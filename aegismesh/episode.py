@@ -39,6 +39,10 @@ class EpisodeStep:
     slo_compliance_pct: float
     quota_left_gb: float
     snapshot: NetworkSnapshot = field(repr=False)
+    # 這個時段生效的需求倍率。快照只記錄「分到多少」，要判斷那是完整服務
+    # 還是降速使用，就得知道「這個時段完整需要多少」—— 而災害期間的需求
+    # 是逐時段變動的（避難人潮、傷患湧入），不能拿平常的需求來比。
+    demand: dict[str, float] = field(default_factory=dict)
 
     @property
     def critical_hours(self) -> float:
@@ -146,6 +150,7 @@ def run_episode(scenario: Scenario, policy: str = AEGIS) -> EpisodeResult:
             slo_compliance_pct=after.slo_compliance_pct,
             quota_left_gb=left,
             snapshot=after,
+            demand=dict(twin.demand),
         ))
 
     return EpisodeResult(scenario=scenario, policy=policy, steps=results)

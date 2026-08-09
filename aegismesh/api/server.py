@@ -21,7 +21,7 @@ import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import SETTINGS
 from ..domain import NetworkSnapshot, RecoveryPlan
+from ..episode import AEGIS, HUMAN_HEURISTIC, POLICY_LABELS, EpisodeStep, compare
 from ..llm import LLMClient
 from ..optimizer import STRATEGY_LABELS
 from ..orchestrator import Orchestrator
@@ -87,8 +88,12 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
     設了金鑰才會走到）。戰情室開場是三個 fetch 並發，那 0.25s 若發生在
     事件迴圈上，會連帶把 topology / scenarios 一起拖住 —— 首屏整個變慢。
     移到啟動階段之後，開場只剩下純粹的網路往返。
+
+    三場推演一併預熱（每場約 40ms）：切到「24 小時推演」分頁時就不必等。
     """
-    for build in (_topology_payload, _scenarios_payload, _health_payload):
+    builds = [_topology_payload, _scenarios_payload, _health_payload]
+    builds += [partial(_episode_payload, sid) for sid in SCENARIOS]
+    for build in builds:
         await asyncio.to_thread(build)
     yield
 
@@ -249,6 +254,115 @@ def _scenarios_payload() -> list[dict[str, Any]]:
         }
         for s in SCENARIOS.values()
     ]
+
+
+@app.get("/api/episode/{scenario_id}")
+async def episode(scenario_id: str) -> JSONResponse:
+    """整場事件的多時段推演對照。純演算法、不含 LLM，數十毫秒就跑完，
+    所以走 REST 而不是 WebSocket —— 前端拿到完整結果之後自己控制揭露節奏。"""
+    try:
+        payload = await asyncio.to_thread(_episode_payload, scenario_id)
+    except KeyError:
+        return JSONResponse({"error": f"未知情境：{scenario_id}"}, status_code=404)
+    return JSONResponse(payload)
+
+
+def _episode_services(step: EpisodeStep, twin: DigitalTwin) -> list[dict[str, Any]]:
+    """這個時段每項醫療服務拿到什麼 —— 「誰讓出了頻寬」的證據。
+
+    比較基準是「這個時段的完整需求」而非平常的需求：避難人潮讓訪客 Wi-Fi
+    的需求變成 2.5 倍，拿平常的數字對照會把嚴重的降速標成正常。
+    """
+    rows: list[dict[str, Any]] = []
+    for sid, svc in twin.services.items():
+        state = step.snapshot.services.get(sid)
+        if state is None:
+            continue
+        wan = next(
+            (WAN_LABEL[twin.links[lid].kind.value] for lid in state.link_ids
+             if twin.links[lid].kind.value in WAN_LABEL),
+            None,
+        )
+        rows.append({
+            "id": sid,
+            "name": svc.name,
+            "priority": svc.priority,
+            "critical": svc.is_critical,
+            "life_critical": svc.is_life_critical,
+            "wan": wan,
+            "mbps": round(state.admitted_mbps, 1),
+            "required_mbps": round(
+                svc.slo.required_bandwidth_mbps * step.demand.get(sid, 1.0), 1
+            ),
+            "slo_met": state.slo_met,
+        })
+    return sorted(rows, key=lambda r: r["priority"])
+
+
+@lru_cache(maxsize=len(SCENARIOS))
+def _episode_payload(scenario_id: str) -> dict[str, Any]:
+    scenario = get_scenario(scenario_id)          # 未知 ID 會拋 KeyError
+    results = compare(scenario)
+    twin = DigitalTwin()
+
+    quota_link = next((l for l in twin.links.values() if l.quota_gb is not None), None)
+    policies = [
+        {
+            "key": key,
+            "label": POLICY_LABELS[key],
+            "critical_service_hours": round(results[key].critical_service_hours, 2),
+            "quota_exhausted_at": results[key].quota_exhausted_at,
+            "steps": [
+                {
+                    "hour": s.hour,
+                    "end_hour": s.hour + s.duration_h,
+                    "duration_h": s.duration_h,
+                    "label": s.label,
+                    "strategy": s.strategy,
+                    "strategy_label": (STRATEGY_LABELS.get(s.strategy, s.strategy)
+                                       if s.strategy else None),
+                    "life_critical_pct": round(s.snapshot.life_critical_availability_pct, 1),
+                    "critical_pct": round(s.critical_availability_pct, 1),
+                    "slo_pct": round(s.slo_compliance_pct, 1),
+                    "monthly_cost_ntd": round(s.snapshot.monthly_cost_ntd),
+                    "quota_left_gb": round(s.quota_left_gb, 1),
+                    "services": _episode_services(s, twin),
+                }
+                for s in results[key].steps
+            ],
+        }
+        for key in (HUMAN_HEURISTIC, AEGIS)
+    ]
+
+    # 「決策何時分岔」與「代價何時浮現」是兩個不同的時刻，而且中間隔了好幾個
+    # 小時 —— 這正是這張圖唯一想講的事，所以由後端算好，不讓前端自行詮釋。
+    human, aegis = (results[HUMAN_HEURISTIC].steps, results[AEGIS].steps)
+    diverge = next((h.hour for h, a in zip(human, aegis) if h.strategy != a.strategy), None)
+    outcome = next(
+        (h.hour for h, a in zip(human, aegis)
+         if abs(h.critical_availability_pct - a.critical_availability_pct) > 0.05),
+        None,
+    )
+    return {
+        "scenario": {
+            "id": scenario.id,
+            "name": scenario.name,
+            "narrative": scenario.narrative,
+            "duration_hours": scenario.duration_hours,
+        },
+        "quota": None if quota_link is None else {
+            "link": quota_link.id,
+            "label": WAN_LABEL.get(quota_link.kind.value, quota_link.id),
+            "total_gb": quota_link.quota_gb,
+        },
+        "policies": policies,
+        "delta_hours": round(
+            results[AEGIS].critical_service_hours
+            - results[HUMAN_HEURISTIC].critical_service_hours, 2
+        ),
+        "diverge_hour": diverge,
+        "outcome_hour": outcome,
+    }
 
 
 @app.get("/api/health")

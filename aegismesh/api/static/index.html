@@ -388,6 +388,107 @@ code{
 .imp.ok{color:var(--dim)} .imp.warn{color:var(--warn)} .imp.bad{color:var(--crit); font-weight:650}
 .btns{display:flex; gap:10px; justify-content:flex-end; margin-top:var(--space-md)}
 
+/* ---------- 分頁 ---------- */
+.tabs{display:flex; gap:2px; padding:3px; background:var(--panel); border:1px solid var(--line); border-radius:var(--r-md)}
+.tabs button{
+  min-height:36px; padding:var(--space-3xs) var(--space-xs); border:1px solid transparent;
+  border-radius:var(--r-sm); background:transparent; color:var(--dim); font-size:12.5px;
+}
+.tabs button:hover:not([aria-selected="true"]){background:var(--panel-2); border-color:transparent; color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--panel-3); border-color:var(--line-strong); color:var(--fg)}
+
+/* ---------- 24 小時推演 ---------- */
+/* 兩個 main 只有一個可見。作者樣式的 display 會贏過 UA 的 [hidden]，得自己關掉 */
+main[hidden]{display:none}
+main.ep{grid-template-columns:minmax(0,1fr)}
+/* 整欄一起捲，而不是每塊面板各自捲 —— 這一頁要從頭讀到尾 */
+main.ep .col{overflow-y:auto; overflow-x:hidden}
+main.ep .panel{flex:none; overflow:visible}
+
+.ep-hero{display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-md)}
+.ep-verdict{flex:0 0 auto}
+.ep-verdict .k{font-size:12px; color:var(--muted); letter-spacing:.03em}
+.ep-verdict .v{
+  font-family:var(--mono); font-size:clamp(34px,4vw,54px); font-weight:600;
+  letter-spacing:-.045em; line-height:1.15; color:var(--ok);
+}
+.ep-verdict .v.flat{color:var(--muted)}
+.ep-verdict .d{margin-top:var(--space-3xs); font-family:var(--mono); font-size:11px; color:var(--dim)}
+.ep-why{flex:1 1 340px; min-width:0; margin:0; font-size:13px; line-height:1.85; color:var(--muted)}
+.ep-why b{color:var(--fg); font-weight:650}
+.ep-why b.hl{color:var(--warn)}
+.ep-hero .note{flex:1 1 100%; margin-top:0}
+.ep-hero .note b{color:var(--muted)}
+
+/* 兩條車道：同一場災害、同一條時間軸，上下對照 */
+.lane + .lane{margin-top:var(--space-sm)}
+.lanehd{display:flex; align-items:baseline; gap:var(--space-2xs); margin-bottom:var(--space-3xs); font-size:12px}
+.lanehd .lname{font-weight:700; color:var(--fg); white-space:nowrap}
+.lanehd .lsub{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--dim)}
+.lanehd .ltot{margin-inline-start:auto; font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap}
+.lanebar{display:flex; gap:3px}
+.seg{
+  min-width:0; padding:var(--space-2xs) var(--space-xs);
+  background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-sm);
+}
+.seg b{display:block; margin:2px 0; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg)}
+.seg .sm{display:block; font-family:var(--mono); font-size:10.5px; color:var(--dim)}
+.seg.ok{background:color-mix(in oklab,var(--ok) 11%,var(--panel-2)); border-color:color-mix(in oklab,var(--ok) 28%,var(--line))}
+.seg.warn{background:color-mix(in oklab,var(--warn) 11%,var(--panel-2)); border-color:color-mix(in oklab,var(--warn) 28%,var(--line))}
+.seg.crit{background:color-mix(in oklab,var(--crit) 12%,var(--panel-2)); border-color:color-mix(in oklab,var(--crit) 30%,var(--line))}
+.seg .zero{color:var(--crit); font-weight:650}
+
+/* 配額曲線。overflow 可見，端點的圓才不會被畫布邊緣切一半；
+   外層的 padding／負 margin 讓窄畫面捲動時，起點那顆圓一樣不會被切到 */
+.qwrap{margin:var(--space-2xs) -5px 0; padding-inline:5px}
+#epQuota{display:block; width:100%; height:auto; overflow:visible}
+.qline{fill:none; stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round}
+.qline.human{stroke:var(--crit)} .qline.aegis{stroke:var(--accent)} .qline.both{stroke:var(--muted)}
+.qdot{stroke:var(--panel); stroke-width:2}
+.qdot.human{fill:var(--crit)} .qdot.aegis{fill:var(--accent)} .qdot.both{fill:var(--muted)}
+.qgrid{stroke:var(--line); stroke-width:1}
+.qgrid.v{stroke-dasharray:3 6}
+.qlbl{fill:var(--dim); font-family:var(--mono); font-size:12px}
+.qlbl.end{fill:var(--muted)}
+.qmark{stroke:var(--crit); stroke-width:1.5; stroke-dasharray:5 4}
+.qmarklbl{fill:var(--crit); font-family:var(--mono); font-size:12px}
+.qkeys{display:flex; flex-wrap:wrap; gap:var(--space-sm); font-family:var(--mono); font-size:10.5px}
+.qk{display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+.qk::before{content:""; width:16px; height:2.5px; border-radius:2px; background:currentColor}
+.qk.human{color:var(--crit)} .qk.aegis{color:var(--accent)} .qk.both{color:var(--muted)}
+
+/* 每個時段的並排對照：左人工、右 AegisMesh */
+.epstep + .epstep{margin-top:var(--space-md)}
+.ephd{
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--space-2xs);
+  margin-bottom:var(--space-2xs); padding-bottom:var(--space-3xs); border-bottom:1px solid var(--line);
+}
+.ephd .eph{font-family:var(--mono); font-size:12.5px; font-weight:650; color:var(--accent)}
+.ephd .eplbl{min-width:0; font-size:12px; color:var(--muted)}
+.ephd .epflag{margin-inline-start:auto; font-size:11px; color:var(--warn); white-space:nowrap}
+.epcols{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-xs)}
+.epcol{padding:var(--space-xs); background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-md)}
+.epcol.win{border-color:color-mix(in oklab,var(--ok) 30%,var(--line))}
+.epc-hd{display:flex; align-items:baseline; gap:var(--space-2xs); margin-bottom:var(--space-2xs)}
+.epc-hd .pol{font-size:11px; color:var(--dim); white-space:nowrap}
+.epc-hd .strat{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; font-weight:650; color:var(--fg)}
+.epm{display:flex; flex-wrap:wrap; gap:var(--space-3xs) var(--space-sm); margin-bottom:var(--space-2xs); font-size:11px; color:var(--muted)}
+.epm b{font-family:var(--mono); font-size:12px; color:var(--fg)}
+.epm b.ok{color:var(--ok)} .epm b.warn{color:var(--warn)} .epm b.crit{color:var(--crit)}
+.chips{display:flex; flex-wrap:wrap; gap:5px; margin:0; padding:0; list-style:none}
+.chip{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 7px; font-size:11px;
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r-sm); color:var(--muted);
+}
+.chip .pri{padding:0 4px}
+.chip .num{font-family:var(--mono); font-size:10.5px}
+.chip.full{border-color:color-mix(in oklab,var(--ok) 28%,var(--line))}
+.chip.full .num{color:var(--ok)}
+.chip.cut{border-color:color-mix(in oklab,var(--warn) 32%,var(--line))}
+.chip.cut .num{color:var(--warn)}
+.chip.off{border-color:color-mix(in oklab,var(--crit) 26%,var(--line)); color:var(--dim)}
+.chip.off .num{color:var(--crit)}
+
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:var(--line-strong); border:3px solid transparent; background-clip:padding-box; border-radius:var(--r-sm)}
 ::-webkit-scrollbar-track{background:transparent}
@@ -404,8 +505,17 @@ code{
   .col:first-child .panel:first-child,.col:last-child .panel:first-child{flex-basis:auto}
   #topo{min-width:720px; max-height:none}
 }
+@media (max-width:64rem){
+  /* 窄畫面把三個時段改成上下疊放：橫排會把方案名稱擠到看不見 */
+  .lanebar{flex-direction:column}
+  .epcols{grid-template-columns:minmax(0,1fr)}
+  /* 曲線等比縮放會連高度一起壓扁，變成一條看不出形狀的細線 —— 改成可橫向捲動 */
+  .qwrap{overflow-x:auto}
+  #epQuota{min-width:600px}
+}
 @media (max-width:40rem){
   header{padding:var(--space-xs)}.brand{font-size:17px}.brand small{font-size:10px}
+  .tabs{order:2; width:100%}.tabs button{flex:1}
   .badge{order:3; width:100%; justify-content:center}
   .control-group{order:4; grid-template-columns:minmax(0,1fr)}
   .control-group button{width:100%}
@@ -431,6 +541,12 @@ code{
 
 <header>
   <div class="brand">AegisMesh 天穹韌網<small>醫院網路數位分身 · 災害通訊應變戰情室</small></div>
+  <div class="tabs" role="tablist" aria-label="檢視模式">
+    <button type="button" role="tab" data-view="live" aria-selected="true"
+            aria-controls="viewLive" id="tabLive">災害當下的閉環</button>
+    <button type="button" role="tab" data-view="episode" aria-selected="false"
+            aria-controls="viewEpisode" id="tabEpisode" tabindex="-1">整場事件推演</button>
+  </div>
   <div class="spacer"></div>
   <span class="badge" id="llmBadge" role="status" aria-live="polite">AI 文字說明：檢查中…</span>
   <div class="control-group">
@@ -440,7 +556,7 @@ code{
   </div>
 </header>
 
-<main>
+<main id="viewLive" role="tabpanel" aria-labelledby="tabLive">
   <div class="col">
     <div class="panel">
       <h2>醫院網路連線圖
@@ -489,6 +605,12 @@ code{
       <h2>AI 想出的三個方案<span class="hint">先電腦模擬，再由規則審查</span></h2>
       <div id="plans" aria-live="polite"><div class="empty">尚未產生方案。</div></div>
     </div>
+  </div>
+</main>
+
+<main id="viewEpisode" class="ep" role="tabpanel" aria-labelledby="tabEpisode" hidden>
+  <div class="col" id="epRoot">
+    <div class="empty">推演載入中…</div>
   </div>
 </main>
 
@@ -854,6 +976,9 @@ function introHTML(){
        左圖會同步顯示線路的變化，右側則是每項醫療服務當下的狀況。</p>
     <p>所有數字（走哪條路、分多少頻寬、花多少錢）都由演算法算出並可重現，
        <b>AI 只負責把結果寫成人看得懂的說明，無權決定任何一項網路變更</b>。</p>
+    <p>這一頁看的是<b>災害發生當下</b>那一次決定。想看整場災害從頭到尾的差別，
+       切到上方的<b>「整場事件推演」</b>：同一場災害跑兩次，一次照人工經驗法則、
+       一次照 AegisMesh 的配速，看幾十個小時之後誰還撐得住。</p>
   </div>`;
 }
 
@@ -887,6 +1012,289 @@ function renderPlans(plans, selectedId){
         <td><span class="tag ${p.policy_decision}">${label(DECISION_LABEL, p.policy_decision)}</span></td>
       </tr>`).join('')}</tbody></table>`;
 }
+
+/* ------------------------------------------------- 整場事件推演（第二分頁）
+
+   這一頁回答的是閉環畫面回答不了的問題：同一場災害從頭跑到尾，配速到底
+   換到了什麼。資料由 /api/episode 一次算完（純演算法、沒有 LLM），
+   前端只負責把「決策何時分岔、代價何時浮現」這兩個時刻畫出來。         */
+
+let view = 'live', epScenario = null, epLoading = false;
+
+const fmtH = h => 'h' + Number(h.toFixed(1));
+// 累計小時數一律一位小數：18.67 / 24 兩個數字並排時，位數不一致很難比
+const h1 = v => v.toFixed(1);
+// 後端的策略名稱帶括號說明（「人工經驗法則（救命優先…）」），窄欄位只放前半段
+const epShort = s => s.split('（')[0];
+const epTone = pct => pct >= 99.9 ? 'ok' : pct > 0 ? 'warn' : 'crit';
+
+function setView(v){
+  view = v;
+  $('#viewLive').hidden = v !== 'live';
+  $('#viewEpisode').hidden = v !== 'episode';
+  document.querySelectorAll('.tabs button').forEach(b => {
+    const on = b.dataset.view === v;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
+  // 推演是純計算、按鈕沒有意義；「開始應變」只屬於閉環那一頁
+  $('#runBtn').hidden = v !== 'live';
+  if (v === 'episode') loadEpisode();
+}
+
+async function loadEpisode(){
+  const id = $('#scenario').value;
+  if (!id){         // 開場載入失敗時情境清單是空的，講清楚別讓它停在「載入中…」
+    $('#epRoot').innerHTML = '<div class="empty">尚未讀到情境清單。' +
+      '請切回「災害當下的閉環」按「重試載入」。</div>';
+    return;
+  }
+  if (epLoading || epScenario === id) return;
+  epLoading = true;
+  $('#epRoot').innerHTML = '<div class="empty">正在把這場災害沿時間軸跑兩次…</div>';
+  try {
+    const r = await fetch(`/api/episode/${encodeURIComponent(id)}`,
+                          {signal: AbortSignal.timeout(BOOT_TIMEOUT_MS)});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    renderEpisode(await r.json());
+    epScenario = id;              // 失敗時保持 null，下次切回來會自動重試
+  } catch (error) {
+    $('#epRoot').innerHTML = '<div class="empty">推演讀取失敗，請確認伺服器仍在執行，' +
+      '再切回本頁重試。</div>';
+    console.error('Episode fetch failed', error);
+  } finally {
+    epLoading = false;
+  }
+}
+
+function epSeg(s){
+  return `<div class="seg ${epTone(s.critical_pct)}" style="flex:${s.duration_h}" title="${s.label}">
+    <span class="sm">${fmtH(s.hour)}–${fmtH(s.end_hour).slice(1)}</span>
+    <b>${s.strategy_label || '無可行方案'}</b>
+    <span class="sm">關鍵服務 ${s.critical_pct}%　配額剩
+      <span class="${s.quota_left_gb <= 0 ? 'zero' : ''}">${s.quota_left_gb} GB</span></span>
+  </div>`;
+}
+
+function epLane(p, dur){
+  return `<div class="lane">
+    <div class="lanehd"><span class="lname">${epShort(p.label)}</span>
+      <span class="lsub">${(p.label.match(/（(.+)）/) || [,''])[1]}</span>
+      <span class="ltot">關鍵服務正常 ${h1(p.critical_service_hours)} / ${h1(dur)} 小時</span></div>
+    <div class="lanebar">${p.steps.map(epSeg).join('')}</div>
+  </div>`;
+}
+
+// 兩條配額曲線完全重疊時，後畫的那條會把前一條蓋掉，看起來像「只有一種做法」。
+// 與其偷偷把線錯開（那等於竄改數值），不如認出重疊並改畫成一條，圖例也一起改。
+const epSameQuota = d => {
+  const [a, b] = d.policies;
+  return a.steps.length === b.steps.length
+    && a.steps.every((s, i) => Math.abs(s.quota_left_gb - b.steps[i].quota_left_gb) < 0.05);
+};
+
+// 某個時刻之前，這條策略已經燒掉多少配額（總額 − 上一個時段結束時的剩餘）
+const epBurnedBefore = (d, policy, hour) => {
+  const i = policy.steps.findIndex(s => s.hour === hour);
+  return i > 0 ? Number((d.quota.total_gb - policy.steps[i - 1].quota_left_gb).toFixed(1)) : null;
+};
+const epBurnedTotal = (d, policy) => Number(
+  (d.quota.total_gb - policy.steps[policy.steps.length - 1].quota_left_gb).toFixed(1));
+
+/* 配額曲線：整頁最關鍵的一張圖。兩條線在前段幾乎看不出差別，
+   一條卻在中途就觸底 —— 那就是「代價延遲浮現」本身的形狀。 */
+function epQuota(d){
+  if (!d.quota) return '';
+  const dur = d.scenario.duration_hours, total = d.quota.total_gb;
+  const W = 1000, TOP = 16, BASE = 132, AXIS = 158;
+  const x = h => (h / dur) * W;
+  const y = gb => BASE - Math.max(0, Math.min(gb, total)) / total * (BASE - TOP);
+  const parts = [];
+
+  for (const gb of [total, total / 2, 0]){
+    parts.push(`<line class="qgrid" x1="0" y1="${y(gb)}" x2="${W}" y2="${y(gb)}"/>`,
+      `<text class="qlbl" x="3" y="${y(gb) - 5}">${Math.round(gb)} GB</text>`);
+  }
+
+  const bounds = [0, ...d.policies[0].steps.map(s => s.end_hour)];
+  bounds.forEach((h, i) => {
+    const last = i === bounds.length - 1;
+    if (i) parts.push(`<line class="qgrid v" x1="${x(h)}" y1="${TOP}" x2="${x(h)}" y2="${BASE}"/>`);
+    parts.push(`<text class="qlbl${last ? ' end' : ''}" x="${x(h)}" y="${AXIS}"
+      text-anchor="${i === 0 ? 'start' : last ? 'end' : 'middle'}">${fmtH(h)}</text>`);
+  });
+
+  const merged = epSameQuota(d);
+  for (const p of merged ? [d.policies[0]] : d.policies){
+    // 起點是「還沒開始用」的滿額，之後每個時段結束時取一次剩餘量
+    const pts = [[0, total], ...p.steps.map(s => [s.end_hour, s.quota_left_gb])];
+    const cls = merged ? 'both' : p.key;
+    parts.push(`<polyline class="qline ${cls}" points="${
+      pts.map(([h, gb]) => `${x(h).toFixed(1)},${y(gb).toFixed(1)}`).join(' ')}"/>`);
+    parts.push(...pts.map(([h, gb]) =>
+      `<circle class="qdot ${cls}" cx="${x(h).toFixed(1)}" cy="${y(gb).toFixed(1)}" r="4"/>`));
+  }
+
+  const human = d.policies.find(p => p.key === 'human');
+  const ex = human && human.quota_exhausted_at;
+  if (ex !== null && ex !== undefined && ex < dur){
+    const hx = x(ex), right = hx > W * 0.62;
+    parts.push(`<line class="qmark" x1="${hx}" y1="${TOP - 10}" x2="${hx}" y2="${BASE}"/>`,
+      `<text class="qmarklbl" x="${hx + (right ? -8 : 8)}" y="${TOP - 2}"
+        text-anchor="${right ? 'end' : 'start'}">配額耗盡 ${fmtH(ex)}　事件還剩 ${
+          Number((dur - ex).toFixed(1))} 小時</text>`);
+  }
+
+  return `<div class="qwrap"><svg id="epQuota" viewBox="0 0 ${W} ${AXIS + 8}"
+    preserveAspectRatio="xMidYMid meet" role="img"
+    aria-label="${d.quota.label}流量配額剩餘量隨時間變化：${merged
+      ? '兩種做法完全相同' : '人工經驗法則提前歸零，AegisMesh 撐到事件結束'}">
+    ${parts.join('')}</svg></div>`;
+}
+
+function epChip(s){
+  const off = s.mbps <= 0;
+  const cut = !off && s.mbps + 0.05 < s.required_mbps;
+  const val = off ? '暫停' : cut ? `${s.mbps}M ／需 ${s.required_mbps}M` : `${s.mbps}M`;
+  return `<li class="chip ${off ? 'off' : cut ? 'cut' : 'full'}"
+    title="${s.name}｜完整需求 ${s.required_mbps} Mbps｜${s.wan ? '走' + s.wan : '沒有可用路徑'}">
+    <span class="pri p${s.priority}">P${s.priority}</span>${s.name}<span class="num">${val}</span></li>`;
+}
+
+function epCol(p, s, win){
+  return `<div class="epcol${win ? ' win' : ''}">
+    <div class="epc-hd"><span class="pol">${epShort(p.label)}</span>
+      <span class="strat">${s.strategy_label || '無可行方案'}</span></div>
+    <div class="epm">
+      <span>生命關鍵 P0 <b class="${epTone(s.life_critical_pct)}">${s.life_critical_pct}%</b></span>
+      <span>關鍵服務 <b class="${epTone(s.critical_pct)}">${s.critical_pct}%</b></span>
+      <span>配額剩 <b class="${s.quota_left_gb <= 0 ? 'crit' : ''}">${s.quota_left_gb} GB</b></span>
+    </div>
+    <ul class="chips">${s.services.map(epChip).join('')}</ul>
+  </div>`;
+}
+
+function epSteps(d){
+  const [human, aegis] = d.policies;
+  return human.steps.map((hs, i) => {
+    const as = aegis.steps[i];
+    const flags = [];
+    if (d.diverge_hour === hs.hour) flags.push('決策從這裡分岔');
+    if (d.outcome_hour === hs.hour) flags.push('差別從這裡看得出來');
+    const diff = Math.abs(hs.critical_pct - as.critical_pct) > 0.05;
+    return `<div class="epstep">
+      <div class="ephd"><span class="eph">${fmtH(hs.hour)}–${fmtH(hs.end_hour).slice(1)}</span>
+        <span class="eplbl">${hs.label}</span>
+        ${flags.length ? `<span class="epflag">← ${flags.join(' · ')}</span>` : ''}</div>
+      <div class="epcols">
+        ${epCol(human, hs, diff && hs.critical_pct > as.critical_pct)}
+        ${epCol(aegis, as, diff && as.critical_pct > hs.critical_pct)}
+      </div></div>`;
+  }).join('');
+}
+
+function epHero(d){
+  const [human, aegis] = d.policies;
+  const dur = d.scenario.duration_hours;
+  const flat = Math.abs(d.delta_hours) < 0.05;
+  const qlabel = d.quota ? d.quota.label : '備援';
+  const why = [];
+
+  if (flat){
+    why.push(`這場情境裡兩種做法拿到<b>相同的結果</b>（各 ${h1(human.critical_service_hours)} 小時）：
+      時間軸只有 ${human.steps.length} 個時段，沒有「現在多用一點、後面就少一點」的空間。`);
+    // 結果一樣不代表代價一樣。同樣的成效卻多燒掉配額，只是因為這場事件夠短
+    // 而還沒被追討 —— 這件事該講出來，不能讓「沒有差別」看起來像「怎麼做都行」。
+    if (d.quota){
+      const bh = epBurnedTotal(d, human), ba = epBurnedTotal(d, aegis);
+      if (bh - ba >= 1){
+        why.push(`不過人工經驗法則為了同樣的成效燒掉了 <b class="hl">${bh} GB</b> 的${qlabel}配額，
+          AegisMesh 只用了 ${ba} GB。這場事件夠短，所以還沒付出代價 ——
+          事件一拉長，那些配額就是後半場的救命本錢。`);
+      } else {
+        why.push(`兩邊連${qlabel}配額都用得一樣多（各 ${bh} GB${
+          human.quota_exhausted_at === null ? '' : `，於 ${fmtH(human.quota_exhausted_at)} 見底`
+        }）：只有一個時段時，配速沒有可以施力的地方。`);
+      }
+    }
+    why.push(`想看配速真正的差別，把上方情境切到「颱風致光纖中斷 ＋ 5G 基地台壅塞」。`);
+  } else {
+    if (d.diverge_hour !== null && d.outcome_hour !== null && d.outcome_hour > d.diverge_hour){
+      const burned = d.quota ? epBurnedBefore(d, human, d.outcome_hour) : null;
+      why.push(`兩者在 <b>${fmtH(d.diverge_hour)}</b> 的第一個決定就不一樣，差別卻要到
+        <b>${fmtH(d.outcome_hour)}</b> 才在數字上看得出來 —— 中間隔了
+        <b class="hl">${Number((d.outcome_hour - d.diverge_hour).toFixed(1))} 小時</b>${
+          burned === null ? '' : `，而人工經驗法則到那時已經燒掉 ${burned} GB 配額
+          （全部只有 ${d.quota.total_gb} GB）`}，沒有回頭路。`);
+    }
+    if (human.quota_exhausted_at !== null && human.quota_exhausted_at < dur){
+      why.push(`人工經驗法則的${qlabel}配額在 <b>${fmtH(human.quota_exhausted_at)}</b> 歸零，
+        事件還剩 ${Number((dur - human.quota_exhausted_at).toFixed(1))} 小時；AegisMesh ${
+          aegis.quota_exhausted_at === null || aegis.quota_exhausted_at >= dur
+            ? '剛好撐完全程' : `撐到 ${fmtH(aegis.quota_exhausted_at)}`}。`);
+    }
+    why.push(`人工經驗法則在每個當下都是對的：救命優先、備援有多少用多少。
+      它錯只錯在沒有人能在腦中把配額攤平到未來 ${dur} 小時 ——
+      <b>這正是人腦處理不了的那種代價</b>。`);
+  }
+
+  return `<div class="panel ep-hero">
+    <div class="ep-verdict">
+      <div class="k">AegisMesh 讓關鍵醫療服務多正常運作</div>
+      <div class="v num${flat ? ' flat' : ''}" id="epDelta">${
+        flat ? '沒有差別' : `${d.delta_hours > 0 ? '+' : ''}${d.delta_hours.toFixed(1)} 小時`}</div>
+      <div class="d">${epShort(human.label)} ${h1(human.critical_service_hours)} 小時 →
+        AegisMesh ${h1(aegis.critical_service_hours)} 小時（事件全長 ${h1(dur)} 小時）</div>
+    </div>
+    <p class="ep-why">${why.join(' ')}</p>
+    <div class="note">這一頁完全沒有 LLM 參與：同一場災害沿時間軸跑兩次，
+      一次照人工經驗法則、一次照 AegisMesh 的配速與治理紅線，每個數字都是數位孿生算出來的。
+      衡量標準只有一個 —— <b>整場事件中關鍵醫療服務正常運作的累計小時數</b>。</div>
+  </div>`;
+}
+
+function renderEpisode(d){
+  const dur = d.scenario.duration_hours;
+  $('#epRoot').innerHTML = epHero(d) + `
+    <div class="panel">
+      <h2>${Number(dur.toFixed(1))} 小時逐時段對照
+        <span class="qkeys">${d.quota && epSameQuota(d)
+          ? '<span class="qk both">兩者的配額用法完全相同</span>'
+          : `<span class="qk human">人工經驗法則</span><span class="qk aegis">AegisMesh</span>`}</span>
+        <span class="hint">下方曲線：${d.quota ? d.quota.label + '流量配額還剩多少' : '（此情境無配額限制）'}</span></h2>
+      ${d.policies.map(p => epLane(p, dur)).join('')}
+      ${epQuota(d)}
+    </div>
+    <div class="panel">
+      <h2>每個時段，誰讓出了頻寬<span class="hint">左：人工經驗法則　右：AegisMesh</span></h2>
+      ${epSteps(d)}
+    </div>`;
+
+  // 這個數字是整頁的結論，讓它走完一段再停下，觀眾的視線才會落在正確的地方
+  const el = $('#epDelta');
+  if (!reduceMotion && Math.abs(d.delta_hours) >= 0.05){
+    const to = d.delta_hours, t0 = performance.now();
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / 900);
+      el.textContent = `${to > 0 ? '+' : ''}${(to * (1 - Math.pow(1 - p, 3))).toFixed(1)} 小時`;
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+
+document.querySelectorAll('.tabs button').forEach(b => {
+  b.onclick = () => setView(b.dataset.view);
+  // 分頁列的鍵盤慣例：左右鍵在分頁之間移動
+  b.onkeydown = e => {
+    const keys = {ArrowRight: 1, ArrowLeft: -1};
+    if (!(e.key in keys)) return;
+    e.preventDefault();
+    const tabs = [...document.querySelectorAll('.tabs button')];
+    const next = tabs[(tabs.indexOf(b) + keys[e.key] + tabs.length) % tabs.length];
+    setView(next.dataset.view); next.focus();
+  };
+});
 
 /* ------------------------------------------------------------ WebSocket */
 function handle(m){
@@ -1034,7 +1442,11 @@ $('#approveBtn').onclick = () => respond(true);
 $('#rejectBtn').onclick  = () => respond(false);
 $('#modal').addEventListener('cancel', e => e.preventDefault());
 // 換情境時同步換掉預告，讓人在按下去之前就知道等一下會壞掉什麼
-$('#scenario').onchange = () => { if (!running) renderIntro(); };
+$('#scenario').onchange = () => {
+  if (!running) renderIntro();
+  epScenario = null;                       // 推演結果跟著情境走，換了就失效
+  if (view === 'episode') loadEpisode();
+};
 
 $('#runBtn').onclick = () => {
   if (!ready) return boot();   // 開場載入失敗時，同一顆按鈕就是「重試載入」

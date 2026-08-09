@@ -59,6 +59,53 @@ def test_scenarios_endpoint_returns_runnable_netem():
             assert "基準容量" not in cmd, "API 必須帶入容量，不該吐出佔位符"
 
 
+@pytest.mark.parametrize("scenario_id", sorted(SCENARIOS))
+def test_episode_endpoint_is_self_describing(scenario_id):
+    """推演分頁只靠這一個回應作畫，缺任何一格畫面上就會出現空白或 undefined。"""
+    d = client.get(f"/api/episode/{scenario_id}").json()
+    assert d["scenario"]["id"] == scenario_id
+    assert [p["key"] for p in d["policies"]] == ["human", "aegis"]
+
+    for policy in d["policies"]:
+        assert policy["label"], "車道標題需要策略名稱"
+        assert policy["steps"], "每個策略至少要有一個時段"
+        for step in policy["steps"]:
+            assert step["end_hour"] > step["hour"]
+            assert step["services"], "沒有服務清單就畫不出「誰讓出了頻寬」"
+            for svc in step["services"]:
+                # 完整服務／降速／暫停三種狀態全靠這兩個數字比出來
+                assert svc["required_mbps"] > 0
+                assert svc["mbps"] >= 0
+        hours = [s["end_hour"] for s in policy["steps"]]
+        assert hours[-1] == pytest.approx(d["scenario"]["duration_hours"])
+
+
+def test_episode_endpoint_uses_per_step_demand_for_required_bandwidth():
+    """需求會隨時段變動（避難人潮、傷患湧入）。拿平常的需求對照，
+    嚴重的降速會被標成「完整服務」—— 那是會誤導值班人員的畫面。"""
+    steps = client.get("/api/episode/typhoon-fiber-cut").json()["policies"][0]["steps"]
+    guest = [next(s for s in st["services"] if s["id"] == "svc-guest") for st in steps]
+    assert [g["required_mbps"] for g in guest] == [500.0, 600.0, 400.0]
+
+
+def test_episode_endpoint_shows_pacing_beating_the_human_heuristic():
+    """這一頁的結論本身：颱風情境裡 AegisMesh 必須多撐出關鍵服務小時數，
+    而且決策分岔的時刻要早於代價浮現的時刻 —— 否則整頁的論述不成立。"""
+    d = client.get("/api/episode/typhoon-fiber-cut").json()
+    human, aegis = d["policies"]
+    assert d["delta_hours"] > 0
+    assert aegis["critical_service_hours"] > human["critical_service_hours"]
+    assert d["diverge_hour"] is not None and d["outcome_hour"] is not None
+    assert d["diverge_hour"] < d["outcome_hour"], "代價若當場浮現，就不需要推演了"
+    assert human["quota_exhausted_at"] < d["scenario"]["duration_hours"]
+
+
+def test_episode_endpoint_rejects_unknown_scenario():
+    r = client.get("/api/episode/does-not-exist")
+    assert r.status_code == 404
+    assert "未知情境" in r.json()["error"]
+
+
 def test_health_endpoint():
     h = client.get("/api/health").json()
     assert h["status"] == "ok"
