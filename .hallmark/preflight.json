@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-08",
+  "scope": "single-page",
+  "framework": "FastAPI-served vanilla HTML",
+  "font_stack": "unloaded Inter request with Noto Sans TC fallback",
+  "palette": "inline dark cyan/green/amber/red semantic palette",
+  "motion": "CSS-only",
+  "spacing": "ad hoc pixel values",
+  "preserve": ["dark operational theme", "semantic status colors", "single-page workbench", "websocket approval flow"]
+}

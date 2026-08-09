@@ -1,0 +1,12 @@
+[
+  {
+    "date": "2026-08-08",
+    "macrostructure": "Workbench",
+    "theme": "custom technical cyan",
+    "enrichment": "none",
+    "brief": "Strengthen the AegisMesh operations cockpit without changing its closed-loop workflow",
+    "scope": "single-page",
+    "nav": "operational command bar",
+    "footer": "none"
+  }
+]

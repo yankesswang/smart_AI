@@ -1,0 +1,31 @@
+[project]
+name = "aegismesh"
+version = "0.1.0"
+description = "AegisMesh 天穹韌網 — 海地星空多網融合的 Agentic AI 通訊韌性數位孿生平台"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.2",
+    "openai>=1.30",
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "rich>=13.7",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+aegismesh = "aegismesh.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["aegismesh*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

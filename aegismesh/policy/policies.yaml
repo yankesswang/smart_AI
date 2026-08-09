@@ -1,0 +1,72 @@
+# AegisMesh Policy-as-Code
+#
+# 這份檔案是治理層的唯一真實來源。Agent 不能繞過它，也不能修改它 ——
+# 每一條規則都由 engine.py 中對應的 kind 實作，評估結果全數寫入稽核軌跡。
+#
+# effect: deny | require_approval   （沒有任何規則命中才是 allow）
+version: 1
+
+rules:
+  - id: POL-001
+    name: 關鍵業務不得因復原動作而更差
+    kind: critical_regression
+    effect: deny
+    weight: 40
+    description: 復原計畫若讓生命關鍵業務的可用率低於事故當下，一律禁止執行。
+
+  - id: POL-002
+    name: 禁止優先級反轉
+    kind: priority_inversion
+    effect: deny
+    weight: 30
+    description: 不得在較高優先級業務仍為零頻寬時，配置頻寬給較低優先級業務。
+
+  - id: POL-003
+    name: 生命關鍵業務不得低於臨床最低頻寬
+    kind: critical_floor
+    effect: deny
+    weight: 35
+    description: P0 業務可達路徑存在時，配置頻寬不得低於其臨床最低需求。
+
+  - id: POL-010
+    name: 衛星鏈路啟用須人工核准
+    kind: satellite_activation
+    effect: require_approval
+    weight: 15
+    description: 海地星空衛星頻寬成本為固網的 50 倍以上，切換須由 NOC 值班主管確認。
+
+  - id: POL-011
+    name: 月成本上限
+    kind: cost_ceiling
+    effect: require_approval
+    weight: 12
+    params:
+      monthly_ntd: 90000
+    description: 推演後月度通訊成本超過門檻時，須經人工核准。
+
+  - id: POL-012
+    name: 成本增幅倍數上限
+    kind: cost_multiplier
+    effect: require_approval
+    weight: 10
+    params:
+      factor: 3.0
+    description: 相較事故前成本增加超過指定倍數時，須經人工核准。
+
+  - id: POL-020
+    name: 變更爆炸半徑上限
+    kind: blast_radius
+    effect: require_approval
+    weight: 8
+    params:
+      max_actions: 6
+    description: 單一計畫變更動作過多時風險升高，須人工確認後再執行。
+
+  - id: POL-021
+    name: 停用業務須人工核准
+    kind: service_suspension
+    effect: require_approval
+    weight: 18
+    params:
+      max_priority: 3
+    description: 停用優先級 P3 以內的業務（含行政與批價）須由院方確認。
