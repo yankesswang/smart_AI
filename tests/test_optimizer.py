@@ -134,17 +134,34 @@ def test_equal_priority_critical_services_all_get_a_floor(scenario_id):
 
 
 def test_quota_cap_binds_before_link_capacity():
-    """嚴格配速的策略下，衛星流量不得超過「撐完整場事件」的速率。"""
+    """配額必須比天線容量更早成為瓶頸，且每個策略都受自己的配速約束。
+
+    配額約束的是「加碼」，不是 P0 的臨床底線 —— 病人安全不跟預算談判。
+    因此可接受的上限是「該策略的可持續速率」與「P0 底線總和」取大者。
+    """
+    from aegismesh.optimizer import STRATEGIES
+
     twin = DigitalTwin()
     twin.apply_scenario(SCENARIOS["earthquake-dual-loss"])
-    sustainable = _quota_cap_mbps(twin, "w-sat", 1.0)
     link = twin.links["w-sat"]
-    assert sustainable < link.effective_capacity_mbps, "配額必須比天線容量更早成為瓶頸"
+    assert _quota_cap_mbps(twin, "w-sat", 1.0) < link.effective_capacity_mbps, (
+        "配額必須比天線容量更早成為瓶頸"
+    )
 
-    plan = next(p for p in generate_plans(twin) if p.strategy == "lowest_cost")
-    load = plan.projected.links["w-sat"].load_mbps
-    assert load <= sustainable + 1e-6, f"費用優先策略用了 {load:.1f} Mbps，超過可持續的 {sustainable:.1f}"
-    assert plan.projected.quota_hours_left["w-sat"] >= twin.event_hours - 1e-6
+    p0_floor = sum(
+        twin.min_mbps(sid) for sid, svc in twin.services.items() if svc.is_life_critical
+    )
+    pacing = {st.key: st.quota_pacing for st in STRATEGIES}
+    plans = generate_plans(twin)
+    assert plans, "情境必須產生至少一個方案"
+
+    for plan in plans:
+        ceiling = max(_quota_cap_mbps(twin, "w-sat", pacing[plan.strategy]), p0_floor)
+        load = plan.projected.links["w-sat"].load_mbps
+        # 容差 1e-3 Mbps（= 1 kbps）：多輪扣減的浮點累積誤差，物理上無意義
+        assert load <= ceiling + 1e-3, (
+            f"{plan.strategy} 用了 {load:.3f} Mbps，超過上限 {ceiling:.3f}"
+        )
 
 
 def test_demand_surge_scales_requirements():

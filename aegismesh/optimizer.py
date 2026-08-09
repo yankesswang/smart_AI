@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .domain import Action, RecoveryPlan, Service
@@ -45,6 +46,11 @@ STRATEGIES = (
              cost_weight=0.45, protect_priority=0, quota_pacing=1.25),
     Strategy("lowest_cost", "費用優先", util_target=0.92, queue_budget=3.0,
              cost_weight=0.85, protect_priority=0, quota_pacing=1.0),
+    # 配額保留：只死守 P0，把可降級的 P1 讓出來換取衛星配額撐完整場事件。
+    # 這是「犧牲現在的一部分，保住後半場的全部」—— 沒有這個選項的話，
+    # 唯一合規的做法就是燒光配額救眼前。
+    Strategy("ration", "配額保留（死守生命關鍵）", util_target=0.85, queue_budget=1.0,
+             cost_weight=0.30, protect_priority=0, quota_pacing=0.85),
 )
 
 # key 是稽核與 API 的穩定識別字，label 是給人看的名稱。單一來源，
@@ -62,7 +68,9 @@ def _quota_cap_mbps(twin: DigitalTwin, link_id: str, pacing: float) -> float:
     if link.quota_gb is None:
         return float("inf")
     remaining = max(link.quota_gb - twin.quota_used_gb.get(link_id, 0.0), 0.0)
-    hours = max(twin.event_hours, 0.1)
+    # 用「剩餘時間」而非總時長：已經燒掉的配額回不來，
+    # 剩下的必須攤在剩下的時間上，配速才會隨事件推進自動收緊。
+    hours = max(twin.hours_remaining, 0.1)
     return (remaining / hours) * 1000 * 8 / 3600 * pacing
 
 
@@ -121,6 +129,11 @@ def _greedy_allocate(
             for lid, l in twin.links.items()}
     hard = {lid: min(l.effective_capacity_mbps * st.util_target, quota[lid])
             for lid, l in twin.links.items()}
+    # 生命關鍵服務的保底不受配額配速約束 —— 配額是預算問題，
+    # 臨床最低頻寬是病人安全問題，兩者不該放在同一個天平上。
+    # 若連 P0 的底線都要讓配額決定，嚴格配速的策略會直接把急診餓死。
+    floor_budget = {lid: l.effective_capacity_mbps * st.util_target
+                    for lid, l in twin.links.items()}
     paths: dict[str, list[str]] = {}
     admitted: dict[str, float] = {}
     ranked = {
@@ -133,15 +146,20 @@ def _greedy_allocate(
         for l in twin.path_links(path):
             soft[l.id] -= mbps
             hard[l.id] -= mbps
+            floor_budget[l.id] -= mbps
 
     # ---- Pass 1：保底
     for svc in order:
-        protected = svc.priority <= st.protect_priority or svc.is_critical
+        # P0 一律保底；P1 只在策略明確保護它時保底（protect_critical）。
+        # 這個分野讓系統有「讓出可降級的 P1、把配額留給 P0 的後半場」這個選項。
+        protected = svc.priority <= st.protect_priority or svc.is_life_critical
         if not protected:
             continue
         need_min = twin.min_mbps(svc.id)
-        # 受保護業務在 soft 排不進去時可動用 hard —— 寧可延遲吃緊也不讓它斷線
-        for budget in (soft, hard):
+        # 受保護業務在 soft 排不進去時可動用 hard，P0 還可再動用不受配額
+        # 約束的 floor_budget —— 寧可透支預算也不讓生命關鍵服務斷線
+        pass1 = (soft, hard, floor_budget) if svc.is_life_critical else (soft, hard)
+        for budget in pass1:
             for path in ranked[svc.id]:
                 links = twin.path_links(path)
                 if links and min(budget[l.id] for l in links) >= need_min:
@@ -317,8 +335,12 @@ def _build_actions(
             ))
         if abs(new_mbps - old_mbps) > 0.5:
             kind = "throttle" if new_mbps < old_mbps else "admit"
+            # 向下取整而非四捨五入：round(46.2963, 1) = 46.3 會讓執行後的
+            # 配置比規劃時多 0.004 Mbps，剛好超出配額上限。分配量寧可少給
+            # 一點，也不能因為顯示精度而突破硬上限。
             actions.append(Action(
-                kind, sid, {"mbps": round(new_mbps, 1), "was_mbps": round(old_mbps, 1)},
+                kind, sid,
+                {"mbps": math.floor(new_mbps * 10) / 10, "was_mbps": round(old_mbps, 1)},
                 rationale=f"優先級 P{svc.priority}：{'降速釋出頻寬' if kind == 'throttle' else '保障關鍵頻寬'}",
             ))
     return actions
@@ -357,15 +379,34 @@ def simulate(twin: DigitalTwin, plan: RecoveryPlan):
     return shadow.evaluate(f"projected::{plan.id}")
 
 
-def score_plan(before, after, plan: RecoveryPlan) -> float:
-    """綜合評分：關鍵可用率 60%、整體 SLA 25%、成本效率 15%。"""
+def score_plan(before, after, plan: RecoveryPlan, twin: DigitalTwin | None = None) -> float:
+    """綜合評分：關鍵可用率 60%、整體 SLA 25%、成本效率 15%，再扣配額透支。
+
+    傳入 twin 時評分具備時間意識：一個「現在全救、但配額只夠撐剩餘時間的
+    四成」的方案會被扣到輸給「現在救七成、但撐得完」的方案。沒有這一項的話，
+    評分只看當下，永遠會推薦把未來的頻寬借來用完 —— 而災害的後半場往往才是
+    最需要衛星的時候。
+
+    扣分尺度刻意與關鍵可用率同量級（滿分 45 分）：配額提前燒光的代價，
+    本來就該和「現在少救幾個服務」放在同一個天平上比較。
+    """
     if after is None:
         return 0.0
     crit_gain = after.critical_availability_pct - before.critical_availability_pct
     slo_gain = after.slo_compliance_pct - before.slo_compliance_pct
     cost_penalty = max(0.0, after.monthly_cost_ntd - before.monthly_cost_ntd) / 1000.0
     complexity_penalty = 0.4 * len(plan.actions)
-    return 0.60 * crit_gain + 0.25 * slo_gain - 0.15 * cost_penalty - complexity_penalty
+
+    shortfall = 0.0
+    if twin is not None:
+        need = max(twin.hours_remaining, 1e-6)
+        for hours in after.quota_hours_left.values():
+            if hours == float("inf"):
+                continue
+            shortfall = max(shortfall, max(0.0, 1.0 - hours / need))
+
+    return (0.60 * crit_gain + 0.25 * slo_gain
+            - 0.15 * cost_penalty - complexity_penalty - 45.0 * shortfall)
 
 
 def _dedupe(plans: list[RecoveryPlan]) -> list[RecoveryPlan]:

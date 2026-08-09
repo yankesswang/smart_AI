@@ -34,7 +34,7 @@ class PlanningAgent(Agent):
     ) -> tuple[AgentResult, list[RecoveryPlan]]:
         plans = generate_plans(twin)
         for plan in plans:
-            plan.score = score_plan(incident, plan.projected, plan)
+            plan.score = score_plan(incident, plan.projected, plan, twin)
         plans.sort(key=lambda p: p.score, reverse=True)
 
         if not plans:

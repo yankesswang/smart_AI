@@ -70,10 +70,12 @@ class PolicyEngine:
         params = rule.get("params") or {}
 
         if kind == "critical_regression":
-            if after.critical_availability_pct < before.critical_availability_pct - 1e-6:
+            # 紅線畫在 P0：P1 可降級是臨床上本來就接受的取捨，
+            # 把它也畫進紅線會讓系統失去「保住後半場」的唯一手段。
+            if after.life_critical_availability_pct < before.life_critical_availability_pct - 1e-6:
                 return (
-                    f"救命服務正常率由 {before.critical_availability_pct:.0f}% "
-                    f"降至 {after.critical_availability_pct:.0f}%"
+                    f"生命關鍵服務正常率由 {before.life_critical_availability_pct:.0f}% "
+                    f"降至 {after.life_critical_availability_pct:.0f}%"
                 )
             return None
 

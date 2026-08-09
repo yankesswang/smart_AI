@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from ..domain import Fault, LinkState, Scenario
+from ..domain import Fault, LinkState, Scenario, TimelineStep
 
 TYPHOON_FIBER_CUT = Scenario(
     id="typhoon-fiber-cut",
@@ -19,6 +19,37 @@ TYPHOON_FIBER_CUT = Scenario(
     duration_hours=24.0,
     # 避難收容湧入 → 訪客 Wi-Fi 需求暴增；傷患湧入 → 急診生命徵象串流變多
     demand={"svc-guest": 2.5, "svc-ed-vitals": 1.6, "svc-teleconsult": 1.3},
+    # 24 小時推演。陷阱刻意放在後段：第 16 小時基地台備援電力耗盡，
+    # 衛星成為唯一生路 —— 前 16 小時把配額用兇的人，這時候才會發現沒得用，
+    # 而那個決定是在十幾個小時前做下的。這正是人腦最難處理的那種代價。
+    timeline=[
+        TimelineStep(
+            0.0, "第 0 小時：光纖中斷，避難人潮湧入 5G",
+            faults=[
+                Fault("w-fiber", LinkState.DOWN, description="對外主線光纖被扯斷，完全不通"),
+                Fault("w-5g", LinkState.DEGRADED, extra_latency_ms=25.0, extra_loss_pct=0.25,
+                      capacity_factor=0.40, description="5G 基地台塞車：速度只剩四成"),
+            ],
+            demand={"svc-guest": 2.5, "svc-ed-vitals": 1.6, "svc-teleconsult": 1.3},
+        ),
+        TimelineStep(
+            8.0, "第 8 小時：收容人數再增，5G 過熱降載至兩成",
+            faults=[
+                Fault("w-fiber", LinkState.DOWN, description="光纖搶修中"),
+                Fault("w-5g", LinkState.DEGRADED, extra_latency_ms=40.0, extra_loss_pct=0.6,
+                      capacity_factor=0.20, description="5G 過熱降載，速度只剩兩成"),
+            ],
+            demand={"svc-guest": 3.0, "svc-ed-vitals": 1.8, "svc-teleconsult": 1.4},
+        ),
+        TimelineStep(
+            16.0, "第 16 小時：基地台備援電力耗盡，衛星成為唯一生路",
+            faults=[
+                Fault("w-fiber", LinkState.DOWN, description="光纖仍在搶修"),
+                Fault("w-5g", LinkState.DOWN, description="基地台備援電力耗盡，退出服務"),
+            ],
+            demand={"svc-guest": 2.0, "svc-ed-vitals": 2.0, "svc-teleconsult": 1.5},
+        ),
+    ],
     faults=[
         Fault("w-fiber", LinkState.DOWN, description="對外主線光纖被扯斷，完全不通"),
         Fault(

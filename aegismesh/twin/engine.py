@@ -66,6 +66,7 @@ class DigitalTwin:
         self.demand: dict[str, float] = {}
         self.quota_used_gb: dict[str, float] = {}
         self.event_hours: float = 12.0
+        self.elapsed_hours: float = 0.0
         self._graph = self._build_graph()
         self.reset_routing()
 
@@ -123,6 +124,8 @@ class DigitalTwin:
         """注入災害：線路故障 ＋ 需求變動 ＋ 事件持續時間。"""
         self.demand = dict(scenario.demand)
         self.event_hours = scenario.duration_hours
+        self.elapsed_hours = 0.0
+        self.quota_used_gb = {}
         self.apply_faults(scenario.faults)
 
     def apply_faults(self, faults: list[Fault]) -> None:
@@ -135,6 +138,14 @@ class DigitalTwin:
             link.netem_extra_loss_pct = f.extra_loss_pct
             link.netem_capacity_factor = f.capacity_factor
 
+    def clear_link_faults(self) -> None:
+        """只把線路狀態復原，不動配額與已經過的時間。"""
+        for link in self.links.values():
+            link.state = LinkState.UP
+            link.netem_extra_latency_ms = 0.0
+            link.netem_extra_loss_pct = 0.0
+            link.netem_capacity_factor = 1.0
+
     def clear_faults(self) -> None:
         for link in self.links.values():
             link.state = LinkState.UP
@@ -143,6 +154,7 @@ class DigitalTwin:
             link.netem_capacity_factor = 1.0
         self.demand = {}
         self.quota_used_gb = {}
+        self.elapsed_hours = 0.0
 
     # --------------------------------------------------- 需求／配額／共同風險
 
@@ -157,6 +169,37 @@ class DigitalTwin:
 
     def min_mbps(self, service_id: str) -> float:
         return self.services[service_id].slo.min_bandwidth_mbps * self.demand.get(service_id, 1.0)
+
+    @property
+    def hours_remaining(self) -> float:
+        """事件還要撐多久。配速要用這個而不是總時長 ——
+        已經燒掉的配額回不來，剩下的必須攤在剩下的時間上。"""
+        return max(self.event_hours - self.elapsed_hours, 0.0)
+
+    def consume_quota(self, hours: float) -> dict[str, float]:
+        """依目前流量推進 `hours` 小時，把用掉的量記進配額。
+
+        這是把配額從「估算值」變成「真的會用完的東西」的一步：
+        前面時段用得兇，後面時段就真的沒得用。
+        """
+        load = self._link_load()
+        burned: dict[str, float] = {}
+        for lid, link in self.links.items():
+            if link.quota_gb is None:
+                continue
+            gb = load.get(lid, 0.0) * hours * 3600 / 8 / 1000
+            self.quota_used_gb[lid] = self.quota_used_gb.get(lid, 0.0) + gb
+            burned[lid] = gb
+        self.elapsed_hours += hours
+        self.tick += 1
+        return burned
+
+    def advance_to(self, step) -> None:
+        """切換到某個時段的線路狀態與需求（完整宣告，非增量）。"""
+        self.clear_link_faults()
+        self.apply_faults(step.faults)
+        if step.demand:
+            self.demand = dict(step.demand)
 
     def quota_hours_left(self, load: dict[str, float] | None = None) -> dict[str, float]:
         """有配額的線路照目前流量還能撐幾小時。
@@ -254,6 +297,7 @@ class DigitalTwin:
         twin.demand = dict(self.demand)
         twin.quota_used_gb = dict(self.quota_used_gb)
         twin.event_hours = self.event_hours
+        twin.elapsed_hours = self.elapsed_hours
         twin._graph = self._graph                    # 拓樸不變，可共用
         return twin
 
@@ -319,6 +363,8 @@ class DigitalTwin:
 
         crit = [s for sid, s in svc_states.items() if self.services[sid].is_critical]
         crit_avail = 100.0 * sum(1 for s in crit if s.slo_met) / len(crit) if crit else 100.0
+        life = [s for sid, s in svc_states.items() if self.services[sid].is_life_critical]
+        life_avail = 100.0 * sum(1 for s in life if s.slo_met) / len(life) if life else 100.0
 
         # 加權可用率：優先級越高權重越大（權重 = 1/(priority+1)）
         total_w = sum(1.0 / (s.priority + 1) for s in self.services.values())
@@ -342,6 +388,7 @@ class DigitalTwin:
             services=svc_states,
             links=link_snaps,
             critical_availability_pct=crit_avail,
+            life_critical_availability_pct=life_avail,
             weighted_availability_pct=weighted_avail,
             slo_compliance_pct=compliance,
             monthly_cost_ntd=cost,

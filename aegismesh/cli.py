@@ -19,6 +19,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from .audit import AuditLog
+from .episode import AEGIS, HUMAN_HEURISTIC, POLICY_LABELS, compare
 from .domain import RecoveryPlan
 from .optimizer import STRATEGY_LABELS
 from .orchestrator import Orchestrator, auto_approve
@@ -228,6 +229,53 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0 if result.succeeded else 1
 
 
+def cmd_episode(args: argparse.Namespace) -> int:
+    """整場事件的多時段推演：AI 配速 vs 人工經驗法則。"""
+    scenario = get_scenario(args.scenario)
+    console.print(Rule(f"[bold]{scenario.name}[/bold] · {scenario.duration_hours:.0f} 小時推演"))
+    console.print(f"[dim]{scenario.narrative}[/dim]\n")
+
+    results = compare(scenario)
+    for policy in (HUMAN_HEURISTIC, AEGIS):
+        r = results[policy]
+        t = Table(title=POLICY_LABELS[policy], header_style="bold cyan")
+        t.add_column("時段", no_wrap=True)
+        t.add_column("採用方案", no_wrap=True)
+        t.add_column("生命關鍵", justify="right")
+        t.add_column("關鍵服務", justify="right")
+        t.add_column("衛星配額剩", justify="right", no_wrap=True)
+        for s in r.steps:
+            p0 = s.snapshot.life_critical_availability_pct
+            style = "green" if s.critical_availability_pct >= 99.9 else (
+                "yellow" if s.critical_availability_pct > 0 else "red")
+            t.add_row(
+                f"h{s.hour:.0f}–{s.hour + s.duration_h:.0f}",
+                STRATEGY_LABELS.get(s.strategy, s.strategy or "—無可行方案—"),
+                f"[{'green' if p0 >= 99.9 else 'red'}]{p0:.0f}%[/]",
+                f"[{style}]{s.critical_availability_pct:.0f}%[/]",
+                f"{s.quota_left_gb:.0f} GB",
+            )
+        console.print(t)
+        console.print(
+            f"  關鍵服務正常累計 [bold]{r.critical_service_hours:.1f}[/bold] / "
+            f"{scenario.duration_hours:.0f} 小時"
+            + (f"　衛星配額耗盡於 [red]h{r.quota_exhausted_at:.0f}[/red]"
+               if r.quota_exhausted_at is not None else "　衛星配額撐完全程")
+        )
+        console.print()
+
+    human, aegis = results[HUMAN_HEURISTIC], results[AEGIS]
+    delta = aegis.critical_service_hours - human.critical_service_hours
+    console.print(Rule("差異"))
+    console.print(
+        f"AegisMesh 讓關鍵醫療服務多正常運作 [bold green]{delta:+.1f} 小時[/bold green]"
+        f"（{human.critical_service_hours:.1f} → {aegis.critical_service_hours:.1f}）。\n"
+        f"[dim]差別發生在配速決策上：代價要到十幾小時後才浮現，"
+        f"而那時已經沒有回頭路。[/dim]"
+    )
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from .api.server import serve
 
@@ -300,6 +348,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="跳過人工核准閘門（僅供自動化測試）")
     p_demo.add_argument("--max-rounds", type=int, default=2, help="驗證失敗時的最大重規劃輪數")
     p_demo.set_defaults(func=cmd_demo)
+
+    p_ep = sub.add_parser("episode", help="整場事件多時段推演：AI 配速 vs 人工經驗法則")
+    p_ep.add_argument("scenario", nargs="?", default="typhoon-fiber-cut", choices=list(SCENARIOS))
+    p_ep.set_defaults(func=cmd_episode)
 
     sub.add_parser("scenarios", help="列出可用災害情境").set_defaults(func=cmd_scenarios)
 
