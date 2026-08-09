@@ -27,7 +27,13 @@ def build_nodes() -> list[Node]:
 
 
 def build_links() -> list[Link]:
-    """cost_per_gb 單位為新台幣元/GB，反映固網 << 5G << 衛星的實際價差。"""
+    """cost_per_gb 單位為新台幣元/GB，反映固網 << 5G << 衛星的實際價差。
+
+    duct 欄位標示共同風險群組（SRLG）。這裡的設定取自真實佈線常態：
+    院區對外光纖與鄰近 5G 基地台的回程光纖，往往共用同一條市政管道。
+    帳面上「固網斷了還有 5G」，實際上一鏟子下去兩條一起斷 ——
+    這正是人工判斷最常漏掉、而圖模型能自動抓出來的東西。
+    """
     return [
         # 院內 LAN
         Link("l-ed", "ward-ed", "core-sw", LinkKind.LAN, 10_000, 0.20, 0.001, 0.0),
@@ -39,12 +45,18 @@ def build_links() -> list[Link]:
         Link("l-core-5g", "core-sw", "cpe-5g", LinkKind.LAN, 2_000, 0.30, 0.002, 0.0),
         Link("l-core-sat", "core-sw", "sat-vsat", LinkKind.LAN, 500, 0.50, 0.002, 0.0),
         # WAN 三路：固網專線 / 5G / 衛星
-        Link("w-fiber", "cpe-fiber", "pop-fiber", LinkKind.FIBER, 1_000, 3.0, 0.005, 0.08),
+        Link("w-fiber", "cpe-fiber", "pop-fiber", LinkKind.FIBER, 1_000, 3.0, 0.005, 0.08,
+             duct="duct-civic-north"),
         Link("w-5g", "cpe-5g", "gnb-5g", LinkKind.MOBILE_5G, 600, 14.0, 0.05, 0.55),
-        Link("w-sat", "sat-vsat", "gw-sat", LinkKind.SATELLITE, 120, 48.0, 0.30, 4.20),
+        # 衛星在災害期間有流量配額：整場事件只有 300 GB。
+        # 天線開得到 120 Mbps，但那樣用 5.5 小時就歸零 —— 容量與配額是兩回事。
+        Link("w-sat", "sat-vsat", "gw-sat", LinkKind.SATELLITE, 120, 48.0, 0.30, 4.20,
+             quota_gb=300.0),
         # 電信骨幹 → 醫療雲
         Link("b-fiber", "pop-fiber", "dc-hicloud", LinkKind.BACKBONE, 10_000, 4.0, 0.002, 0.01),
-        Link("b-5g", "gnb-5g", "dc-hicloud", LinkKind.BACKBONE, 5_000, 6.0, 0.005, 0.01),
+        # ← 與院區對外光纖共用同一條市政管道
+        Link("b-5g", "gnb-5g", "dc-hicloud", LinkKind.BACKBONE, 5_000, 6.0, 0.005, 0.01,
+             duct="duct-civic-north"),
         Link("b-sat", "gw-sat", "dc-hicloud", LinkKind.BACKBONE, 1_000, 12.0, 0.010, 0.01),
     ]
 

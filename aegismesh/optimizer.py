@@ -20,6 +20,7 @@ class Strategy:
     queue_budget: float       # 容許的排隊延遲／基礎延遲比值，決定使用率的軟上限
     cost_weight: float        # 路徑排序時成本的權重（0=只看延遲，1=只看成本）
     protect_priority: int     # 此優先級（含）以內的業務不會被 refine 迴圈犧牲
+    quota_pacing: float       # 允許用到「撐完事件的速率」的幾倍（>1 = 透支配額）
 
     @property
     def rho_cap(self) -> float:
@@ -33,13 +34,37 @@ class Strategy:
 
 
 STRATEGIES = (
-    Strategy("protect_critical", "生命關鍵優先", util_target=0.80, queue_budget=0.8,
-             cost_weight=0.10, protect_priority=1),
-    Strategy("balanced", "均衡（SLA×成本）", util_target=0.88, queue_budget=1.5,
-             cost_weight=0.45, protect_priority=0),
-    Strategy("lowest_cost", "成本最小化", util_target=0.92, queue_budget=3.0,
-             cost_weight=0.85, protect_priority=0),
+    # quota_pacing 是這三個策略真正分歧的地方：
+    #   救命優先 —— 為了現在救人，允許把衛星配額用到 2.5 倍速（幾小時後會斷）
+    #   均衡     —— 小幅透支
+    #   費用優先 —— 嚴格配速，確保撐完整場事件
+    # 有了耗竭性資源，「哪個方案比較好」才不再有顯而易見的答案。
+    Strategy("protect_critical", "救命優先", util_target=0.80, queue_budget=0.8,
+             cost_weight=0.10, protect_priority=1, quota_pacing=2.5),
+    Strategy("balanced", "品質與費用均衡", util_target=0.88, queue_budget=1.5,
+             cost_weight=0.45, protect_priority=0, quota_pacing=1.25),
+    Strategy("lowest_cost", "費用優先", util_target=0.92, queue_budget=3.0,
+             cost_weight=0.85, protect_priority=0, quota_pacing=1.0),
 )
+
+# key 是稽核與 API 的穩定識別字，label 是給人看的名稱。單一來源，
+# 避免前端、CLI、Agent 敘述各自維護一份翻譯而講出不同的方案名。
+STRATEGY_LABELS = {s.key: s.label for s in STRATEGIES}
+
+def _quota_cap_mbps(twin: DigitalTwin, link_id: str, pacing: float) -> float:
+    """把「剩餘配額要撐完整場事件」換算成這條線路的 Mbps 上限。
+
+    800 GB 的配額配上 120 Mbps 的天線，聽起來很夠 —— 但事件要撐 24 小時的話，
+    可持續速率只有 28 Mbps。這個換算就是人工判斷最容易失手的地方：
+    眼前看到的是「衛星還有 75% 容量」，看不到的是「照這樣用 5 小時後歸零」。
+    """
+    link = twin.links[link_id]
+    if link.quota_gb is None:
+        return float("inf")
+    remaining = max(link.quota_gb - twin.quota_used_gb.get(link_id, 0.0), 0.0)
+    hours = max(twin.event_hours, 0.1)
+    return (remaining / hours) * 1000 * 8 / 3600 * pacing
+
 
 _MAX_REFINE_ROUNDS = 12
 _HOT_LINK_UTIL_PCT = 45.0   # 使用率高於此值才算「壅塞熱點」，值得回收頻寬
@@ -78,48 +103,84 @@ def _greedy_allocate(
     st: Strategy,
     candidate_paths: dict[str, list[list[str]]],
 ) -> tuple[dict[str, list[str]], dict[str, float]]:
-    """按優先級由高到低逐一允入，維護每條鏈路的殘餘容量。
+    """兩階段允入控制：先保底，再加碼。
 
-    容量上限用 st.rho_cap（由排隊預算推導），因此高延遲鏈路會被自動保守使用，
-    不會出現「容量還夠但延遲已爆掉」的分配。
+    早期版本是「依優先級一個一個吃到飽」。資源充裕時看不出問題，但只要有
+    耗竭性資源（衛星配額），排序第一的 P0 就會把上限吃光，同為 P0 的第二個
+    服務拿到零 —— 急診活著、加護病房斷線，這在臨床上完全站不住腳。
+
+    改成電信 QoS 的標準兩階段模型：
+      Pass 1（保底 / CIR）受保護服務先各自預留「最低可服務頻寬」，確保沒有人歸零
+      Pass 2（加碼 / PIR）再依優先級把剩餘頻寬往上加到完整需求
+
+    容量上限用 st.rho_cap（由排隊預算推導），高延遲鏈路會被自動保守使用；
+    再與配額上限取小者 —— 線路開得起，不代表整場事件用得起。
     """
-    # 兩層預算：soft 是延遲導向的保守上限，hard 是容量硬上限。
-    # 受保護業務在 soft 排不進去時可以動用 hard —— 寧可延遲吃緊也不讓生命關鍵業務斷線，
-    # 之後由 refine 迴圈實際推演確認 SLO 是否真的守得住。
-    soft = {lid: l.effective_capacity_mbps * st.rho_cap for lid, l in twin.links.items()}
-    hard = {lid: l.effective_capacity_mbps * st.util_target for lid, l in twin.links.items()}
+    quota = {lid: _quota_cap_mbps(twin, lid, st.quota_pacing) for lid in twin.links}
+    soft = {lid: min(l.effective_capacity_mbps * st.rho_cap, quota[lid])
+            for lid, l in twin.links.items()}
+    hard = {lid: min(l.effective_capacity_mbps * st.util_target, quota[lid])
+            for lid, l in twin.links.items()}
     paths: dict[str, list[str]] = {}
     admitted: dict[str, float] = {}
+    ranked = {
+        svc.id: _rank_paths(twin, svc, candidate_paths[svc.id], st)
+        for svc in twin.services.values()
+    }
+    order = sorted(twin.services.values(), key=lambda s: s.priority)
 
-    for svc in sorted(twin.services.values(), key=lambda s: s.priority):
-        candidates = _rank_paths(twin, svc, candidate_paths[svc.id], st)
+    def take(path: list[str], mbps: float) -> None:
+        for l in twin.path_links(path):
+            soft[l.id] -= mbps
+            hard[l.id] -= mbps
+
+    # ---- Pass 1：保底
+    for svc in order:
         protected = svc.priority <= st.protect_priority or svc.is_critical
-        budgets = [soft, hard] if protected else [soft]
-
-        chosen: list[str] = []
-        grant = 0.0
-        for budget in budgets:
-            for path in candidates:
+        if not protected:
+            continue
+        need_min = twin.min_mbps(svc.id)
+        # 受保護業務在 soft 排不進去時可動用 hard —— 寧可延遲吃緊也不讓它斷線
+        for budget in (soft, hard):
+            for path in ranked[svc.id]:
                 links = twin.path_links(path)
-                headroom = min(budget[l.id] for l in links)
-                if headroom < svc.slo.min_bandwidth_mbps:
-                    continue
-                grant = min(svc.slo.required_bandwidth_mbps, headroom)
-                chosen = path
-                break
-            if chosen:
+                if links and min(budget[l.id] for l in links) >= need_min:
+                    paths[svc.id] = path
+                    admitted[svc.id] = need_min
+                    take(path, need_min)
+                    break
+            if svc.id in admitted:
                 break
 
-        if chosen:
-            for l in twin.path_links(chosen):
-                soft[l.id] -= grant
-                hard[l.id] -= grant
-            paths[svc.id] = chosen
-            admitted[svc.id] = grant
-        else:
+    # ---- Pass 2：依優先級加碼到完整需求
+    for svc in order:
+        need_full, need_min = twin.required_mbps(svc.id), twin.min_mbps(svc.id)
+        current = admitted.get(svc.id, 0.0)
+        path = paths.get(svc.id)
+
+        if path is None:                       # Pass 1 沒配到（非受保護、或塞不下）
+            for cand in ranked[svc.id]:
+                links = twin.path_links(cand)
+                if links and min(soft[l.id] for l in links) >= need_min:
+                    path = paths[svc.id] = cand
+                    break
+        if path is None:
             # 連最低頻寬都排不進去 → 暫停該業務，把頻寬讓給更關鍵者
-            paths[svc.id] = candidates[0] if candidates else []
+            paths[svc.id] = ranked[svc.id][0] if ranked[svc.id] else []
             admitted[svc.id] = 0.0
+            continue
+
+        links = twin.path_links(path)
+        headroom = max(min(soft[l.id] for l in links), 0.0)
+        add = min(need_full - current, headroom)
+        if current <= 0.0 and add < need_min:  # 加了還是達不到最低服務水準
+            admitted[svc.id] = 0.0
+            continue
+        if add > 0:
+            admitted[svc.id] = current + add
+            take(path, add)
+        else:
+            admitted.setdefault(svc.id, current)
 
     return paths, admitted
 
@@ -158,10 +219,10 @@ def _priority_repair(
         donors.sort(key=lambda s: -s.priority)   # 從最不重要的開始收
 
         reclaimable = sum(admitted[d.id] for d in donors)
-        if reclaimable >= svc.slo.min_bandwidth_mbps:
+        if reclaimable >= twin.min_mbps(svc.id):
             for d in donors:
                 admitted[d.id] = 0.0
-            admitted[svc.id] = min(svc.slo.required_bandwidth_mbps, reclaimable)
+            admitted[svc.id] = min(twin.required_mbps(svc.id), reclaimable)
         else:
             # 救不起來 → 至少不能讓更低優先級的業務佔著頻寬
             for d in donors:
@@ -196,10 +257,15 @@ def _refine(
             break
 
         # 受害者路徑上、使用率超過門檻的鏈路 = 值得回收頻寬的熱點
+        # 熱點 = 使用率高，或者「配額已經逼近上限」。後者很反直覺：
+        # 配額綁住時，鏈路使用率可能只有 43%，但規劃上它已經滿了 ——
+        # 只看使用率的話，迴圈會誤判成「不是壅塞造成的」而提早放棄。
         hot: set[str] = set()
         for sid in failing:
             for lid in snap.services[sid].link_ids:
-                if snap.links[lid].utilization_pct >= _HOT_LINK_UTIL_PCT:
+                cap = _quota_cap_mbps(twin, lid, st.quota_pacing)
+                if (snap.links[lid].utilization_pct >= _HOT_LINK_UTIL_PCT
+                        or (cap != float("inf") and snap.links[lid].load_mbps >= cap * 0.9)):
                     hot.add(lid)
         if not hot:
             break  # 延遲問題不是壅塞造成的（例如基礎延遲本身就超標），限流無濟於事
@@ -208,7 +274,7 @@ def _refine(
         # 這一點很關鍵 —— 壅塞常常是「受保護業務彼此排擠」造成的，
         # 若禁止動它們，迴圈會卡住而讓關鍵業務全數失守。
         def floor_of(s) -> float:
-            return 0.0 if s.priority > st.protect_priority else s.slo.min_bandwidth_mbps
+            return 0.0 if s.priority > st.protect_priority else twin.min_mbps(s.id)
 
         victim = None
         for cand in order:

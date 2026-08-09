@@ -7,309 +7,392 @@
 <!-- 內嵌 favicon：避免瀏覽器對 /favicon.ico 發出 404 請求 -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e13'/%3E%3Cpath d='M16 5l9 4v7c0 6-4 9.5-9 11-5-1.5-9-5-9-11V9z' fill='none' stroke='%234dd0e1' stroke-width='2'/%3E%3C/svg%3E">
 <style>
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
-/* Hallmark · genre: modern-minimal · macrostructure: Workbench · tone: technical · anchor hue: cyan
- * contrast: pass (40-41) · honest: pass (46) · chrome: pass (47) · tokens: pass (48)
- * responsive: pass (34, 49-57) · icons: pass (30)
+/* AegisMesh 戰情室樣式表
+ *
+ * 兩條色彩通道刻意分開，這是這份表最重要的規則：
+ *   狀態色（ok / warn / crit）只表達健康度；
+ *   WAN 類型（固網 / 5G / 衛星）另用一組不重疊的色相。
+ * 舊版把 5G 畫成琥珀色、固網畫成綠色，等於讓「鏈路種類」borrow 了「健康度」的語意，
+ * 一條健康的 5G 鏈路看起來永遠像在告警。
+ *
+ * 所有對比皆以 OKLCH → sRGB 實算驗證：小字 ≥ 4.5:1，具識別功能的圖形邊界 ≥ 3:1。
  */
 :root{
-  --bg:oklch(13% .012 235); --panel:oklch(16% .014 235); --panel-2:oklch(19% .016 235); --line:oklch(29% .018 235);
-  --fg:oklch(94% .008 235); --muted:oklch(76% .018 235); --dim:oklch(58% .025 235);
-  --ok:oklch(78% .17 150); --warn:oklch(82% .15 78); --crit:oklch(70% .19 28); --accent:oklch(78% .13 210);
-  --fiber:var(--ok); --g5:var(--warn); --sat:oklch(74% .13 250); --wire:oklch(38% .025 235);
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
-}
-*{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{
-  background:var(--bg); color:var(--fg); font-size:14px;
-  font-family:var(--font-body,"Noto Sans TC",sans-serif);
-  display:flex; flex-direction:column; overflow:hidden;
-}
-.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
-
-/* ---------- header ---------- */
-header{
-  display:flex; align-items:center; gap:16px; padding:12px 20px;
-  border-bottom:1px solid var(--line); background:var(--panel-2); flex:none;
-}
-.brand{font-size:16px; font-weight:650; letter-spacing:.02em}
-.brand small{color:var(--muted); font-weight:400; margin-left:8px; letter-spacing:0}
-.spacer{flex:1}
-.badge{
-  font-size:11px; padding:4px 9px; border-radius:5px; border:1px solid var(--line);
-  color:var(--muted); background:var(--panel); white-space:nowrap;
-}
-.badge.on{color:var(--ok); border-color:color-mix(in oklch,var(--ok) 38%,var(--line))}
-.badge.off{color:var(--warn); border-color:color-mix(in oklch,var(--warn) 36%,var(--line))}
-select,button{
-  font:inherit; color:var(--fg); background:var(--panel-2);
-  border:1px solid var(--line); border-radius:6px; padding:7px 12px;
-}
-button{cursor:pointer; transition:background-color var(--dur-short,160ms) var(--ease-out,cubic-bezier(.16,1,.3,1)),border-color var(--dur-short,160ms) var(--ease-out,cubic-bezier(.16,1,.3,1)),transform 100ms var(--ease-out,cubic-bezier(.16,1,.3,1))}
-button:hover:not(:disabled){border-color:var(--accent)}
-button:disabled{opacity:.4; cursor:not-allowed}
-select:disabled{opacity:.55; cursor:not-allowed}
-button.primary{background:var(--accent); border-color:var(--accent); color:var(--bg); font-weight:600}
-button.go{background:var(--ok); border-color:var(--ok); color:var(--bg)}
-button.no{background:transparent; border-color:var(--crit); color:var(--crit)}
-
-/* ---------- layout ---------- */
-main{flex:1; display:grid; grid-template-columns:1fr 380px; gap:1px;
-     background:var(--line); min-height:0}
-.col{display:flex; flex-direction:column; gap:1px; min-height:0; background:var(--line)}
-.panel{background:var(--panel); padding:14px 16px; min-height:0; overflow:auto}
-.panel.tight{padding:0}
-h2{
-  margin:0 0 10px; font-size:11px; font-weight:600; letter-spacing:.09em;
-  text-transform:uppercase; color:var(--muted);
-}
-h2 .hint{float:right; text-transform:none; letter-spacing:0; font-weight:400; color:var(--dim)}
-
-/* ---------- topology ---------- */
-#topo{width:100%; height:auto; display:block}
-.link{stroke:var(--wire); stroke-width:2; transition:stroke var(--dur-medium,280ms) var(--ease-out,cubic-bezier(.16,1,.3,1)),stroke-width var(--dur-medium,280ms) var(--ease-out,cubic-bezier(.16,1,.3,1))}
-.link.fiber{stroke:var(--fiber)} .link.g5{stroke:var(--g5)} .link.sat{stroke:var(--sat)}
-.link.degraded{stroke:var(--warn); stroke-dasharray:7 5; animation:flow 1s linear infinite}
-.link.down{stroke:var(--crit); stroke-dasharray:3 6; opacity:.55}
-@keyframes flow{to{stroke-dashoffset:-12}}
-.nodebox{fill:var(--panel-2); stroke:var(--line); rx:6}
-.nodebox.dc{fill:var(--panel-2); stroke:var(--accent)}
-.nodelbl{fill:var(--fg); font-size:10.5px}
-.nodesub{fill:var(--dim); font-size:9px; font-family:var(--mono)}
-.linklbl{fill:var(--dim); font-size:8.5px; font-family:var(--mono)}
-
-/* ---------- metric tiles ---------- */
-.tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px}
-.tile{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:11px 12px}
-.tile .k{font-size:10px; color:var(--muted); letter-spacing:.05em}
-.tile .v{font-family:var(--mono); font-size:25px; font-weight:600; margin-top:3px; line-height:1.1}
-.tile .d{font-size:10px; color:var(--dim); font-family:var(--mono); margin-top:2px}
-.v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.crit{color:var(--crit)}
-
-/* ---------- tables ---------- */
-table{width:100%; border-collapse:collapse; font-size:12px}
-th{
-  text-align:left; font-weight:500; color:var(--muted); font-size:10px;
-  letter-spacing:.05em; padding:5px 7px; border-bottom:1px solid var(--line);
-  position:sticky; top:0; background:var(--panel);
-}
-td{padding:6px 7px; border-bottom:1px solid var(--line)}
-tr.sel td{background:var(--panel-2)}
-.r{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums}
-.pri{
-  font-family:var(--mono); font-size:10px; padding:1px 5px; border-radius:3px;
-  background:var(--panel-2); color:var(--muted); border:1px solid var(--line);
-}
-.pri.p0{color:var(--crit); border-color:var(--crit); background:color-mix(in oklch,var(--crit) 9%,var(--panel))}
-.pri.p1{color:var(--warn); border-color:var(--warn); background:color-mix(in oklch,var(--warn) 9%,var(--panel))}
-.dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px}
-.dot.ok{background:var(--ok)} .dot.warning{background:var(--warn)} .dot.critical{background:var(--crit)}
-.tag{font-size:10px; padding:2px 6px; border-radius:4px; border:1px solid}
-.tag.allow{color:var(--ok); border-color:var(--ok); background:color-mix(in oklch,var(--ok) 9%,var(--panel))}
-.tag.require_approval{color:var(--warn); border-color:var(--warn); background:color-mix(in oklch,var(--warn) 9%,var(--panel))}
-.tag.deny{color:var(--crit); border-color:var(--crit); background:color-mix(in oklch,var(--crit) 9%,var(--panel))}
-.wan{font-size:10px; font-family:var(--mono)}
-.wan.fiber{color:var(--fiber)} .wan.g5{color:var(--g5)} .wan.satellite{color:var(--sat)}
-
-/* ---------- agent stream ---------- */
-#stream{display:flex; flex-direction:column; gap:9px}
-.card{
-  border:1px solid var(--line); border-left:2px solid var(--accent);
-  background:var(--panel-2); border-radius:0 7px 7px 0; padding:9px 12px;
-  animation:pop var(--dur-medium,280ms) var(--ease-out,cubic-bezier(.16,1,.3,1));
-}
-@keyframes pop{from{opacity:0; transform:translateX(-8px)}to{opacity:1}}
-.card .hd{display:flex; gap:8px; align-items:baseline; margin-bottom:4px}
-.card .who{font-size:11.5px; font-weight:600; color:var(--accent)}
-.card .st{font-size:9.5px; color:var(--dim); font-family:var(--mono)}
-.card .tx{font-size:12px; line-height:1.55; color:var(--muted)}
-.card.sys{border-left-color:var(--warn)} .card.sys .who{color:var(--warn)}
-.card.exec{border-left-color:var(--ok)} .card.exec .who{color:var(--ok)}
-.card.crit{border-left-color:var(--crit)} .card.crit .who{color:var(--crit)}
-.card ul{margin:6px 0 0; padding-left:17px; font-size:11.5px; color:var(--muted); line-height:1.6}
-code{font-family:var(--mono); font-size:10.5px; color:var(--muted); background:var(--bg);
-     padding:1px 5px; border-radius:3px}
-
-/* ---------- modal ---------- */
-#modal{
-  position:fixed; inset:0; background:var(--bg); display:none;
-  align-items:center; justify-content:center; z-index:50; backdrop-filter:blur(3px);
-}
-#modal.show{display:flex}
-.dlg{
-  width:min(620px,92vw); max-height:86vh; overflow:auto; background:var(--panel);
-  border:1px solid var(--warn); border-radius:11px; padding:22px;
-  box-shadow:0 24px 70px var(--bg);
-}
-.dlg h3{margin:0 0 4px; font-size:16px; color:var(--warn)}
-.dlg .sub{color:var(--muted); font-size:12px; margin-bottom:16px}
-.findings{background:var(--panel-2); border:1px solid var(--warn); border-radius:7px;
-          padding:11px 13px; margin-bottom:14px}
-.findings li{font-size:12px; line-height:1.65; color:var(--warn)}
-.acts{background:var(--panel-2); border:1px solid var(--line); border-radius:7px;
-      padding:11px 13px; margin-bottom:18px}
-.acts li{font-size:12px; line-height:1.7; color:var(--muted)}
-.dlg ul{margin:0; padding-left:18px}
-.btns{display:flex; gap:10px; justify-content:flex-end}
-.empty{color:var(--dim); font-size:12px; padding:14px 2px}
-::-webkit-scrollbar{width:9px;height:9px}
-::-webkit-scrollbar-thumb{background:var(--line); border-radius:5px}
-::-webkit-scrollbar-track{background:transparent}
-
-/* ---------- Workbench redesign ---------- */
-:root{
-  --bg:oklch(13% 0.012 235); --panel:oklch(16% 0.014 235);
-  --panel-2:oklch(19% 0.016 235); --panel-3:oklch(22% 0.018 235);
-  --line:oklch(29% 0.018 235); --line-strong:oklch(38% 0.025 235);
-  --fg:oklch(94% 0.008 235); --muted:oklch(76% 0.018 235);
-  --dim:oklch(58% 0.025 235); --ok:oklch(78% 0.17 150);
-  --warn:oklch(82% 0.15 78); --crit:oklch(70% 0.19 28);
-  --accent:oklch(78% 0.13 210); --fiber:var(--ok);
-  --g5:var(--warn); --sat:oklch(74% 0.13 250); --wire:var(--line-strong);
-  --scrim:oklch(8% 0.01 235 / .84); --shadow:oklch(5% 0.02 235 / .42);
+  /* 表面層級 */
+  --bg:oklch(13% .012 235); --panel:oklch(16% .014 235);
+  --panel-2:oklch(19% .016 235); --panel-3:oklch(22% .018 235);
+  --line:oklch(29% .018 235);
+  /* 節點框線要能被辨識，需 3:1；舊值 38% 只有 1.95:1 */
+  --line-strong:oklch(50% .025 235);
+  /* 文字：--dim 由 58% 提到 62%，舊值在 --panel-2 上只有 4.33:1，未達 AA */
+  --fg:oklch(94% .008 235); --muted:oklch(76% .018 235); --dim:oklch(62% .025 235);
+  /* 健康狀態 —— 只有這三色可以代表健康度 */
+  --ok:oklch(78% .17 150); --warn:oklch(82% .15 78); --crit:oklch(70% .19 28);
+  /* 介面重點色 */
+  --accent:oklch(78% .13 210); --accent-ink:oklch(18% .025 235); --positive-ink:oklch(18% .035 150);
+  /* WAN 類型 —— 色相刻意避開狀態色（195 / 300 / 255） */
+  --wan-fiber:oklch(80% .12 195); --wan-5g:oklch(76% .14 300); --wan-sat:oklch(74% .14 255);
+  --wire:var(--line-strong);
+  /* 材質 */
+  --scrim:oklch(8% .01 235 / .84); --shadow:oklch(5% .02 235 / .42);
   --ambient:oklch(23% .035 220 / .34); --header-surface:oklch(14.5% .014 235 / .96);
-  --accent-ink:oklch(18% .025 235); --positive-ink:oklch(18% .035 150);
   --dc-surface:oklch(21% .034 220);
+  /* 一組圓角比例，全站只用這四階 */
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:18px;
+  /* 間距 */
   --space-3xs:.25rem; --space-2xs:.5rem; --space-xs:.75rem; --space-sm:1rem;
-  --space-md:1.5rem; --space-lg:2rem; --space-xl:3rem;
-  --font-display:"Geist","Noto Sans TC","PingFang TC",sans-serif;
-  --font-body:"IBM Plex Sans","Noto Sans TC","PingFang TC",sans-serif;
-  --mono:"Geist Mono","SFMono-Regular",Menlo,monospace;
-  --ease-out:cubic-bezier(.16,1,.3,1); --ease-in:cubic-bezier(.7,0,.84,0);
-  --dur-short:160ms; --dur-medium:280ms;
+  --space-md:1.5rem; --space-lg:2rem;
+  /* 字體：刻意不載入外部 webfont。評審現場可能沒有網路，宣告一套載不到的
+   * Geist / IBM Plex 只會靜默退回系統字 —— 那等於設計上說了謊。這裡直接用會解析成功的堆疊。 */
+  --font-ui:"PingFang TC","Noto Sans TC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,"Noto Sans Mono",monospace;
+  --ease-out:cubic-bezier(.16,1,.3,1); --dur-short:160ms; --dur-medium:280ms;
 }
-html,body{min-width:0; height:100%; overflow-x:clip}
+
+/* ---------- base ---------- */
+*{box-sizing:border-box}
+html,body{margin:0; height:100%; min-width:0; overflow-x:clip}
 body{
-  min-height:100dvh; font-family:var(--font-body); font-size:15px;
-  background:var(--bg); color:var(--fg); text-rendering:optimizeLegibility;
+  min-height:100dvh; display:flex; flex-direction:column; overflow:hidden;
+  background:var(--bg); color:var(--fg);
+  font-family:var(--font-ui); font-size:15px; text-rendering:optimizeLegibility;
 }
 body::before{
   content:""; position:fixed; inset:0; pointer-events:none; z-index:-1;
   background:radial-gradient(circle at 14% 0%,var(--ambient),transparent 31%);
 }
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
 .visually-hidden{
   position:absolute!important; width:1px!important; height:1px!important; padding:0!important;
   margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important;
   white-space:nowrap!important; border:0!important;
 }
+
+/* ---------- header ---------- */
 header{
-  min-height:68px; padding:var(--space-2xs) var(--space-md); gap:var(--space-xs);
+  flex:none; display:flex; align-items:center; gap:var(--space-xs);
+  min-height:68px; padding:var(--space-2xs) var(--space-md);
   border-bottom:1px solid var(--line); background:var(--header-surface);
   box-shadow:0 12px 36px var(--shadow); position:relative; z-index:10;
 }
-.brand{font-family:var(--font-display); font-size:18px; font-weight:700; letter-spacing:-.025em; white-space:nowrap}
-.brand small{display:block; margin:var(--space-3xs) 0 0; font-family:var(--font-body); font-size:11px; font-weight:400; color:var(--dim); letter-spacing:.02em}
-.badge{
-  min-height:34px; display:inline-flex; align-items:center; gap:var(--space-2xs); padding:var(--space-2xs) var(--space-xs);
-  border-radius:var(--radius-control,10px); background:var(--panel); font-family:var(--mono);
-  font-size:10px; letter-spacing:.01em;
+.brand{font-size:18px; font-weight:700; letter-spacing:-.01em; white-space:nowrap}
+.brand small{
+  display:block; margin-top:var(--space-3xs); font-size:11px; font-weight:400;
+  color:var(--dim); letter-spacing:.02em;
 }
-.badge::before{content:""; width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px color-mix(in oklch,currentColor 14%,transparent)}
-.badge.on{color:var(--ok); border-color:color-mix(in oklch,var(--ok) 38%,var(--line))}
-.badge.off{color:var(--warn); border-color:color-mix(in oklch,var(--warn) 36%,var(--line))}
+.spacer{flex:1}
+.badge{
+  min-height:34px; display:inline-flex; align-items:center; gap:var(--space-2xs);
+  padding:var(--space-2xs) var(--space-xs); border:1px solid var(--line); border-radius:var(--r-md);
+  background:var(--panel); color:var(--muted); font-family:var(--mono); font-size:10px; white-space:nowrap;
+}
+/* 這顆點代表真實語意狀態（推理引擎在線與否），不是裝飾 */
+.badge::before{
+  content:""; width:7px; height:7px; border-radius:50%; background:currentColor;
+  box-shadow:0 0 0 3px color-mix(in oklab,currentColor 14%,transparent);
+}
+.badge.on{color:var(--ok); border-color:color-mix(in oklab,var(--ok) 38%,var(--line))}
+.badge.off{color:var(--warn); border-color:color-mix(in oklab,var(--warn) 36%,var(--line))}
+
+/* ---------- controls ---------- */
 .control-group{display:flex; align-items:center; gap:var(--space-2xs)}
 select,button{
-  min-height:44px; border-radius:10px; border-color:var(--line); background:var(--panel-2);
-  color:var(--fg); transition:background-color var(--dur-short) var(--ease-out),
-    border-color var(--dur-short) var(--ease-out),transform 100ms var(--ease-out);
+  font:inherit; font-family:var(--font-ui); min-height:44px; padding:var(--space-2xs) var(--space-xs);
+  color:var(--fg); background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-md);
+  transition:background-color var(--dur-short) var(--ease-out),
+             border-color var(--dur-short) var(--ease-out),
+             transform 100ms var(--ease-out);
 }
-select{max-width:370px; padding-inline:var(--space-xs) calc(var(--space-md) + var(--space-xs)); color-scheme:dark}
-button{font-family:var(--font-display); font-weight:650; white-space:nowrap}
+select{max-width:370px; padding-inline-end:var(--space-lg); color-scheme:dark}
+button{cursor:pointer; font-weight:650; white-space:nowrap}
 button:hover:not(:disabled){background:var(--panel-3); border-color:var(--line-strong)}
 button:active:not(:disabled){transform:translateY(1px)}
 button:focus-visible,select:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+button:disabled{opacity:.4; cursor:not-allowed}
+select:disabled{opacity:.55; cursor:not-allowed}
 button.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); padding-inline:var(--space-sm)}
-button.primary:hover:not(:disabled){background:color-mix(in oklch,var(--accent) 88%,var(--fg)); border-color:var(--accent)}
+button.primary:hover:not(:disabled){background:color-mix(in oklab,var(--accent) 88%,var(--fg)); border-color:var(--accent)}
 button.go{background:var(--ok); color:var(--positive-ink); border-color:var(--ok)}
-button.no{background:transparent; color:var(--crit); border-color:color-mix(in oklch,var(--crit) 60%,var(--line))}
+button.go:hover:not(:disabled){background:color-mix(in oklab,var(--ok) 88%,var(--fg)); border-color:var(--ok)}
+button.no{background:transparent; color:var(--crit); border-color:color-mix(in oklab,var(--crit) 60%,var(--line))}
+button.no:hover:not(:disabled){background:color-mix(in oklab,var(--crit) 12%,transparent); border-color:var(--crit)}
 
+/* ---------- layout ---------- */
 main{
-  padding:var(--space-xs); grid-template-columns:minmax(0,1.7fr) minmax(390px,.82fr); gap:var(--space-xs);
-  background:transparent; min-height:0;
+  flex:1; display:grid; min-height:0; padding:var(--space-xs); gap:var(--space-xs);
+  grid-template-columns:minmax(0,1.7fr) minmax(390px,.82fr);
 }
-.col{gap:var(--space-xs); background:transparent}
+.col{display:flex; flex-direction:column; gap:var(--space-xs); min-height:0}
 .panel{
-  position:relative; padding:var(--space-sm); background:var(--panel); border:1px solid var(--line);
-  border-radius:14px; box-shadow:0 14px 40px var(--shadow); scrollbar-gutter:stable;
+  position:relative; min-height:0; overflow:auto; padding:var(--space-sm);
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r-lg);
+  box-shadow:0 14px 40px var(--shadow); scrollbar-gutter:stable;
 }
 .col:first-child .panel:first-child{flex:0 0 52%}
 .col:last-child .panel:first-child{flex:0 0 auto}
+/* 災害注入的那一刻要讓人「感覺到」。只動 opacity，一次性播完就結束 */
+.panel::after{
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at 50% 45%,transparent 42%,color-mix(in oklab,var(--crit) 60%,transparent));
+}
+.panel.alarm::after{animation:alarm-flash 1.4s var(--ease-out)}
+@keyframes alarm-flash{0%{opacity:0} 18%{opacity:.9} 100%{opacity:0}}
 h2{
-  display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm); margin:0 0 var(--space-xs);
-  font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:.075em;
+  display:flex; align-items:center; gap:var(--space-sm);
+  margin:0 0 var(--space-xs); font-size:12px; font-weight:700; letter-spacing:.04em;
   color:var(--muted); line-height:1.3;
 }
-h2 .hint{float:none; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:10px; color:var(--dim)}
-#topo{min-height:290px; max-height:calc(52dvh - 88px)}
-.nodebox{fill:var(--panel-2); stroke:var(--line-strong); rx:9}
-.nodebox.dc{fill:var(--dc-surface); stroke:color-mix(in oklch,var(--accent) 42%,var(--line))}
-.nodelbl{font-family:var(--font-body); font-size:11px; font-weight:650}
-.nodesub,.linklbl{font-family:var(--mono); fill:var(--dim)}
-.link{stroke-width:2.25}
-
-.tiles{grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-2xs); margin-bottom:var(--space-sm)}
-.tile{min-width:0; min-height:100px; padding:var(--space-xs); border-radius:12px; background:var(--panel-2); border-color:var(--line)}
-.tile:first-child{grid-column:1 / -1; min-height:128px; background:linear-gradient(135deg,color-mix(in oklch,var(--ok) 10%,var(--panel-2)),var(--panel-2))}
-.tile .k{font-size:11px; color:var(--muted); letter-spacing:.03em}
-.tile .v{font-size:clamp(27px,2.4vw,42px); letter-spacing:-.045em; margin-top:var(--space-2xs)}
-.tile:first-child .v{font-size:clamp(40px,4vw,62px)}
-.tile .d{margin-top:var(--space-3xs); font-size:10px; color:var(--dim)}
-
-table{font-size:12px}
-th{padding:8px 8px; background:var(--panel); color:var(--dim); border-bottom-color:var(--line); letter-spacing:.04em}
-td{padding:9px 8px; border-bottom-color:color-mix(in oklch,var(--line) 64%,transparent)}
-tbody tr{transition:background-color var(--dur-short) var(--ease-out)}
-tbody tr:hover td{background:color-mix(in oklch,var(--panel-3) 72%,transparent)}
-tr.sel td{background:color-mix(in oklch,var(--accent) 9%,var(--panel))}
-.pri{border-radius:5px; background:var(--panel-2)}
-.dot{width:7px; height:7px; margin-inline-end:6px}
-.tag{display:inline-flex; align-items:center; min-height:24px; padding:3px 7px; border-radius:6px; white-space:nowrap}
-.tag.allow{background:color-mix(in oklch,var(--ok) 9%,var(--panel)); border-color:color-mix(in oklch,var(--ok) 35%,var(--line))}
-.tag.require_approval{background:color-mix(in oklch,var(--warn) 9%,var(--panel)); border-color:color-mix(in oklch,var(--warn) 35%,var(--line))}
-.tag.deny{background:color-mix(in oklch,var(--crit) 9%,var(--panel)); border-color:color-mix(in oklch,var(--crit) 35%,var(--line))}
-
-#stream{gap:var(--space-2xs); padding-inline-start:var(--space-sm); position:relative}
-#stream::before{content:""; position:absolute; inset-block:4px; inset-inline-start:4px; width:1px; background:var(--line)}
-.card{
-  position:relative; padding:var(--space-xs); border:1px solid var(--line); border-inline-start:1px solid var(--line);
-  border-radius:10px; background:var(--panel-2); animation:event-in var(--dur-medium) var(--ease-out);
+/* 標題文字是匿名文字節點，靠第一個元素子項的 auto margin 把右側附屬資訊整組推到底，
+ * 這樣「圖例 + 狀態」才會靠在一起，而不是被 space-between 拆到中間浮著 */
+h2 > :first-child{margin-inline-start:auto}
+h2 .hint{
+  min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:var(--mono); font-size:10px; font-weight:400; letter-spacing:0; color:var(--dim);
 }
-.card::before{content:""; position:absolute; width:9px; height:9px; border-radius:50%; inset-inline-start:-19px; inset-block-start:15px; background:var(--accent); box-shadow:0 0 0 4px var(--panel)}
-@keyframes event-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.card .hd{align-items:center; margin-bottom:var(--space-3xs)}
-.card .who{font-family:var(--font-display); font-size:12px; font-weight:700}
-.card .st{margin-inline-start:auto; font-size:10px}
+/* 進度指示器：舞台 Demo 全程都要讓觀眾知道「現在跑到第幾步」 */
+.steps{display:flex; align-items:center; gap:var(--space-2xs); font-size:10.5px; font-weight:400; letter-spacing:0}
+.steps span{
+  position:relative; padding:3px 8px; border:1px solid transparent; border-radius:999px;
+  color:var(--dim); white-space:nowrap;
+  transition:color var(--dur-short) var(--ease-out),background-color var(--dur-short) var(--ease-out),
+             border-color var(--dur-short) var(--ease-out);
+}
+.steps span + span::before{content:"›"; position:absolute; inset-inline-start:-9px; color:var(--line-strong)}
+.steps span.done{color:var(--muted)}
+.steps span.active{
+  color:var(--accent-ink); background:var(--accent); border-color:var(--accent); font-weight:650;
+  animation:step-pulse 1.6s ease-in-out infinite;
+}
+@keyframes step-pulse{50%{box-shadow:0 0 0 4px color-mix(in oklab,var(--accent) 22%,transparent)}}
+
+/* ---------- topology ---------- */
+/* 扣掉標題與下方讀圖提示的高度，提示才不會被擠出面板外 */
+#topo{width:100%; height:auto; display:block; min-height:290px; max-height:calc(52dvh - 124px)}
+/* 線路分兩層畫：底層 .link 表示「這條路存在、狀態如何」，
+   上層 .flow 是真正在跑的流量。分開之後，斷掉的線就會靜止不動 ——
+   畫面上「沒有東西在流」本身就是最直覺的斷線訊號。 */
+.link{
+  stroke:var(--wire); stroke-width:2.25;
+  transition:stroke var(--dur-medium) var(--ease-out),stroke-width var(--dur-medium) var(--ease-out);
+}
+.link.fiber{stroke:var(--wan-fiber)} .link.g5{stroke:var(--wan-5g)} .link.sat{stroke:var(--wan-sat)}
+/* 健康度一律覆蓋 WAN 類型色 —— 出事的鏈路必須先讀得出「出事了」 */
+.link.degraded{stroke:var(--warn); stroke-dasharray:7 5}
+.link.down{stroke:var(--crit); stroke-dasharray:3 6; opacity:.5}
+
+.flow{
+  stroke:var(--fg); stroke-width:3.2; stroke-linecap:round; stroke-dasharray:2 12;
+  opacity:0; pointer-events:none;
+  animation:flow-move 1.8s linear infinite;
+  transition:opacity var(--dur-medium) var(--ease-out);
+}
+.flow.fiber{stroke:var(--wan-fiber)} .flow.g5{stroke:var(--wan-5g)} .flow.sat{stroke:var(--wan-sat)}
+@keyframes flow-move{to{stroke-dashoffset:-14}}
+
+/* 兩個戲劇性瞬間：線斷掉、以及流量湧進新路徑 */
+@keyframes link-snap{
+  0%{stroke-width:9; opacity:1} 25%{stroke-width:1.5; opacity:.35}
+  50%{stroke-width:6; opacity:.9} 100%{stroke-width:2.25; opacity:.5}
+}
+.link.snap{animation:link-snap .85s var(--ease-out)}
+@keyframes flow-surge{
+  0%{opacity:1; stroke-width:6; stroke-dasharray:0.5 6} 100%{stroke-width:2.6}
+}
+.flow.surge{animation:flow-surge 1.1s var(--ease-out)}
+.nodebox{fill:var(--panel-2); stroke:var(--line-strong); rx:9}
+.nodebox.dc{fill:var(--dc-surface); stroke:color-mix(in oklab,var(--accent) 55%,var(--line-strong))}
+.nodelbl{fill:var(--fg); font-family:var(--font-ui); font-size:11px; font-weight:650}
+.nodesub{fill:var(--dim); font-family:var(--mono); font-size:9px}
+.linklbl{fill:var(--dim); font-family:var(--mono); font-size:8.5px}
+/* 色彩編碼必須有圖例，否則評審只能猜哪條線是哪種網路 */
+.legend{display:flex; flex-wrap:wrap; gap:var(--space-xs); font-family:var(--mono); font-size:10px}
+.lg{display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+.lg::before{content:""; width:14px; height:2px; border-radius:1px; background:currentColor}
+.lg.fiber{color:var(--wan-fiber)} .lg.g5{color:var(--wan-5g)} .lg.sat{color:var(--wan-sat)}
+/* 分區底色：先讓人看懂「左邊是醫院、右邊是電信業者」，再談線路怎麼走 */
+.zone{fill:color-mix(in oklab,var(--panel-2) 60%,transparent); stroke:var(--line); rx:12}
+.zonelbl{fill:var(--dim); font-family:var(--mono); font-size:10.5px; letter-spacing:.06em}
+
+/* ---------- metric tiles ---------- */
+.tiles{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-2xs); margin-bottom:var(--space-sm)}
+.tile{
+  min-width:0; min-height:100px; padding:var(--space-xs); border-radius:var(--r-md);
+  background:var(--panel-2); border:1px solid var(--line);
+  transition:background-color var(--dur-medium) var(--ease-out),border-color var(--dur-medium) var(--ease-out);
+}
+.tile:first-child{grid-column:1 / -1; min-height:128px}
+.tile.wide{grid-column:1 / -1; min-height:84px}
+.tile.wide .v{font-size:clamp(22px,1.9vw,30px)}
+.tile .k{font-size:11px; color:var(--muted); letter-spacing:.03em}
+.tile .v{
+  font-family:var(--mono); font-size:clamp(27px,2.4vw,42px); font-weight:600;
+  letter-spacing:-.045em; line-height:1.1; margin-top:var(--space-2xs);
+}
+.tile:first-child .v{font-size:clamp(40px,4vw,62px)}
+.tile .d{margin-top:var(--space-3xs); font-family:var(--mono); font-size:10px; color:var(--dim)}
+.v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.crit{color:var(--crit)}
+/* 底色跟著實際狀態走。舊版把第一格寫死成綠色漸層，關鍵可用率 0% 時
+ * 整塊仍然是「一切安好」的綠 —— 那是會誤導值班人員的顏色。 */
+.tile:has(.v.ok){
+  background:linear-gradient(135deg,color-mix(in oklab,var(--ok) 9%,var(--panel-2)),var(--panel-2));
+  border-color:color-mix(in oklab,var(--ok) 26%,var(--line));
+}
+.tile:has(.v.warn){
+  background:linear-gradient(135deg,color-mix(in oklab,var(--warn) 9%,var(--panel-2)),var(--panel-2));
+  border-color:color-mix(in oklab,var(--warn) 26%,var(--line));
+}
+.tile:has(.v.crit){
+  background:linear-gradient(135deg,color-mix(in oklab,var(--crit) 11%,var(--panel-2)),var(--panel-2));
+  border-color:color-mix(in oklab,var(--crit) 30%,var(--line));
+}
+/* 數值變動時閃一下：閉環跑起來時，指標改變是最關鍵的即時訊號 */
+@keyframes value-change{from{box-shadow:inset 0 0 0 9999px color-mix(in oklab,var(--accent) 16%,transparent)}to{box-shadow:none}}
+.tile.changed{animation:value-change 700ms var(--ease-out)}
+
+/* ---------- tables ---------- */
+table{width:100%; border-collapse:collapse; font-size:12px}
+th{
+  position:sticky; top:0; z-index:1; text-align:left; padding:8px;
+  font-weight:500; font-size:10px; letter-spacing:.04em; color:var(--dim);
+  background:var(--panel); border-bottom:1px solid var(--line);
+}
+td{padding:9px 8px; border-bottom:1px solid color-mix(in oklab,var(--line) 64%,transparent)}
+tbody tr{transition:background-color var(--dur-short) var(--ease-out)}
+tbody tr:hover td{background:color-mix(in oklab,var(--panel-3) 72%,transparent)}
+tr.sel td{background:color-mix(in oklab,var(--accent) 9%,var(--panel))}
+.r{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums}
+.pri{
+  font-family:var(--mono); font-size:10px; padding:1px 5px; border-radius:var(--r-sm);
+  background:var(--panel-2); color:var(--muted); border:1px solid var(--line);
+}
+.pri.p0{color:var(--crit); border-color:var(--crit); background:color-mix(in oklab,var(--crit) 9%,var(--panel))}
+.pri.p1{color:var(--warn); border-color:var(--warn); background:color-mix(in oklab,var(--warn) 9%,var(--panel))}
+.dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-inline-end:6px}
+.dot.ok{background:var(--ok)} .dot.warning{background:var(--warn)} .dot.critical{background:var(--crit)}
+.tag{
+  display:inline-flex; align-items:center; min-height:24px; padding:3px 7px;
+  border:1px solid; border-radius:var(--r-sm); font-size:10px; white-space:nowrap;
+}
+.tag.allow{color:var(--ok); border-color:color-mix(in oklab,var(--ok) 35%,var(--line)); background:color-mix(in oklab,var(--ok) 9%,var(--panel))}
+.tag.require_approval{color:var(--warn); border-color:color-mix(in oklab,var(--warn) 35%,var(--line)); background:color-mix(in oklab,var(--warn) 9%,var(--panel))}
+.tag.deny{color:var(--crit); border-color:color-mix(in oklab,var(--crit) 35%,var(--line)); background:color-mix(in oklab,var(--crit) 9%,var(--panel))}
+.wan{font-family:var(--mono); font-size:10px}
+.wan.fiber{color:var(--wan-fiber)} .wan.g5{color:var(--wan-5g)} .wan.satellite{color:var(--wan-sat)}
+
+/* ---------- agent stream ---------- */
+#stream{display:flex; flex-direction:column; gap:var(--space-2xs); padding-inline-start:var(--space-sm); position:relative}
+#stream::before{content:""; position:absolute; inset-block:4px; inset-inline-start:4px; width:1px; background:var(--line)}
+/* 還沒開跑時只有開場說明，沒有事件 —— 這時候畫一條時間軸只是雜訊 */
+#stream:not(:has(.card))::before{display:none}
+
+/* ---------- 開場說明 ---------- */
+.intro{padding:var(--space-sm); background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-md)}
+.intro h3{margin:0 0 var(--space-2xs); font-size:14px; font-weight:700; color:var(--fg)}
+.intro p{margin:0 0 var(--space-2xs); font-size:12.5px; line-height:1.8; color:var(--muted)}
+.intro p:last-child{margin-bottom:0}
+.intro b{color:var(--fg); font-weight:650}
+.routes{display:grid; gap:var(--space-3xs); margin:var(--space-2xs) 0 var(--space-xs); padding:0; list-style:none}
+.routes li{display:flex; align-items:baseline; gap:var(--space-2xs); font-size:12px; line-height:1.7; color:var(--muted)}
+.routes .swatch{flex:none; width:16px; height:3px; border-radius:2px; transform:translateY(-3px)}
+.swatch.fiber{background:var(--wan-fiber)} .swatch.g5{background:var(--wan-5g)} .swatch.sat{background:var(--wan-sat)}
+.routes .rname{flex:none; min-width:3.4em; color:var(--fg); font-weight:650}
+.routes .role{color:var(--dim)}
+.preview{margin-top:var(--space-2xs); padding:var(--space-xs) var(--space-sm);
+         background:color-mix(in oklab,var(--crit) 7%,var(--panel-2));
+         border:1px solid color-mix(in oklab,var(--crit) 26%,var(--line)); border-radius:var(--r-md)}
+.preview .ptitle{font-size:12px; font-weight:700; color:var(--crit)}
+.preview p{margin:var(--space-3xs) 0 0; font-size:12.5px; line-height:1.75; color:var(--muted)}
+.preview ul{margin:var(--space-2xs) 0 0; padding-inline-start:17px; font-size:12px; line-height:1.7; color:var(--muted)}
+.card{
+  position:relative; padding:var(--space-xs); background:var(--panel-2);
+  border:1px solid var(--line); border-radius:var(--r-md);
+  animation:event-in var(--dur-medium) var(--ease-out);
+}
+/* 時間軸圓點要壓在軌道線的中心線上：軌道中心 4.5px，
+ * 圓點寬 9px，故左緣需落在 0px = -（padding 16px + 卡片邊框 1px） */
+.card::before{
+  content:""; position:absolute; width:9px; height:9px; border-radius:50%;
+  inset-inline-start:calc(-1 * var(--space-sm) - 1px); inset-block-start:15px;
+  background:var(--accent); box-shadow:0 0 0 4px var(--panel);
+}
+@keyframes event-in{from{opacity:0; transform:translateY(8px)}to{opacity:1; transform:none}}
+.card .hd{display:flex; gap:8px; align-items:center; margin-bottom:var(--space-3xs)}
+.card .who{font-size:12px; font-weight:700; color:var(--accent)}
+.card .st{margin-inline-start:auto; font-family:var(--mono); font-size:10px; color:var(--dim)}
 .card .tx{font-size:13px; line-height:1.6; color:var(--muted)}
-.card.sys::before{background:var(--warn)} .card.exec::before{background:var(--ok)} .card.crit::before{background:var(--crit)}
+.card.sys .who{color:var(--warn)} .card.sys::before{background:var(--warn)}
+.card.exec .who{color:var(--ok)} .card.exec::before{background:var(--ok)}
+.card.crit .who{color:var(--crit)} .card.crit::before{background:var(--crit)}
 /* Agent 已開跑、LLM 敘述還沒回來的暫時卡片，之後被真正的結果取代 */
 .card.pending{border-style:dashed; background:transparent}
 .card.pending .who,.card.pending .tx{color:var(--dim)}
 .card.pending::before{background:var(--dim); animation:pending-pulse 1.4s ease-in-out infinite}
 @keyframes pending-pulse{50%{opacity:.3}}
-.empty{display:grid; place-items:center; min-height:92px; padding:var(--space-sm); border:1px dashed var(--line); border-radius:10px; color:var(--dim); text-align:center}
-code{font-size:11px; color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:5px}
+.card ul{margin:6px 0 0; padding-inline-start:17px; font-size:12px; color:var(--muted); line-height:1.6}
+/* 給專有名詞或原始指令用的一行白話註解 */
+.note{display:block; margin-top:var(--space-2xs); font-size:11px; line-height:1.6; color:var(--dim)}
+code{
+  font-family:var(--mono); font-size:11px; color:var(--muted); background:var(--bg);
+  padding:1px 5px; border:1px solid var(--line); border-radius:var(--r-sm);
+}
+.empty{
+  display:grid; place-items:center; min-height:92px; padding:var(--space-sm);
+  border:1px dashed var(--line); border-radius:var(--r-md);
+  color:var(--dim); font-size:12px; text-align:center;
+}
 
+/* ---------- approval dialog ---------- */
 #modal{
   position:fixed; inset:0; margin:auto; width:min(640px,calc(100% - 28px)); max-height:min(86dvh,760px);
-  padding:0; border:1px solid color-mix(in oklch,var(--warn) 48%,var(--line)); border-radius:18px;
-  background:var(--panel); color:var(--fg); box-shadow:0 28px 90px var(--shadow);
+  padding:0; background:var(--panel); color:var(--fg); border-radius:var(--r-xl);
+  border:1px solid color-mix(in oklab,var(--warn) 48%,var(--line));
+  box-shadow:0 28px 90px var(--shadow);
 }
 #modal::backdrop{background:var(--scrim); backdrop-filter:blur(8px)}
 #modal[open]{display:block; animation:dialog-in var(--dur-medium) var(--ease-out)}
-@keyframes dialog-in{from{opacity:0;transform:scale(.97) translateY(10px)}to{opacity:1;transform:none}}
-.dlg{width:auto; max-height:none; overflow:auto; padding:var(--space-md); border:0; border-radius:inherit; background:transparent; box-shadow:none}
-.dlg h3{font-family:var(--font-display); font-size:20px; color:var(--fg); letter-spacing:-.02em}
-.dlg .sub{font-size:13px; line-height:1.55; margin:var(--space-2xs) 0 var(--space-sm)}
-.findings,.acts{padding:var(--space-xs) var(--space-sm); border-radius:10px}
-.findings{background:color-mix(in oklch,var(--warn) 8%,var(--panel)); border-color:color-mix(in oklch,var(--warn) 32%,var(--line))}
-.acts{background:var(--panel-2)}
-.findings li,.acts li{font-size:13px}
-.btns{margin-top:var(--space-md)}
+@keyframes dialog-in{from{opacity:0; transform:scale(.97) translateY(10px)}to{opacity:1; transform:none}}
+.dlg{padding:var(--space-md); overflow:auto}
+.dlg h3{margin:0; font-size:20px; letter-spacing:-.02em; color:var(--fg)}
+.dlg .sub{margin:var(--space-2xs) 0 var(--space-sm); font-size:13px; line-height:1.55; color:var(--muted)}
+.box-title{margin-bottom:var(--space-3xs); font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--dim)}
+.dlg ul{margin:0; padding-inline-start:18px}
+.findings,.acts{padding:var(--space-xs) var(--space-sm); border:1px solid var(--line); border-radius:var(--r-md); margin-bottom:var(--space-xs)}
+.findings{background:color-mix(in oklab,var(--warn) 8%,var(--panel)); border-color:color-mix(in oklab,var(--warn) 32%,var(--line))}
+.acts{padding:var(--space-2xs) var(--space-xs); background:var(--panel-2)}
+.findings li{color:var(--warn); font-size:13px; line-height:1.7}
+/* 規則編號只給稽核對照用，不該和事由搶注意力 */
+.rid{margin-inline-start:var(--space-2xs); font-family:var(--mono); font-size:10px; color:var(--dim)}
+
+/* 決策摘要：核准得到什麼、付出什麼、不核准會怎樣 */
+.brief{margin-bottom:var(--space-sm); padding:var(--space-xs) var(--space-sm);
+       background:var(--panel-2); border:1px solid var(--line); border-radius:var(--r-md)}
+.ba{display:flex; align-items:baseline; justify-content:space-between; gap:var(--space-sm);
+    padding:var(--space-2xs) 0; font-size:13px}
+.ba + .ba{border-top:1px solid color-mix(in oklab,var(--line) 60%,transparent)}
+.ba .k{color:var(--muted)}
+.ba .v{font-family:var(--mono); font-size:15px; color:var(--dim)}
+.ba .from{font-weight:400; color:var(--dim)}
+.ba .to{color:var(--ok)} .ba .to.cost{color:var(--warn)}
+.ifnot{margin:var(--space-2xs) 0 0; padding-top:var(--space-2xs);
+       border-top:1px solid color-mix(in oklab,var(--line) 60%,transparent);
+       font-size:12.5px; line-height:1.7; color:var(--muted)}
+.ifnot b{color:var(--crit)}
+
+/* 一列一個醫療服務，而不是一列一個動作 */
+.chg{font-size:12.5px}
+.chg th{background:transparent; padding:6px 6px}
+.chg td{padding:7px 6px; vertical-align:middle}
+.chg tbody tr:last-child td{border-bottom:0}
+.chg .pri{margin-inline-end:6px}
+.imp{font-size:11px}
+.imp.ok{color:var(--dim)} .imp.warn{color:var(--warn)} .imp.bad{color:var(--crit); font-weight:650}
+.btns{display:flex; gap:10px; justify-content:flex-end; margin-top:var(--space-md)}
 
 ::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-thumb{background:var(--line-strong);border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb{background:var(--line-strong); border:3px solid transparent; background-clip:padding-box; border-radius:var(--r-sm)}
+::-webkit-scrollbar-track{background:transparent}
 
+/* ---------- responsive ---------- */
 @media (max-width:64rem){
   body{height:auto; min-height:100dvh; overflow:auto}
   header{flex-wrap:wrap; align-items:center}
@@ -327,9 +410,9 @@ code{font-size:11px; color:var(--muted); background:var(--bg); border:1px solid 
   .control-group{order:4; grid-template-columns:minmax(0,1fr)}
   .control-group button{width:100%}
   main{padding:var(--space-2xs); gap:var(--space-2xs)}.col{gap:var(--space-2xs)}
-  .panel{padding:var(--space-xs); border-radius:12px}
+  .panel{padding:var(--space-xs); border-radius:var(--r-md)}
   h2{align-items:flex-start; flex-direction:column; gap:var(--space-3xs)}
-  h2 .hint{width:100%}
+  h2 .hint,.legend{width:100%}
   .tiles{grid-template-columns:minmax(0,1fr)}
   .tile:first-child{grid-column:auto}
   .tile,.tile:first-child{min-height:104px}
@@ -347,9 +430,9 @@ code{font-size:11px; color:var(--muted); background:var(--bg); border:1px solid 
 <body>
 
 <header>
-  <div class="brand">AegisMesh 天穹韌網<small>通訊韌性數位孿生 · 戰情室</small></div>
+  <div class="brand">AegisMesh 天穹韌網<small>醫院網路數位分身 · 災害通訊應變戰情室</small></div>
   <div class="spacer"></div>
-  <span class="badge" id="llmBadge" role="status" aria-live="polite">推理引擎檢查中…</span>
+  <span class="badge" id="llmBadge" role="status" aria-live="polite">AI 文字說明：檢查中…</span>
   <div class="control-group">
     <label class="visually-hidden" for="scenario">災害情境</label>
     <select id="scenario" aria-label="災害情境" disabled></select>
@@ -360,47 +443,66 @@ code{font-size:11px; color:var(--muted); background:var(--bg); border:1px solid 
 <main>
   <div class="col">
     <div class="panel">
-      <h2>網路拓樸 · 智慧醫院園區<span class="hint" id="topoHint" role="status">基準狀態</span></h2>
-      <svg id="topo" viewBox="0 0 900 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="智慧醫院園區網路拓樸"></svg>
+      <h2>醫院網路連線圖
+        <span class="legend">
+          <span class="lg fiber">固網</span><span class="lg g5">5G</span><span class="lg sat">衛星</span>
+        </span>
+        <span class="hint" id="topoHint" role="status">災害前正常狀態</span></h2>
+      <svg id="topo" viewBox="0 0 900 430" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="智慧醫院園區網路連線圖：左半為醫院院區內設備，右半為中華電信網路與醫療雲，兩者之間由固網、5G、衛星三條線路連接"></svg>
+      <div class="note">線條越粗代表用量越大 · 虛線代表中斷或品質變差 · 線上數字為「使用率 · 反應時間」 · 方框下方為設備代號</div>
     </div>
     <div class="panel" style="flex:1">
-      <h2>Agent 決策軌跡<span class="hint">Observe → Plan → Simulate → Approve → Execute → Verify</span></h2>
-      <div id="stream" aria-live="polite" aria-relevant="additions"><div class="empty">選擇災害情境後按「執行閉環」。</div></div>
+      <h2>AI 決策過程<span class="steps" id="steps">
+        <span data-step="observe">發現異常</span><span data-step="assess">評估影響</span
+        ><span data-step="plan">想方案</span><span data-step="govern">規則審查</span
+        ><span data-step="approve">核准執行</span><span data-step="verify">驗收</span>
+      </span></h2>
+      <div id="stream" aria-live="polite" aria-relevant="additions"><div class="empty">選一個災害情境，按右上角「開始應變」。</div></div>
     </div>
   </div>
 
   <div class="col">
     <div class="panel">
-      <h2>即時指標<span class="hint" id="phase" role="status" aria-live="polite">待命</span></h2>
+      <h2>醫院現在的狀況<span class="hint" id="phase" role="status" aria-live="polite">待命</span></h2>
       <div class="tiles">
-        <div class="tile"><div class="k">關鍵可用率</div>
+        <div class="tile" title="急診生命徵象、ICU 生理監測等中斷會直接影響病人安全的服務，目前有多少比例是正常的">
+          <div class="k">救命服務正常率</div>
           <div class="v num" id="mCrit">-</div><div class="d" id="dCrit">&nbsp;</div></div>
-        <div class="tile"><div class="k">SLA 達成率</div>
+        <div class="tile" title="全部六項醫療服務中，連線品質仍符合當初承諾標準的比例">
+          <div class="k">整體服務達標率</div>
           <div class="v num" id="mSlo">-</div><div class="d" id="dSlo">&nbsp;</div></div>
-        <div class="tile"><div class="k">月度成本</div>
+        <div class="tile" title="依各條線路的流量與單價估算的每月通訊費用，衛星最貴、固網最便宜">
+          <div class="k">每月通訊費用</div>
           <div class="v num" id="mCost">-</div><div class="d" id="dCost">&nbsp;</div></div>
+        <div class="tile wide" title="衛星在災害期間有總流量上限。天線開得到 120 Mbps，但照那樣用幾小時就會歸零 —— 容量與配額是兩回事">
+          <div class="k">衛星流量配額還能撐</div>
+          <div class="v num" id="mQuota">-</div><div class="d" id="dQuota">&nbsp;</div></div>
       </div>
       <table id="svcTable">
-        <thead><tr><th>優先</th><th>業務</th><th>路徑</th>
-          <th class="r">頻寬</th><th class="r">延遲</th><th>SLA</th></tr></thead>
+        <thead><tr><th title="數字越小越重要，P0 為中斷即危及生命">重要度</th><th>醫療服務</th><th>走哪條網路</th>
+          <th class="r" title="分配到的網路速度">速度</th><th class="r" title="資料一來一回所需時間，越低越即時">反應時間</th><th>品質</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
     <div class="panel" style="flex:1">
-      <h2>候選計畫 · 孿生推演與政策裁決</h2>
-      <div id="plans" aria-live="polite"><div class="empty">尚未產生候選計畫。</div></div>
+      <h2>AI 想出的三個方案<span class="hint">先電腦模擬，再由規則審查</span></h2>
+      <div id="plans" aria-live="polite"><div class="empty">尚未產生方案。</div></div>
     </div>
   </div>
 </main>
 
 <dialog id="modal" aria-labelledby="approvalTitle" aria-describedby="mSub">
 <div class="dlg">
-  <h3 id="approvalTitle">需要人工核准</h3>
+  <h3 id="approvalTitle">需要值班主管核准</h3>
   <div class="sub" id="mSub"></div>
+  <div id="mBrief"></div>
+  <div class="box-title">為什麼需要您核准</div>
   <div class="findings"><ul id="mFind"></ul></div>
-  <div class="acts"><ul id="mActs"></ul></div>
+  <div class="box-title">核准後，每項醫療服務的變化</div>
+  <div class="acts" id="mActs"></div>
   <div class="btns">
-    <button class="no" id="rejectBtn">拒絕執行</button>
+    <button class="no" id="rejectBtn">不准執行</button>
     <button class="go" id="approveBtn">核准並執行</button>
   </div>
 </div></dialog>
@@ -411,13 +513,86 @@ const SVG = 'http://www.w3.org/2000/svg';
 const WAN = {fiber:'fiber', '5g':'g5', satellite:'sat'};
 const KIND_LABEL = {fiber:'固網', '5g':'5G', satellite:'衛星'};
 
-let topo = null, ws = null, baseline = null, running = false, ready = false;
+/* 畫面一律講白話。後端回傳的 agent 名稱、階段代號、策略鍵值都維持原樣 ——
+   稽核軌跡與 API 需要穩定的識別字，翻譯只發生在這一層。 */
+const AGENT_LABEL = {
+  'Telemetry Agent': '網路監測 AI',
+  'Impact Agent':    '影響評估 AI',
+  'Planning Agent':  '方案規劃 AI',
+  'Policy Agent':    '規則審查 AI',
+  'Verification Agent': '成效驗收 AI',
+};
+const STAGE_LABEL = {
+  observe: '找出哪裡壞了', assess: '看誰受影響', 'plan+simulate': '想方案並模擬',
+  govern: '規則審查', approve: '核准', execute: '執行變更', verify: '驗收成效',
+};
+/* 方案名稱不放在這裡：後端 optimizer.STRATEGY_LABELS 是唯一來源，
+   隨 _plan_brief 一起送過來（strategy_label），避免前後端各講一套。 */
+const DECISION_LABEL = {allow: '可直接執行', require_approval: '需主管核准', deny: '不准執行'};
+const label = (map, key) => map[key] || key;
+
+// 後端階段 → 進度指示器的六格（approve 與 execute 合併成一格）
+const STEP_OF = {
+  observe:'observe', assess:'assess', 'plan+simulate':'plan', govern:'govern',
+  approve:'approve', execute:'approve', verify:'verify',
+};
+const STEP_ORDER = ['observe','assess','plan','govern','approve','verify'];
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function markStep(stage){
+  const key = STEP_OF[stage];
+  if (!key) return;
+  const at = STEP_ORDER.indexOf(key);
+  STEP_ORDER.forEach((s, i) => {
+    const el = document.querySelector(`#steps [data-step="${s}"]`);
+    if (!el) return;
+    el.classList.toggle('active', i === at);
+    el.classList.toggle('done', i < at);
+  });
+}
+
+function resetSteps(){
+  document.querySelectorAll('#steps span').forEach(el => el.classList.remove('active','done'));
+}
+
+let topo = null, ws = null, baseline = null, incident = null,
+    running = false, ready = false, scenarios = [], eventHours = null;
 
 // 開場三個 fetch 的上限。沒有這道防線的話，只要伺服器接受了連線卻不回應，
 // fetch 會無限期掛著，畫面就永遠停在「載入中…」且沒有任何線索。
 const BOOT_TIMEOUT_MS = 8000;
 
 /* ------------------------------------------------------------ 拓樸繪製 */
+
+// 節點的 site 欄位（hospital / cht）本來只是後端的分類，正好可以直接
+// 換成畫面上的兩塊分區；範圍由節點實際座標算出，日後拓樸調整不必改這裡。
+const ZONES = [
+  {site:'hospital', label:'醫院院區內'},
+  {site:'cht',      label:'中華電信網路 · 醫療雲'},
+];
+
+function drawZones(t, C){
+  const g = document.createElementNS(SVG,'g');
+  for (const z of ZONES){
+    const ns = t.nodes.filter(n => n.site === z.site);
+    if (!ns.length) continue;
+    // 夾在畫布內：最右一欄貼著 CANVAS_W，加了外距就會被裁掉
+    const x1 = Math.max(4, Math.min(...ns.map(n => n.x)) - 14);
+    const x2 = Math.min(C.w - 4, Math.max(...ns.map(n => n.x + C.node_w)) + 14);
+    const rect = document.createElementNS(SVG,'rect');
+    rect.setAttribute('x', x1); rect.setAttribute('y', 6);
+    rect.setAttribute('width', x2 - x1); rect.setAttribute('height', C.h - 16);
+    rect.setAttribute('class','zone');
+    const tx = document.createElementNS(SVG,'text');
+    tx.setAttribute('x', x1 + 12); tx.setAttribute('y', 28);
+    tx.setAttribute('class','zonelbl');
+    tx.textContent = z.label;
+    g.append(rect, tx);
+  }
+  return g;
+}
+
 function drawTopology(t){
   const svg = $('#topo');
   const C = t.canvas;
@@ -426,7 +601,12 @@ function drawTopology(t){
   const pos = Object.fromEntries(t.nodes.map(n => [n.id, n]));
   const cx = n => n.x + C.node_w / 2, cy = n => n.y + C.node_h / 2;
 
+  // 分區先畫（墊在最底層）。沒有這兩塊底色，這張圖只是一堆方框；
+  // 有了之後「左邊是醫院、右邊是電信業者，中間三條路是對外連線」一眼就成立。
+  svg.appendChild(drawZones(t, C));
+
   const gLinks = document.createElementNS(SVG,'g');
+  const gFlow = document.createElementNS(SVG,'g');
   const gLabels = document.createElementNS(SVG,'g');
   for (const l of t.links){
     const a = pos[l.src], b = pos[l.dst];
@@ -437,6 +617,12 @@ function drawTopology(t){
     line.setAttribute('class', 'link ' + (WAN[l.kind] || ''));
     line.dataset.linkId = l.id;
     gLinks.appendChild(line);
+
+    // 流量層：與底線同座標，透明度與速度由實際使用率決定
+    const flow = line.cloneNode();
+    flow.setAttribute('class', 'flow ' + (WAN[l.kind] || ''));
+    flow.dataset.flowFor = l.id;
+    gFlow.appendChild(flow);
 
     if (WAN[l.kind]){
       const tx = document.createElementNS(SVG,'text');
@@ -449,7 +635,7 @@ function drawTopology(t){
       gLabels.appendChild(tx);
     }
   }
-  svg.appendChild(gLinks); svg.appendChild(gLabels);
+  svg.appendChild(gLinks); svg.appendChild(gFlow); svg.appendChild(gLabels);
 
   const labels = [];
   for (const n of t.nodes){
@@ -482,16 +668,43 @@ function drawTopology(t){
   }
 }
 
+// 一次性動畫要重播就得先移除 class 並強制回流，否則同一輪連續兩次不會觸發
+function replay(el, cls, ms){
+  el.classList.remove(cls);
+  void el.getBoundingClientRect();
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+let prevLinks = {}, prevMetrics = {};
+
 function paintLinks(snapshot){
   for (const [lid, ls] of Object.entries(snapshot.links)){
     const line = document.querySelector(`line[data-link-id="${lid}"]`);
+    const flow = document.querySelector(`line[data-flow-for="${lid}"]`);
     if (!line) continue;
-    const base = line.getAttribute('class').split(' ').filter(c => !['degraded','down'].includes(c));
+    const prev = prevLinks[lid];
+    const base = line.getAttribute('class').split(' ').filter(c => !['degraded','down','snap'].includes(c));
     if (ls.state === 'down')        base.push('down');
     else if (ls.state === 'degraded') base.push('degraded');
     line.setAttribute('class', base.join(' '));
     // 線寬隨使用率成長，讓壅塞在畫面上「看得見」
     line.style.strokeWidth = (1.6 + Math.min(ls.utilization_pct, 100) / 100 * 4).toFixed(1);
+
+    // 流量層：沒有流量就完全靜止，「畫面上沒東西在動」等於斷線
+    if (flow){
+      const util = Math.min(ls.utilization_pct, 100);
+      const alive = ls.state !== 'down' && util > 0.5;
+      flow.style.opacity = alive ? (0.35 + util / 100 * 0.55).toFixed(2) : 0;
+      // 越忙跑越快：2.4s（幾乎沒流量）→ 0.8s（滿載）
+      flow.style.animationDuration = alive ? (2.4 - util / 100 * 1.6).toFixed(2) + 's' : '0s';
+    }
+
+    // 剛斷掉 → 斷裂閃動；剛被啟用（流量由無到有）→ 湧入
+    if (prev){
+      if (prev.state !== 'down' && ls.state === 'down') replay(line, 'snap', 900);
+      else if (flow && prev.utilization_pct <= 0.5 && ls.utilization_pct > 0.5) replay(flow, 'surge', 1150);
+    }
 
     const lbl = document.querySelector(`text[data-label-for="${lid}"]`);
     if (lbl){
@@ -502,6 +715,7 @@ function paintLinks(snapshot){
         : ls.utilization_pct > 75 ? 'var(--warn)' : '';
     }
   }
+  prevLinks = snapshot.links;
 }
 
 /* ------------------------------------------------------------ 指標與業務表 */
@@ -512,18 +726,49 @@ function renderSnapshot(snap, phase){
   $('#topoHint').textContent = phase;
   paintLinks(snap);
 
-  const set = (id, val, cls, delta) => {
-    const el = $(id); el.textContent = val; el.className = 'v num ' + (cls || '');
+  // 指標用滾動而不是瞬間跳號：「0% → 100%」是整場 Demo 的結論，
+  // 讓它花 0.7 秒走完，觀眾的視線才會停在正確的地方。
+  const set = (id, to, fmt, cls, delta) => {
+    const el = $(id);
+    const from = prevMetrics[id];
+    prevMetrics[id] = to;
+    el.className = 'v num ' + (cls || '');
     if (delta !== undefined) $(id.replace('#m','#d')).textContent = delta;
+
+    if (from === undefined || from === to || reduceMotion){ el.textContent = fmt(to); return; }
+    const tile = el.closest('.tile');
+    if (tile) replay(tile, 'changed', 700);
+    const t0 = performance.now();
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / 700);
+      el.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   };
+  const pct = v => v.toFixed(0) + '%';
+  const ntk = v => 'NT$' + (v / 1000).toFixed(0) + 'k';
   const c = snap.critical_availability_pct, s = snap.slo_compliance_pct;
-  set('#mCrit', c.toFixed(0) + '%', tone(c),
-      baseline ? `基準 ${baseline.critical_availability_pct.toFixed(0)}%` : ' ');
-  set('#mSlo', s.toFixed(0) + '%', tone(s),
-      baseline ? `基準 ${baseline.slo_compliance_pct.toFixed(0)}%` : ' ');
-  const cost = snap.monthly_cost_ntd;
-  set('#mCost', 'NT$' + (cost/1000).toFixed(0) + 'k', '',
-      baseline ? `基準 NT$${(baseline.monthly_cost_ntd/1000).toFixed(0)}k` : ' ');
+  set('#mCrit', c, pct, tone(c),
+      baseline ? `基準 ${baseline.critical_availability_pct.toFixed(0)}%` : ' ');
+  set('#mSlo', s, pct, tone(s),
+      baseline ? `基準 ${baseline.slo_compliance_pct.toFixed(0)}%` : ' ');
+  set('#mCost', snap.monthly_cost_ntd, ntk, '',
+      baseline ? `基準 NT$${(baseline.monthly_cost_ntd/1000).toFixed(0)}k` : ' ');
+
+  // 衛星配額：容量看起來很夠，配額卻可能早就見底 —— 這是人工判斷最容易漏掉的一格
+  const qh = (snap.quota_hours_left || {})['w-sat'];
+  const need = eventHours;
+  const qEl = $('#mQuota');
+  if (qh === null || qh === undefined){
+    prevMetrics['#mQuota'] = undefined;
+    qEl.textContent = '未使用衛星'; qEl.className = 'v num';
+    $('#dQuota').textContent = need ? `這場事件預估 ${need} 小時` : ' ';
+  } else {
+    set('#mQuota', qh, v => v.toFixed(1) + ' 小時',
+        need && qh < need ? 'crit' : need ? 'ok' : '',
+        need ? `這場事件預估 ${need} 小時${qh < need ? '　← 撐不到結束' : ''}` : ' ');
+  }
 
   const svcMeta = Object.fromEntries(topo.services.map(x => [x.id, x]));
   const linkKind = Object.fromEntries(topo.links.map(l => [l.id, l.kind]));
@@ -532,14 +777,17 @@ function renderSnapshot(snap, phase){
     .map(([sid, st]) => {
       const m = svcMeta[sid];
       const wan = findWan(sid, snap, linkKind);
+      // 臨床意義掛在業務名稱的 tooltip 上：非醫療背景的觀眾滑過去
+      // 就知道「ICU 生理監測」斷掉為什麼嚴重，不必另外開一塊說明佔版面。
       return `<tr>
-        <td><span class="pri p${m.priority}">P${m.priority}</span></td>
-        <td>${m.name}</td>
+        <td><span class="pri p${m.priority}" title="重要度 P${m.priority}${
+          m.critical ? '：中斷即危及病人安全' : ''}">P${m.priority}</span></td>
+        <td title="${m.clinical_note || m.name}">${m.name}</td>
         <td><span class="wan ${wan === '5g' ? 'g5' : (wan || '')}">${
           wan ? KIND_LABEL[wan] : '-'}</span></td>
         <td class="r">${st.admitted_mbps.toFixed(0)}M</td>
         <td class="r">${st.latency_ms === null ? '-' : st.latency_ms.toFixed(0) + 'ms'}</td>
-        <td><span class="dot ${st.health}"></span>${st.slo_met ? '達標' : '違反'}</td>
+        <td><span class="dot ${st.health}"></span>${st.slo_met ? '正常' : '不足'}</td>
       </tr>`;
     }).join('');
   $('#svcTable tbody').innerHTML = rows;
@@ -561,7 +809,7 @@ function card(who, stage, text, cls, extra){
     <span class="st">${stage || ''}</span></div>
     <div class="tx">${text}</div>${extra || ''}`;
   const s = $('#stream');
-  if (s.querySelector('.empty')) s.innerHTML = '';
+  if (s.querySelector('.empty, .intro')) s.innerHTML = '';
   s.appendChild(el);
   s.scrollTop = s.scrollHeight;
 }
@@ -578,20 +826,65 @@ function clearPending(){
   if (el) el.remove();
 }
 
+/* ---------------------------------------------------- 開場說明與情境預告 */
+
+// 三條對外線路的規格直接讀拓樸資料，不寫死在文案裡 ——
+// 之後調整頻寬或費率，說明會跟著更新，不會變成過期的行銷詞。
+const ROUTE_ROLE = {
+  fiber: '平常的主線，最快也最便宜',
+  '5g':  '主線斷掉時的備援',
+  satellite: '最後手段，每 GB 貴 50 倍以上',
+};
+
+function introHTML(){
+  const wan = topo.links.filter(l => WAN[l.kind]);
+  const rows = wan.map(l => `
+    <li><span class="swatch ${WAN[l.kind]}"></span>
+      <span class="rname">${KIND_LABEL[l.kind]}</span>
+      <span>${l.capacity_mbps} Mbps · ${l.base_latency_ms} 毫秒 · 每 GB NT$${l.cost_per_gb.toFixed(2)}
+        <span class="role">— ${ROUTE_ROLE[l.kind] || ''}</span></span></li>`).join('');
+  return `<div class="intro">
+    <h3>這個畫面在做什麼</h3>
+    <p>智慧醫院對外有三條網路。平常全部走固網；一旦颱風、地震或基地台壅塞把它打斷，
+       就必須當場決定「哪些醫療服務改走哪條路、誰要讓出頻寬」——
+       而急診與加護病房的資料不能等。</p>
+    <ul class="routes">${rows}</ul>
+    <p>按下「開始應變」後，五個 AI 會依序接手：<b>發現異常 → 評估誰受影響 →
+       想出三個方案並在電腦裡先模擬 → 用管理規則審查 → 請值班主管核准 → 執行 → 驗收</b>。
+       左圖會同步顯示線路的變化，右側則是每項醫療服務當下的狀況。</p>
+    <p>所有數字（走哪條路、分多少頻寬、花多少錢）都由演算法算出並可重現，
+       <b>AI 只負責把結果寫成人看得懂的說明，無權決定任何一項網路變更</b>。</p>
+  </div>`;
+}
+
+function previewHTML(){
+  const sc = scenarios.find(s => s.id === $('#scenario').value);
+  if (!sc) return '';
+  return `<div class="preview">
+    <div class="ptitle">接下來會發生：${sc.name}</div>
+    <p>${sc.narrative}</p>
+    <ul>${sc.faults.map(f => `<li>${f.description}</li>`).join('')}</ul>
+  </div>`;
+}
+
+function renderIntro(){
+  $('#stream').innerHTML = introHTML() + previewHTML();
+}
+
 function renderPlans(plans, selectedId){
   $('#plans').innerHTML = `<table>
-    <thead><tr><th>策略</th><th class="r">關鍵</th><th class="r">SLA</th>
-      <th class="r">月成本</th><th class="r">評分</th><th>裁決</th></tr></thead>
+    <thead><tr><th>方案</th><th class="r" title="模擬後救命服務的正常率">救命服務</th>
+      <th class="r" title="模擬後六項醫療服務的整體達標率">整體品質</th>
+      <th class="r">每月費用</th><th class="r" title="綜合救命服務、整體品質與費用算出的分數，越高越好">評分</th>
+      <th>審查結果</th></tr></thead>
     <tbody>${plans.map(p => `
       <tr class="${p.id === selectedId ? 'sel' : ''}">
-        <td>${p.id === selectedId ? '<span class="visually-hidden">首選：</span>' : ''}${p.strategy}</td>
+        <td>${p.id === selectedId ? '<span class="visually-hidden">首選：</span>' : ''}${p.strategy_label || p.strategy}</td>
         <td class="r">${p.projected ? p.projected.critical_availability_pct.toFixed(0)+'%' : '-'}</td>
         <td class="r">${p.projected ? p.projected.slo_compliance_pct.toFixed(0)+'%' : '-'}</td>
         <td class="r">NT$${p.projected ? (p.projected.monthly_cost_ntd/1000).toFixed(0)+'k' : '-'}</td>
         <td class="r">${p.score.toFixed(1)}</td>
-        <td><span class="tag ${p.policy_decision}">${
-          {allow:'自動放行', require_approval:'需核准', deny:'拒絕'}[p.policy_decision] || p.policy_decision
-        }</span></td>
+        <td><span class="tag ${p.policy_decision}">${label(DECISION_LABEL, p.policy_decision)}</span></td>
       </tr>`).join('')}</tbody></table>`;
 }
 
@@ -599,98 +892,161 @@ function renderPlans(plans, selectedId){
 function handle(m){
   switch (m.kind){
     case 'started':
-      card('災害注入', m.scenario.id, m.scenario.narrative, 'crit',
-        '<ul>' + m.faults.map(f =>
-          `<li>${f.description}<br><code>$ ${f.netem}</code></li>`).join('') + '</ul>');
+      eventHours = m.scenario.duration_hours || null;
+      card('災害發生', '情境說明', m.scenario.narrative, 'crit',
+        '<div class="note">以下指令可直接在真實機房造成同樣的故障，代表這不是為了展示而編造的數字：</div><ul>'
+        + m.faults.map(f => `<li>${f.description}<br><code>$ ${f.netem}</code></li>`).join('') + '</ul>');
       break;
     case 'baseline':
-      baseline = m.snapshot; renderSnapshot(m.snapshot, '事故前基準'); break;
+      baseline = m.snapshot; renderSnapshot(m.snapshot, '災害前正常狀態'); break;
     case 'incident':
-      renderSnapshot(m.snapshot, '事故當下'); break;
+      // 核准畫面要拿它跟推演結果對照，才講得出「0% → 100%」
+      incident = m.snapshot; renderSnapshot(m.snapshot, '災害發生當下');
+      if (!reduceMotion) document.querySelectorAll('main .panel')
+        .forEach(p => replay(p, 'alarm', 1500));
+      break;
     case 'agent_start':
-      pending(m.agent, m.stage); break;
+      markStep(m.stage);
+      pending(label(AGENT_LABEL, m.agent), label(STAGE_LABEL, m.stage)); break;
     case 'agent':
       clearPending();
-      card(m.agent.agent, m.agent.stage, m.agent.narrative || '（無敘述）'); break;
+      card(label(AGENT_LABEL, m.agent.agent), label(STAGE_LABEL, m.agent.stage),
+           m.agent.narrative || '（無說明）'); break;
     case 'plans':
       renderPlans(m.plans, m.selected); break;
     case 'approval_request':
-      showModal(m.plan); break;
+      markStep('approve'); showModal(m.plan); break;
     case 'approval':
-      if (!m.human_gate) card('政策引擎', 'approve', '未觸發任何治理規則，自動放行。', 'exec');
-      else if (!m.approved) card('人工核准', 'approve', '已拒絕執行，網路維持事故當下狀態。', 'crit');
+      if (!m.human_gate) card('規則審查 AI', '核准', '這個方案沒有踩到任何管理規則，可以直接執行。', 'exec');
+      else if (!m.approved) card('主管核准', '核准', '主管否決，網路維持災害當下的狀態，不做任何變更。', 'crit');
       break;
     case 'execute':
-      card('Orchestrator', 'execute', `已套用 ${m.applied.length} 個變更動作：`, 'exec',
+      markStep('execute');
+      card('總調度', '執行變更', `已完成 ${m.applied.length} 項網路調整：`, 'exec',
         '<ul>' + m.applied.map(a => `<li>${a}</li>`).join('') + '</ul>');
       break;
     case 'replan':
-      card('Orchestrator', 'replan', `驗證未通過，啟動第 ${m.round + 1} 輪重規劃。`, 'sys'); break;
+      card('總調度', '重新規劃', `驗收沒過，AI 重新想第 ${m.round + 1} 套方案。`, 'sys'); break;
     case 'replan_exhausted':
-      card('Orchestrator', 'replan', `連續 ${m.rounds} 輪未能恢復，升級人工處理。`, 'crit'); break;
+      card('總調度', '重新規劃', `連續 ${m.rounds} 次都沒能救回來，交由人工接手處理。`, 'crit'); break;
     case 'finished':
-      renderSnapshot(m.final, m.summary.succeeded ? '已復原' : '未復原');
+      renderSnapshot(m.final, m.summary.succeeded ? '已恢復' : '尚未恢復');
       finish(m); break;
     case 'error':
       clearPending();
-      card('系統', 'error', m.message, 'crit'); break;
+      card('系統', '錯誤', m.message, 'crit'); break;
   }
 }
 
 function finish(m){
   clearPending();
+  document.querySelectorAll('#steps span').forEach(el => {
+    el.classList.remove('active'); el.classList.add('done');
+  });
   const s = m.summary, ca = s.critical_availability_pct, sc = s.slo_compliance_pct;
   const row = (k, v, suf) =>
     `<tr><td>${k}</td><td class="r">${v.baseline}${suf}</td>
      <td class="r" style="color:var(--crit)">${v.incident}${suf}</td>
      <td class="r" style="color:var(--ok);font-weight:600">${v.final}${suf}</td></tr>`;
-  card(s.succeeded ? '閉環完成' : '閉環未達標', `${s.rounds} 輪`,
-    `${s.succeeded ? '生命關鍵業務已全數恢復。' : (s.halted_reason || '仍有關鍵業務未恢復。')}`,
+  card(s.succeeded ? '應變完成' : '應變未達標', `共 ${s.rounds} 輪`,
+    `${s.succeeded ? '所有救命服務都已恢復正常。' : (s.halted_reason || '仍有救命服務沒有恢復。')}`,
     s.succeeded ? 'exec' : 'crit',
     `<table style="margin-top:9px">
-       <thead><tr><th>指標</th><th class="r">事故前</th><th class="r">事故當下</th>
-         <th class="r">復原後</th></tr></thead>
-       <tbody>${row('關鍵業務可用率', ca, '%')}${row('SLA 達成率', sc, '%')}</tbody></table>
-     <div style="margin-top:9px;font-size:11px;color:var(--dim)">
-       稽核軌跡 ${m.audit.entries} 筆 · 雜湊鏈${m.audit.verified ? '完整' : '異常'}
+       <thead><tr><th>項目</th><th class="r">災害前</th><th class="r">災害當下</th>
+         <th class="r">處理後</th></tr></thead>
+       <tbody>${row('救命服務正常率', ca, '%')}${row('整體服務達標率', sc, '%')}</tbody></table>
+     <div class="note">全程 ${m.audit.entries} 筆決策紀錄已存檔，防竄改驗證${m.audit.verified ? '通過' : '異常'}
        · <code>${m.audit.path.split('/').pop()}</code></div>`);
   running = false; $('#runBtn').disabled = false; $('#runBtn').textContent = '再跑一次';
   $('#runBtn').removeAttribute('aria-busy');
   $('#scenario').disabled = false;
 }
 
+// 主管要決定的其實只有三件事：核准會得到什麼、要付出什麼、不核准會怎樣。
+// 舊版把四條規則原文和八行零散動作攤在畫面上，這三個問題一個都沒回答。
 function showModal(plan){
+  const pr = plan.projected || {};
+  const nowCrit = incident ? incident.critical_availability_pct : null;
+  const baseCost = baseline ? baseline.monthly_cost_ntd : null;
+  const stillDown = incident ? Object.entries(incident.services)
+    .filter(([sid, st]) => !st.slo_met && (svcMeta()[sid] || {}).critical)
+    .map(([sid]) => svcMeta()[sid].name) : [];
+  const k = n => 'NT$' + Math.round(n / 1000) + 'k';
+  const times = (baseCost && pr.monthly_cost_ntd) ? (pr.monthly_cost_ntd / baseCost).toFixed(1) : null;
+  const qLeft = (pr.quota_hours_left || {})['w-sat'];
+
   $('#mSub').innerHTML =
-    `計畫 <b>${plan.strategy}</b> · 風險評分 <b class="num">${plan.risk_score}</b>/100 ·
-     推演後關鍵可用率 <b class="num">${plan.projected.critical_availability_pct}%</b>`;
-  $('#mFind').innerHTML = plan.policy_findings.map(f => `<li>${f}</li>`).join('')
-    || '<li>（無政策發現）</li>';
-  $('#mActs').innerHTML = plan.actions.map(a => `<li>${a}</li>`).join('');
+    `方案「<b>${plan.strategy_label || plan.strategy}</b>」踩到 ${plan.findings.length} 條管理規則，
+     不能自動執行。<span class="note" title="分數越高代表這個方案偏離日常運作越多，滿分 100">
+     風險評分 ${plan.risk_score}/100</span>`;
+
+  $('#mBrief').innerHTML = `<div class="brief">
+    <div class="ba"><span class="k">救命服務正常率</span>
+      <span class="v">${nowCrit === null ? '—' : `<b class="from">${nowCrit.toFixed(0)}%</b> →
+        <b class="to">${pr.critical_availability_pct}%</b>`}</span></div>
+    <div class="ba"><span class="k">每月通訊費用</span>
+      <span class="v">${baseCost === null ? '—' : `<b class="from">${k(baseCost)}</b> →
+        <b class="to cost">${k(pr.monthly_cost_ntd)}</b>${times ? `（${times} 倍）` : ''}`}</span></div>
+    ${qLeft === null || qLeft === undefined ? '' : `<div class="ba"><span class="k">衛星配額還能撐</span>
+      <span class="v"><b class="to ${eventHours && qLeft < eventHours ? 'cost' : ''}">${qLeft} 小時</b>${
+        eventHours ? `（事件預估 ${eventHours} 小時${qLeft < eventHours ? '，撐不到結束' : ''}）` : ''}</span></div>`}
+    <p class="ifnot">${stillDown.length
+      ? `若不核准：<b>${stillDown.join('、')}</b> 將持續無法使用。`
+      : '若不核准：網路維持災害當下的狀態，不做任何調整。'}</p>
+  </div>`;
+
+  // 只印具體事由，規則名稱本身是分類、和事由重覆；編號縮到右側供稽核對照
+  $('#mFind').innerHTML = (plan.findings || []).map(f =>
+    `<li>${f.message}<span class="rid">${f.rule_id}</span></li>`).join('')
+    || '<li>（沒有觸發任何規則）</li>';
+
+  $('#mActs').innerHTML = `<table class="chg">
+    <thead><tr><th>醫療服務</th><th>改走</th><th class="r">分到的速度</th><th>結果</th></tr></thead>
+    <tbody>${(plan.changes || []).map(c => {
+      const off = c.mbps <= 0 || !c.reachable;
+      const cut = !off && c.mbps < c.required_mbps;
+      return `<tr>
+        <td><span class="pri p${c.priority}">P${c.priority}</span>
+          <span title="${c.clinical_note || ''}">${c.name}</span></td>
+        <td><span class="wan ${c.wan === '5G' ? 'g5' : c.wan === '衛星' ? 'satellite' : 'fiber'}">${c.wan || '—'}</span></td>
+        <td class="r">${off ? '—' : c.mbps + 'M'}</td>
+        <td>${off ? '<span class="imp bad">暫停服務</span>'
+              : cut ? `<span class="imp warn">降速使用（完整需 ${c.required_mbps}M）</span>`
+              : '<span class="imp ok">完整服務</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+
   const dialog = $('#modal');
   if (!dialog.open) dialog.showModal();
   $('#rejectBtn').focus();
 }
 
+const svcMeta = () => Object.fromEntries(topo.services.map(x => [x.id, x]));
+
 function respond(approved){
   if ($('#modal').open) $('#modal').close();
   ws && ws.send(JSON.stringify({action:'approve', approved}));
-  card('人工核准', 'approve', approved ? '值班主管已核准執行。' : '值班主管拒絕執行。',
+  card('主管核准', '核准', approved ? '值班主管已核准，開始調整網路。' : '值班主管不同意執行。',
        approved ? 'exec' : 'crit');
 }
 
 $('#approveBtn').onclick = () => respond(true);
 $('#rejectBtn').onclick  = () => respond(false);
 $('#modal').addEventListener('cancel', e => e.preventDefault());
+// 換情境時同步換掉預告，讓人在按下去之前就知道等一下會壞掉什麼
+$('#scenario').onchange = () => { if (!running) renderIntro(); };
 
 $('#runBtn').onclick = () => {
   if (!ready) return boot();   // 開場載入失敗時，同一顆按鈕就是「重試載入」
   if (running) return;
   running = true;
-  $('#runBtn').disabled = true; $('#runBtn').textContent = '執行中…';
+  // 上一輪的鏈路狀態留著會讓新一輪的基準畫面誤觸「斷裂／湧入」動畫
+  prevLinks = {}; resetSteps();
+  $('#runBtn').disabled = true; $('#runBtn').textContent = '應變中…';
   $('#runBtn').setAttribute('aria-busy','true');
   $('#scenario').disabled = true;
   $('#stream').innerHTML = '';
-  $('#plans').innerHTML = '<div class="empty">最佳化器計算中…</div>';
+  $('#plans').innerHTML = '<div class="empty">AI 正在計算可行的救援方案…</div>';
 
   const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws/demo`);
@@ -712,7 +1068,7 @@ async function boot(){
   ready = false;
   $('#runBtn').disabled = true;
   $('#runBtn').textContent = '載入中…';
-  $('#llmBadge').textContent = '推理引擎檢查中…';
+  $('#llmBadge').textContent = 'AI 文字說明：檢查中…';
   $('#llmBadge').className = 'badge';
 
   const get = async path => {
@@ -728,26 +1084,29 @@ async function boot(){
     topo = t;
     drawTopology(t);
     baseline = t.baseline;
-    renderSnapshot(t.baseline, '事故前基準');
+    renderSnapshot(t.baseline, '災害前正常狀態');
 
+    scenarios = scs;
     $('#scenario').innerHTML = scs.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
     const b = $('#llmBadge');
-    b.textContent = h.llm_online ? `LLM ${h.llm_mode}` : '離線決定性推理（未設金鑰）';
+    // 這個徽章只說明「文字說明由誰寫」。所有數字與決策一律由演算法算出，
+    // 兩種模式跑出來的方案完全一樣 —— 講清楚才不會被誤會成 AI 在做決定。
+    b.textContent = h.llm_online ? `AI 文字說明：${h.llm_mode}` : 'AI 文字說明：離線範本（數字不受影響）';
     b.className = 'badge ' + (h.llm_online ? 'on' : 'off');
-    $('#stream').innerHTML = '<div class="empty">選擇災害情境後按「執行閉環」。</div>';
+    renderIntro();
     $('#scenario').disabled = false;
     ready = true;
     $('#runBtn').disabled = false;
-    $('#runBtn').textContent = '執行閉環';
+    $('#runBtn').textContent = '開始應變';
   } catch (error) {
     // 失敗時務必把按鈕交還給使用者。早期版本只改了徽章，按鈕就永遠停在
     // disabled 的「載入中…」—— 伺服器還沒起來就開頁面（啟動約需 0.9s）
     // 是最容易踩到的情況，而畫面看起來只是「載入很久」，沒有重試的路。
     const timedOut = error.name === 'TimeoutError';
-    $('#llmBadge').textContent = timedOut ? '戰情室資料逾時' : '戰情室資料載入失敗';
+    $('#llmBadge').textContent = timedOut ? '資料載入逾時' : '資料載入失敗';
     $('#llmBadge').className = 'badge off';
-    $('#stream').innerHTML = '<div class="empty">無法載入戰情室資料。' +
-      '請確認 <code>aegismesh serve</code> 已啟動，再按上方「重試載入」。</div>';
+    $('#stream').innerHTML = '<div class="empty">讀不到醫院網路資料。' +
+      '請確認伺服器 <code>aegismesh serve</code> 已啟動，再按上方「重試載入」。</div>';
     $('#runBtn').disabled = false;
     $('#runBtn').textContent = '重試載入';
     console.error('Dashboard initialization failed', error);

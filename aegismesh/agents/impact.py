@@ -11,17 +11,19 @@ from typing import Any
 from ..domain import NetworkSnapshot
 from ..llm import compact_json
 from ..twin.engine import DigitalTwin
-from .base import Agent, AgentResult
+from .base import PLAIN_LANGUAGE, Agent, AgentResult
 
 
 class ImpactAgent(Agent):
     name = "Impact Agent"
     stage = "assess"
     system_prompt = (
-        "你是醫院資訊室與電信服務供應商之間的服務影響分析師。"
-        "你會收到一份業務衝擊清單，每項包含業務名稱、臨床用途、SLA 違反原因。"
-        "請用繁體中文寫 2-3 句話說明這次事故對院方的實際影響，"
-        "並指出最優先必須恢復的業務。只能引用清單中的事實。"
+        "你負責向醫院管理層說明這次網路事故對醫療作業的實際衝擊。"
+        "你會收到一份受影響服務清單，每項包含服務名稱、臨床用途、以及哪裡不符合標準。"
+        "請用繁體中文寫 2-3 句話說明這次事故對院方的實際影響"
+        "（例如哪些醫療行為會做不了、對病人安全的風險），並指出最該優先恢復哪一項。"
+        "只能引用清單中的事實。"
+        + PLAIN_LANGUAGE +
         '輸出 JSON：{"business_impact": "2-3 句影響說明", '
         '"restore_first": ["最該優先恢復的 service_id"]}'
     )
@@ -65,9 +67,9 @@ class ImpactAgent(Agent):
             crit = "、".join(i["name"] for i in critical_hit) or "無"
             return {
                 "business_impact": (
-                    f"受影響業務共 {len(impacted)} 項：{names}。"
-                    f"其中生命關鍵業務為 {crit}；"
-                    f"整體 SLA 達成率自 {baseline.slo_compliance_pct:.0f}% "
+                    f"受影響的醫療服務共 {len(impacted)} 項：{names}。"
+                    f"其中攸關性命的是 {crit}；"
+                    f"整體服務達標率自 {baseline.slo_compliance_pct:.0f}% "
                     f"降至 {current.slo_compliance_pct:.0f}%。"
                 ),
                 "restore_first": [i["service_id"] for i in impacted[:2]],

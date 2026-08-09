@@ -12,14 +12,19 @@ TYPHOON_FIBER_CUT = Scenario(
     id="typhoon-fiber-cut",
     name="颱風致光纖中斷 ＋ 5G 基地台壅塞",
     narrative=(
-        "颱風外圍環流造成院區對外主幹光纖於人孔段受損中斷；同時周邊避難收容"
-        "導致 gNB-01 用戶暴增，5G 回程可用頻寬僅剩約四成且延遲上升。"
+        "颱風外圍環流吹垮人孔內的光纖，醫院對外的主線直接斷掉；"
+        "同時附近設了避難收容所，湧入的人潮把 5G 基地台擠爆，"
+        "備援的 5G 只剩約四成速度，反應時間也變慢。"
     ),
+    duration_hours=24.0,
+    # 避難收容湧入 → 訪客 Wi-Fi 需求暴增；傷患湧入 → 急診生命徵象串流變多
+    demand={"svc-guest": 2.5, "svc-ed-vitals": 1.6, "svc-teleconsult": 1.3},
     faults=[
-        Fault("w-fiber", LinkState.DOWN, description="主幹光纖實體中斷"),
+        Fault("w-fiber", LinkState.DOWN, description="對外主線光纖被扯斷，完全不通"),
         Fault(
             "w-5g", LinkState.DEGRADED, extra_latency_ms=25.0, extra_loss_pct=0.25,
-            capacity_factor=0.40, description="5G 基地台壅塞：容量剩 40%、延遲 +25ms、丟包 +0.25%",
+            capacity_factor=0.40,
+            description="5G 基地台塞車：速度只剩四成、反應時間多 25 毫秒、開始掉資料",
         ),
     ],
 )
@@ -28,30 +33,37 @@ EARTHQUAKE_DUAL_LOSS = Scenario(
     id="earthquake-dual-loss",
     name="地震致固網與 5G 雙路中斷（衛星為唯一生路）",
     narrative=(
-        "強震造成固網管道斷裂，鄰近 5G 基地台停電退出服務。院區僅餘海地星空"
-        "衛星鏈路，頻寬 120 Mbps、延遲 48ms，必須嚴格分配給生命關鍵業務。"
+        "強震震斷固網管道，附近的 5G 基地台也因為停電停止服務。"
+        "醫院只剩衛星這條路，而衛星只有 120 Mbps、反應時間 48 毫秒 —— "
+        "頻寬必須嚴格留給救命服務，其他的只能先停。"
     ),
+    duration_hours=36.0,
+    demand={"svc-ed-vitals": 2.0, "svc-icu-iot": 1.4, "svc-guest": 1.8},
     faults=[
-        Fault("w-fiber", LinkState.DOWN, description="固網管道斷裂"),
-        Fault("w-5g", LinkState.DOWN, description="基地台停電退服"),
+        Fault("w-fiber", LinkState.DOWN, description="固網管道被震斷"),
+        Fault("w-5g", LinkState.DOWN, description="5G 基地台停電，完全停止服務"),
         Fault(
             "w-sat", LinkState.DEGRADED, extra_latency_ms=6.0, extra_loss_pct=0.15,
-            capacity_factor=0.9, description="降雨衰減使衛星鏈路輕微劣化",
+            capacity_factor=0.9, description="下雨使衛星訊號稍微變差",
         ),
     ],
 )
 
 BACKBONE_BROWNOUT = Scenario(
     id="backbone-brownout",
-    name="骨幹壅塞致 SLA 邊緣劣化（無斷線的隱性事故）",
+    name="電信骨幹塞車：沒有斷線，但品質悄悄跌破標準",
     narrative=(
-        "區域骨幹異常導致固網 POP 至醫療雲段延遲上升、輕微丟包。"
-        "沒有任何鏈路 down，傳統告警不會觸發，但遠距診療品質已跌破 SLO。"
+        "電信機房到醫療雲之間的骨幹線路異常，反應時間拉長、開始掉一點資料。"
+        "沒有任何一條線斷掉，傳統的告警系統不會響 —— "
+        "但遠距診療的品質其實已經跌破當初承諾的標準。"
     ),
+    duration_hours=6.0,
+    demand={"svc-teleconsult": 1.2},
     faults=[
         Fault(
             "b-fiber", LinkState.DEGRADED, extra_latency_ms=95.0, extra_loss_pct=1.4,
-            capacity_factor=0.75, description="骨幹擁塞：延遲 +95ms、丟包 1.4%",
+            capacity_factor=0.75,
+            description="骨幹塞車：反應時間多 95 毫秒、資料遺失 1.4%",
         ),
     ],
 )

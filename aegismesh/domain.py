@@ -66,6 +66,13 @@ class Link:
     base_loss_pct: float = 0.0
     cost_per_gb: float = 0.0          # 相對成本，衛星 >> 5G > 固網
     state: LinkState = LinkState.UP
+    # 共同風險群組（SRLG）：同一條實體管道／同一個機房／同一組電源。
+    # 這是電信實務裡最常被忽略的東西 —— 帳面上的「備援路徑」若與主路徑
+    # 共用管道，一鏟子下去兩條一起斷，備援等於不存在。
+    duct: str | None = None
+    # 事件期間的流量配額（GB）。None = 不限量。
+    # 衛星是耗竭性資源：現在多用一分，幾小時後就少一分。
+    quota_gb: float | None = None
     # 故障注入疊加值（tc/netem 對應）
     netem_extra_latency_ms: float = 0.0
     netem_extra_loss_pct: float = 0.0
@@ -178,6 +185,8 @@ class NetworkSnapshot:
     weighted_availability_pct: float
     slo_compliance_pct: float
     monthly_cost_ntd: float
+    # 有配額的線路照此流量還能撐幾小時（inf = 沒在用）
+    quota_hours_left: dict[str, float] = field(default_factory=dict)
 
     def violated_services(self) -> list[str]:
         return [sid for sid, st in self.services.items() if not st.slo_met]
@@ -193,6 +202,10 @@ class NetworkSnapshot:
             "weighted_availability_pct": round(self.weighted_availability_pct, 2),
             "slo_compliance_pct": round(self.slo_compliance_pct, 2),
             "monthly_cost_ntd": round(self.monthly_cost_ntd, 0),
+            "quota_hours_left": {
+                k: (None if v == float("inf") else round(v, 2))
+                for k, v in self.quota_hours_left.items()
+            },
             "services": {k: v.to_dict() for k, v in self.services.items()},
             "links": {k: v.to_dict() for k, v in self.links.items()},
         }
@@ -242,6 +255,12 @@ class Scenario:
     name: str
     narrative: str
     faults: list[Fault]
+    # 事件預估持續時間（小時）。衛星配額要撐過這段時間，
+    # 「現在誰上衛星」因此變成跨時間的資源配置，而不是當下的取捨。
+    duration_hours: float = 12.0
+    # 各業務的需求倍率。災害不只打斷線路，也改變需求：
+    # 避難收容湧入 → 訪客 Wi-Fi 暴增；大量傷患 → 生命徵象串流變多。
+    demand: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -275,6 +294,9 @@ class RecoveryPlan:
     # Policy Agent 填入
     policy_decision: str = "pending"     # allow | require_approval | deny
     policy_findings: list[str] = field(default_factory=list)
+    # 同一批發現的結構化版本。核准畫面要能自己決定怎麼排版
+    # （例如只顯示具體事由、把規則編號縮到角落），拿到拼好的字串就做不到。
+    policy_findings_detail: list[dict[str, Any]] = field(default_factory=list)
     risk_score: float = 0.0
     # Planning/Simulation Agent 填入
     score: float = 0.0
@@ -291,6 +313,7 @@ class RecoveryPlan:
             ],
             "policy_decision": self.policy_decision,
             "policy_findings": self.policy_findings,
+            "policy_findings_detail": self.policy_findings_detail,
             "risk_score": round(self.risk_score, 2),
             "score": round(self.score, 2),
             "llm_rationale": self.llm_rationale,

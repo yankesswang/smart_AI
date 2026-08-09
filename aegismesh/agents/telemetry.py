@@ -11,7 +11,7 @@ from typing import Any
 from ..domain import NetworkSnapshot, Severity
 from ..llm import compact_json
 from ..twin.engine import DigitalTwin
-from .base import Agent, AgentResult
+from .base import PLAIN_LANGUAGE, Agent, AgentResult
 
 _UTIL_WARN_PCT = 75.0
 _LATENCY_RATIO_WARN = 2.0   # 延遲超過基礎值的倍數
@@ -21,11 +21,12 @@ class TelemetryAgent(Agent):
     name = "Telemetry Agent"
     stage = "observe"
     system_prompt = (
-        "你是電信網路維運中心（NOC）的一線監控分析師。"
-        "你會收到一份由網路數位孿生量測出的異常清單。"
-        "請只根據清單內容，用繁體中文寫一段 2-3 句的事故播報，"
-        "說明發生什麼、哪一段網路、以及當下最該注意的風險。"
-        "不要杜撰清單中沒有的數據。"
+        "你是醫院網路的監控人員，正在向不具電信背景的院方主管與評審報告狀況。"
+        "你會收到一份系統量測出的異常清單。"
+        "請只根據清單內容，用繁體中文寫一段 2-3 句的狀況播報，"
+        "說明發生什麼事、哪一段網路出問題、以及現在最該擔心什麼。"
+        "不要杜撰清單中沒有的數據。線路一律使用清單中 link_name 的中文名稱。"
+        + PLAIN_LANGUAGE +
         '輸出 JSON：{"headline": "一句話標題", "narrative": "2-3 句敘述"}'
     )
 
@@ -37,34 +38,41 @@ class TelemetryAgent(Agent):
         for lid, link in twin.links.items():
             now = current.links[lid]
             base = baseline.links[lid]
+            # 代號留給稽核，名稱留給人與 LLM
+            name = twin.link_label(lid)
 
             if now.state == "down":
                 anomalies.append({
-                    "link": lid, "type": "link_down", "severity": Severity.CRITICAL.value,
-                    "detail": f"{link.kind.value} 鏈路中斷（容量 {link.capacity_mbps:.0f} Mbps 歸零）",
+                    "link": lid, "link_name": name, "type": "link_down",
+                    "severity": Severity.CRITICAL.value,
+                    "detail": f"{name}完全中斷（原本 {link.capacity_mbps:.0f} Mbps 全部歸零）",
                 })
                 continue
 
             if link.netem_extra_latency_ms > 0 and now.latency_ms > base.latency_ms * _LATENCY_RATIO_WARN:
                 anomalies.append({
-                    "link": lid, "type": "latency_spike", "severity": Severity.WARNING.value,
-                    "detail": f"延遲由 {base.latency_ms:.1f}ms 升至 {now.latency_ms:.1f}ms",
+                    "link": lid, "link_name": name, "type": "latency_spike",
+                    "severity": Severity.WARNING.value,
+                    "detail": f"{name}的反應時間由 {base.latency_ms:.1f} 毫秒變慢到 {now.latency_ms:.1f} 毫秒",
                 })
             if link.netem_capacity_factor < 1.0:
                 anomalies.append({
-                    "link": lid, "type": "capacity_loss", "severity": Severity.WARNING.value,
-                    "detail": f"可用容量降至 {link.netem_capacity_factor:.0%}"
+                    "link": lid, "link_name": name, "type": "capacity_loss",
+                    "severity": Severity.WARNING.value,
+                    "detail": f"{name}可用速度只剩 {link.netem_capacity_factor:.0%}"
                               f"（{now.capacity_mbps:.0f} Mbps）",
                 })
             if now.utilization_pct >= _UTIL_WARN_PCT:
                 anomalies.append({
-                    "link": lid, "type": "congestion", "severity": Severity.WARNING.value,
-                    "detail": f"使用率 {now.utilization_pct:.0f}%，已進入壅塞區間",
+                    "link": lid, "link_name": name, "type": "congestion",
+                    "severity": Severity.WARNING.value,
+                    "detail": f"{name}已用掉 {now.utilization_pct:.0f}% 的容量，開始塞車",
                 })
             if now.loss_pct > max(0.1, base.loss_pct * 3):
                 anomalies.append({
-                    "link": lid, "type": "packet_loss", "severity": Severity.WARNING.value,
-                    "detail": f"丟包率 {now.loss_pct:.2f}%（基準 {base.loss_pct:.2f}%）",
+                    "link": lid, "link_name": name, "type": "packet_loss",
+                    "severity": Severity.WARNING.value,
+                    "detail": f"{name}的資料遺失率達 {now.loss_pct:.2f}%（平常 {base.loss_pct:.2f}%）",
                 })
 
         unreachable = [sid for sid, s in current.services.items() if not s.reachable]
@@ -84,20 +92,20 @@ class TelemetryAgent(Agent):
 
         def fallback() -> dict[str, Any]:
             if severity is Severity.OK:
-                return {"headline": "網路狀態正常", "narrative": "所有鏈路與業務均在 SLO 範圍內。"}
-            heads = "；".join(a["detail"] for a in anomalies[:3]) or "多項指標劣化"
+                return {"headline": "網路狀態正常", "narrative": "所有線路與醫療服務都在正常範圍內。"}
+            heads = "；".join(a["detail"] for a in anomalies[:3]) or "多項指標變差"
             return {
                 "headline": f"偵測到 {len(anomalies)} 項網路異常",
                 "narrative": (
-                    f"{heads}。目前有 {len(unreachable)} 項業務失去連線，"
-                    f"關鍵業務可用率 {current.critical_availability_pct:.0f}%。"
+                    f"{heads}。目前有 {len(unreachable)} 項醫療服務完全斷線，"
+                    f"救命服務正常率 {current.critical_availability_pct:.0f}%。"
                 ),
             }
 
         out = self._ask(
-            f"異常清單：{compact_json(anomalies)}\n"
-            f"失聯業務：{unreachable}\n"
-            f"關鍵業務可用率：{current.critical_availability_pct:.0f}%",
+            f"異常清單（請直接使用其中的 link_name 中文名稱）：{compact_json(anomalies)}\n"
+            f"完全斷線的醫療服務：{[twin.services[s].name for s in unreachable]}\n"
+            f"救命服務正常率：{current.critical_availability_pct:.0f}%",
             fallback,
         )
 

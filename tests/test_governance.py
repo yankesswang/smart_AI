@@ -154,3 +154,38 @@ def test_audit_reopens_from_last_nonempty_entry(tmp_path):
     assert second["prev_hash"] == first["hash"]
     assert AuditLog(path).verify()[0]
     assert AuditLog(path).count() == 2
+
+
+def test_shared_duct_spof_is_flagged():
+    """所有救命服務都擠在同一條市政管道時，治理層必須攔下來要求人工確認。"""
+    twin = DigitalTwin()
+    twin.apply_scenario(SCENARIOS["typhoon-fiber-cut"])
+    incident = twin.evaluate("incident")
+    engine = PolicyEngine()
+
+    flagged = False
+    for plan in generate_plans(twin):
+        engine.apply_to(twin, plan, incident)
+        hits = [f for f in plan.policy_findings if "POL-004" in f]
+        if hits:
+            flagged = True
+            assert "同一條實體管道" in hits[0]
+            assert plan.policy_decision != ALLOW
+    assert flagged, "固網斷線後全數改走 5G，其回程與固網共用管道，POL-004 應該要命中"
+
+
+def test_quota_exhaustion_is_flagged_against_event_duration():
+    """衛星撐不過整場事件時要示警 —— 容量看起來還很夠，配額卻早就見底。"""
+    twin = DigitalTwin()
+    twin.apply_scenario(SCENARIOS["earthquake-dual-loss"])
+    incident = twin.evaluate("incident")
+    engine = PolicyEngine()
+
+    plan = next(p for p in generate_plans(twin) if p.strategy == "protect_critical")
+    engine.apply_to(twin, plan, incident)
+    hits = [f for f in plan.policy_findings if "POL-013" in f]
+    assert hits, "救命優先策略透支配額，必須被 POL-013 攔下"
+    assert "小時" in hits[0]
+    # 使用率看起來不高，但配額其實撐不住 —— 這正是人工判斷會漏掉的地方
+    assert plan.projected.links["w-sat"].utilization_pct < 90.0
+    assert plan.projected.quota_hours_left["w-sat"] < twin.event_hours

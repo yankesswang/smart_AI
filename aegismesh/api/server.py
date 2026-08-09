@@ -32,8 +32,9 @@ from fastapi.staticfiles import StaticFiles
 from ..config import SETTINGS
 from ..domain import NetworkSnapshot, RecoveryPlan
 from ..llm import LLMClient
+from ..optimizer import STRATEGY_LABELS
 from ..orchestrator import Orchestrator
-from ..twin.engine import DigitalTwin
+from ..twin.engine import WAN_LABEL, DigitalTwin
 from ..twin.scenarios import SCENARIOS, get_scenario
 
 logger = logging.getLogger(__name__)
@@ -60,20 +61,22 @@ LAYOUT: dict[str, tuple[int, int]] = {
 }
 assert all(x + NODE_W <= CANVAS_W for x, _ in LAYOUT.values()), "節點超出畫布寬度"
 
-# 拓樸圖上的短名稱。完整名稱仍保留在業務表與 API，這裡只是避免文字溢出方框。
+# 拓樸圖上的短名稱。刻意避開 CPE / VSAT / POP / gNB 這類縮寫 ——
+# 評審不一定是電信背景，看不懂方框就看不懂整張圖。每個方框下方仍印出節點
+# 原始 ID（cpe-fiber、gnb-5g…），技術背景的讀者要對照設備一樣找得到。
 SHORT_NAME: dict[str, str] = {
-    "ward-ed": "急診暨檢傷區",
-    "ward-icu": "加護病房 IoT",
-    "blk-img": "影像暨遠距診療",
-    "blk-adm": "行政暨訪客區",
-    "core-sw": "院內核心交換機",
-    "cpe-fiber": "固網 CPE（主）",
-    "cpe-5g": "5G CPE（備援）",
-    "sat-vsat": "衛星終端 VSAT",
-    "pop-fiber": "中華電信 POP",
-    "gnb-5g": "5G 基地台 gNB-01",
-    "gw-sat": "海地星空閘道",
-    "dc-hicloud": "HiCloud 醫療雲",
+    "ward-ed": "急診室",
+    "ward-icu": "加護病房",
+    "blk-img": "影像與遠距診療",
+    "blk-adm": "行政與訪客區",
+    "core-sw": "院內網路中樞",
+    "cpe-fiber": "固網出口（主要）",
+    "cpe-5g": "5G 出口（備援）",
+    "sat-vsat": "衛星天線",
+    "pop-fiber": "中華電信機房",
+    "gnb-5g": "5G 基地台",
+    "gw-sat": "衛星地面站",
+    "dc-hicloud": "醫療雲端機房",
 }
 
 @asynccontextmanager
@@ -98,27 +101,74 @@ if STATIC_DIR.exists():
 # ------------------------------------------------------------------ 序列化
 
 
-def _plan_brief(plan: RecoveryPlan) -> dict[str, Any]:
+def _plan_changes(plan: RecoveryPlan, twin: DigitalTwin) -> list[dict[str, Any]]:
+    """把計畫改寫成「每個醫療服務一列」的推演結果。
+
+    最佳化器的動作是以「動作」為單位的：同一個服務常常拆成兩筆（改走 5G
+    ＋ 限速至 40M），而頻寬沒變的服務根本不會產生動作。核准畫面照抄動作
+    就會變成八行零散指令，還有一半服務憑空消失或顯示「不變」。
+
+    所以這裡不讀動作，直接讀影子孿生推演出來的結果，並與「完整服務所需頻寬」
+    對照 —— 值班主管要判斷的是「核准之後每項服務拿到的夠不夠」。
+    """
+    if plan.projected is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for sid, svc in twin.services.items():
+        state = plan.projected.services.get(sid)
+        if state is None:
+            continue
+        wan = next(
+            (WAN_LABEL[twin.links[lid].kind.value] for lid in state.link_ids
+             if twin.links[lid].kind.value in WAN_LABEL),
+            None,
+        )
+        rows.append({
+            "name": svc.name,
+            "priority": svc.priority,
+            "critical": svc.is_critical,
+            "clinical_note": svc.clinical_note,
+            "wan": wan,
+            "mbps": round(state.admitted_mbps, 1),
+            # 用災害期間的需求，不是平常的需求 —— 否則急診拿到 27M 會被
+            # 標成「完整服務」，但這場災害裡它其實需要 50M
+            "required_mbps": round(twin.required_mbps(sid), 1),
+            "reachable": state.reachable,
+        })
+    return sorted(rows, key=lambda r: r["priority"])
+
+
+def _plan_brief(plan: RecoveryPlan, twin: DigitalTwin) -> dict[str, Any]:
+    # 動作說明交給孿生渲染：它握有業務名稱，才能把 svc-ed-vitals 講成
+    # 「急診生命徵象即時串流」。原始 ID 仍在稽核軌跡裡。
     pr = plan.projected
     return {
         "id": plan.id,
         "strategy": plan.strategy,
-        "actions": [a.describe() for a in plan.actions],
+        "strategy_label": STRATEGY_LABELS.get(plan.strategy, plan.strategy),
+        "actions": [twin.describe_action(a) for a in plan.actions],
         "action_count": len(plan.actions),
+        "changes": _plan_changes(plan, twin),
         "score": round(plan.score, 1),
         "risk_score": round(plan.risk_score, 1),
         "policy_decision": plan.policy_decision,
         "policy_findings": plan.policy_findings,
+        "findings": plan.policy_findings_detail,
         "llm_rationale": plan.llm_rationale,
         "projected": {
             "critical_availability_pct": round(pr.critical_availability_pct, 1),
             "slo_compliance_pct": round(pr.slo_compliance_pct, 1),
             "monthly_cost_ntd": round(pr.monthly_cost_ntd),
+            "quota_hours_left": {
+                k: (None if v == float("inf") else round(v, 1))
+                for k, v in pr.quota_hours_left.items()
+            },
         } if pr else None,
     }
 
 
-def _serialize(kind: str, payload: Any) -> dict[str, Any]:
+def _serialize(kind: str, payload: Any, twin: DigitalTwin) -> dict[str, Any]:
     if kind in {"baseline", "incident"} and isinstance(payload, NetworkSnapshot):
         return {"kind": kind, "snapshot": payload.to_dict()}
     if kind == "agent":
@@ -127,7 +177,7 @@ def _serialize(kind: str, payload: Any) -> dict[str, Any]:
         selected = payload["selected"]
         return {
             "kind": kind,
-            "plans": [_plan_brief(p) for p in payload["plans"]],
+            "plans": [_plan_brief(p, twin) for p in payload["plans"]],
             "selected": selected.id if selected else None,
         }
     if kind == "approval":
@@ -184,6 +234,7 @@ def _scenarios_payload() -> list[dict[str, Any]]:
             "id": s.id,
             "name": s.name,
             "narrative": s.narrative,
+            "duration_hours": s.duration_hours,
             "faults": [
                 {
                     "link": f.link_id,
@@ -257,7 +308,7 @@ class DemoSession:
             self._closed.set()
 
     def emit(self, kind: str, payload: Any) -> None:
-        self._push(_serialize(kind, payload))
+        self._push(_serialize(kind, payload, self.orch.twin))
 
     def request_approval(self, plan: RecoveryPlan) -> bool:
         """在 worker thread 阻塞，直到瀏覽器回覆、連線中斷、或逾時。"""
@@ -266,7 +317,7 @@ class DemoSession:
 
         self._approval_result = False
         self._approval_ready.clear()
-        self._push({"kind": "approval_request", "plan": _plan_brief(plan)})
+        self._push({"kind": "approval_request", "plan": _plan_brief(plan, self.orch.twin)})
 
         if not self._approval_ready.wait(timeout=self.APPROVAL_TIMEOUT_SEC):
             logger.warning("核准逾時（%.0fs），視為拒絕", self.APPROVAL_TIMEOUT_SEC)
@@ -295,7 +346,8 @@ class DemoSession:
         await self.out.put({
             "kind": "started",
             "scenario": {"id": scenario.id, "name": scenario.name,
-                         "narrative": scenario.narrative},
+                         "narrative": scenario.narrative,
+                         "duration_hours": scenario.duration_hours},
             "llm_mode": self.orch.llm.mode,
             "faults": [
                 {

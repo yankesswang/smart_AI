@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import networkx as nx
 
 from ..domain import (
+    Action,
     Fault,
     Link,
     LinkState,
@@ -29,6 +30,16 @@ from .topology import build_links, build_nodes, build_services
 
 # 一個月的秒數 ÷ 8 bits ÷ 1000 → Mbps 換算成 GB/月
 _MBPS_TO_GB_PER_MONTH = 2_592_000 / 8 / 1000  # = 324.0
+
+# 對外線路的白話名稱（給人看的介面用，稽核軌跡仍存 LinkKind 原值）
+WAN_LABEL = {"fiber": "固網", "5g": "5G", "satellite": "衛星"}
+
+# 鏈路的白話名稱。送進 LLM 的事實清單若只給 `w-fiber` 這種代號，
+# 模型就會照抄進敘述裡，畫面上最顯眼的那段文字反而變成最難懂的部分。
+_LINK_LABEL = {
+    "lan": "院內線路", "fiber": "固網主線", "5g": "5G 線路",
+    "satellite": "衛星線路", "backbone": "電信骨幹",
+}
 
 
 @dataclass
@@ -51,6 +62,10 @@ class DigitalTwin:
         self.services = {s.id: s for s in (services or build_services())}
         self.routing = RoutingTable()
         self.tick = 0
+        # 災害需求倍率與已耗用的配額：兩者都是「情境狀態」而非拓樸定義
+        self.demand: dict[str, float] = {}
+        self.quota_used_gb: dict[str, float] = {}
+        self.event_hours: float = 12.0
         self._graph = self._build_graph()
         self.reset_routing()
 
@@ -99,10 +114,16 @@ class DigitalTwin:
     def reset_routing(self) -> None:
         """預設：每個業務走最低延遲的可用路徑，並允入其完整所需頻寬。"""
         self.routing = RoutingTable()
-        for sid, svc in self.services.items():
+        for sid in self.services:
             paths = self.candidate_paths(sid)
             self.routing.paths[sid] = paths[0] if paths else []
-            self.routing.admitted[sid] = svc.slo.required_bandwidth_mbps
+            self.routing.admitted[sid] = self.required_mbps(sid)
+
+    def apply_scenario(self, scenario) -> None:
+        """注入災害：線路故障 ＋ 需求變動 ＋ 事件持續時間。"""
+        self.demand = dict(scenario.demand)
+        self.event_hours = scenario.duration_hours
+        self.apply_faults(scenario.faults)
 
     def apply_faults(self, faults: list[Fault]) -> None:
         for f in faults:
@@ -120,25 +141,104 @@ class DigitalTwin:
             link.netem_extra_latency_ms = 0.0
             link.netem_extra_loss_pct = 0.0
             link.netem_capacity_factor = 1.0
+        self.demand = {}
+        self.quota_used_gb = {}
+
+    # --------------------------------------------------- 需求／配額／共同風險
+
+    def required_mbps(self, service_id: str) -> float:
+        """含災害需求倍率的完整需求頻寬。
+
+        災害不只打斷線路，也改變需求：避難收容湧入會讓訪客 Wi-Fi 需求暴增，
+        大量傷患會讓生命徵象串流變多。倍率存在孿生上而不是改 Service 物件，
+        因為 clone() 共用 Service 定義，就地修改會污染線上狀態。
+        """
+        return self.services[service_id].slo.required_bandwidth_mbps * self.demand.get(service_id, 1.0)
+
+    def min_mbps(self, service_id: str) -> float:
+        return self.services[service_id].slo.min_bandwidth_mbps * self.demand.get(service_id, 1.0)
+
+    def quota_hours_left(self, load: dict[str, float] | None = None) -> dict[str, float]:
+        """有配額的線路照目前流量還能撐幾小時。
+
+        這是把「耗竭性資源」變成可判斷數字的關鍵一步：光看「衛星 75% 使用率」
+        看不出問題，換算成「3.1 小時後配額歸零，但災害還要 12 小時」才看得出來。
+        """
+        load = self._link_load() if load is None else load
+        out: dict[str, float] = {}
+        for lid, link in self.links.items():
+            if link.quota_gb is None:
+                continue
+            used = max(load.get(lid, 0.0), 0.0)
+            remaining = max(link.quota_gb - self.quota_used_gb.get(lid, 0.0), 0.0)
+            # Mbps → GB/小時：×3600 秒 ÷ 8 bits ÷ 1000
+            gb_per_hour = used * 3600 / 8 / 1000
+            out[lid] = float("inf") if gb_per_hour <= 1e-9 else remaining / gb_per_hour
+        return out
+
+    def shared_duct_risk(self, path_a: list[str], path_b: list[str]) -> set[str]:
+        """兩條路徑共用的管道。非空 = 帳面上的備援其實會一起斷。"""
+        ducts = lambda p: {l.duct for l in self.path_links(p) if l.duct}
+        return ducts(path_a) & ducts(path_b)
+
+    def link_label(self, link_id: str) -> str:
+        """鏈路的白話名稱，例如 `w-fiber` → 「固網主線」。
+
+        同類型鏈路不只一條時（院內四條 LAN），補上目的節點以免混淆。
+        """
+        link = self.links.get(link_id)
+        if link is None:
+            return link_id
+        base = _LINK_LABEL.get(link.kind.value, link.kind.value)
+        same_kind = [l for l in self.links.values() if l.kind is link.kind]
+        if len(same_kind) > 1:
+            return f"{base}（{self.nodes[link.dst].name}）"
+        return base
+
+    def describe_action(self, action: Action) -> str:
+        """給人看的動作說明：用業務名稱與線路種類，不用內部代號。
+
+        `Action.describe()` 輸出的是 `將 svc-ed-vitals 改走 ward-ed → core-sw → …`，
+        對維運工程師精確，但對非技術讀者等於天書。這裡改用「急診生命徵象即時串流
+        改走 5G」這種講法 —— 原始 ID 與完整路徑仍完整保留在 `RecoveryPlan.to_dict()`
+        寫進稽核軌跡的 `target` / `params` 裡，可讀性不會犧牲掉精確性。
+        """
+        svc = self.services.get(action.target)
+        name = svc.name if svc else action.target
+        mbps = f"{float(action.params.get('mbps', 0.0)):g}"
+
+        if action.type == "reroute":
+            wan = WAN_LABEL.get(action.params.get("wan", ""), "其他線路")
+            # 中英文之間補空格是繁中排版慣例：「改走 5G」對、「改走固網」也對
+            return f"「{name}」改走{' ' if wan[:1].isascii() else ''}{wan}"
+        if action.type == "throttle":
+            was = f"{float(action.params.get('was_mbps', 0.0)):g}"
+            return f"「{name}」限速至 {mbps} Mbps（原 {was} Mbps）"
+        if action.type == "admit":
+            return f"「{name}」保障頻寬 {mbps} Mbps"
+        if action.type == "activate_link":
+            link = self.links.get(action.target)
+            return f"啟用備援線路：{WAN_LABEL.get(link.kind.value, action.target) if link else action.target}"
+        return action.describe()
 
     def apply_plan(self, plan: RecoveryPlan) -> list[str]:
-        """把計畫套用到控制面，回傳實際生效的動作描述（供稽核）。"""
+        """把計畫套用到控制面，回傳實際生效的動作描述（供稽核與畫面）。"""
         applied: list[str] = []
         for action in plan.actions:
             if action.type == "reroute":
                 path = action.params.get("path") or []
                 if path and self.path_links(path):
                     self.routing.paths[action.target] = list(path)
-                    applied.append(action.describe())
+                    applied.append(self.describe_action(action))
             elif action.type in {"throttle", "admit"}:
                 mbps = float(action.params.get("mbps", 0.0))
                 self.routing.admitted[action.target] = mbps
-                applied.append(action.describe())
+                applied.append(self.describe_action(action))
             elif action.type == "activate_link":
                 link = self.links.get(action.target)
                 if link and link.state is LinkState.DOWN:
                     link.state = LinkState.UP
-                    applied.append(action.describe())
+                    applied.append(self.describe_action(action))
         return applied
 
     def clone(self) -> "DigitalTwin":
@@ -149,6 +249,11 @@ class DigitalTwin:
         twin.services = self.services                # 業務定義不可變，可共用
         twin.routing = copy.deepcopy(self.routing)
         twin.tick = self.tick
+        # 需求倍率與已耗用配額屬於情境狀態，影子孿生必須帶著走，
+        # 否則推演會以為配額還是滿的、需求還是平常水準。
+        twin.demand = dict(self.demand)
+        twin.quota_used_gb = dict(self.quota_used_gb)
+        twin.event_hours = self.event_hours
         twin._graph = self._graph                    # 拓樸不變，可共用
         return twin
 
@@ -240,6 +345,7 @@ class DigitalTwin:
             weighted_availability_pct=weighted_avail,
             slo_compliance_pct=compliance,
             monthly_cost_ntd=cost,
+            quota_hours_left=self.quota_hours_left(load),
         )
 
     def _evaluate_service(
@@ -267,8 +373,9 @@ class DigitalTwin:
         state.loss_pct = (1.0 - survive) * 100.0
 
         v: list[str] = []
-        if admitted < svc.slo.min_bandwidth_mbps:
-            v.append(f"頻寬 {admitted:.0f} < 最低需求 {svc.slo.min_bandwidth_mbps:.0f} Mbps")
+        need = self.min_mbps(svc.id)
+        if admitted < need:
+            v.append(f"頻寬 {admitted:.0f} < 最低需求 {need:.0f} Mbps")
         if latency > svc.slo.max_latency_ms:
             v.append(f"延遲 {latency:.0f}ms > SLO {svc.slo.max_latency_ms:.0f}ms")
         if state.loss_pct > svc.slo.max_loss_pct:

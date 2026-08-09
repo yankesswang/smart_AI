@@ -139,7 +139,7 @@ class Orchestrator:
         emit("baseline", baseline)
 
         # ---- 注入故障（等同真實環境的 tc/netem 與斷纜）
-        self.twin.apply_faults(scenario.faults)
+        self.twin.apply_scenario(scenario)
         self.twin.tick += 1
         incident = self.twin.evaluate("incident")
         self.audit.record("fault_injection", "Scenario", {

@@ -8,35 +8,55 @@ version: 1
 
 rules:
   - id: POL-001
-    name: 關鍵業務不得因復原動作而更差
+    name: 救命服務不得因為調整而變得更差
     kind: critical_regression
     effect: deny
     weight: 40
     description: 復原計畫若讓生命關鍵業務的可用率低於事故當下，一律禁止執行。
 
   - id: POL-002
-    name: 禁止優先級反轉
+    name: 不得讓次要服務排擠重要服務
     kind: priority_inversion
     effect: deny
     weight: 30
     description: 不得在較高優先級業務仍為零頻寬時，配置頻寬給較低優先級業務。
 
   - id: POL-003
-    name: 生命關鍵業務不得低於臨床最低頻寬
+    name: 救命服務不得低於臨床最低速度
     kind: critical_floor
     effect: deny
     weight: 35
     description: P0 業務可達路徑存在時，配置頻寬不得低於其臨床最低需求。
 
+  - id: POL-004
+    name: 救命服務不得全部集中在同一條實體管道
+    kind: duct_spof
+    effect: require_approval
+    weight: 22
+    description: >
+      帳面上分散在不同線路，實際上若都穿過同一條市政管道，該管道受損時會同時中斷。
+      共同風險群組（SRLG）是人工判斷最容易漏掉的一層。
+
+  - id: POL-013
+    name: 衛星流量配額須撐過整場事件
+    kind: quota_exhaustion
+    effect: require_approval
+    weight: 20
+    params:
+      margin: 1.0
+    description: >
+      衛星天線的瞬時容量與整場事件的流量配額是兩回事。配額提前燒完，
+      等於把後半場的救命服務賣掉換前半場的舒適。
+
   - id: POL-010
-    name: 衛星鏈路啟用須人工核准
+    name: 動用衛星連線須主管核准
     kind: satellite_activation
     effect: require_approval
     weight: 15
     description: 海地星空衛星頻寬成本為固網的 50 倍以上，切換須由 NOC 值班主管確認。
 
   - id: POL-011
-    name: 月成本上限
+    name: 每月費用上限
     kind: cost_ceiling
     effect: require_approval
     weight: 12
@@ -45,7 +65,7 @@ rules:
     description: 推演後月度通訊成本超過門檻時，須經人工核准。
 
   - id: POL-012
-    name: 成本增幅倍數上限
+    name: 費用增幅上限
     kind: cost_multiplier
     effect: require_approval
     weight: 10
@@ -54,7 +74,7 @@ rules:
     description: 相較事故前成本增加超過指定倍數時，須經人工核准。
 
   - id: POL-020
-    name: 變更爆炸半徑上限
+    name: 一次變更的項目數上限
     kind: blast_radius
     effect: require_approval
     weight: 8
@@ -63,7 +83,7 @@ rules:
     description: 單一計畫變更動作過多時風險升高，須人工確認後再執行。
 
   - id: POL-021
-    name: 停用業務須人工核准
+    name: 暫停醫療服務須主管核准
     kind: service_suspension
     effect: require_approval
     weight: 18

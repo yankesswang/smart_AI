@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from aegismesh.optimizer import generate_plans, score_plan
+from aegismesh.optimizer import _quota_cap_mbps, generate_plans, score_plan
 from aegismesh.twin import DigitalTwin, SCENARIOS
 
 
@@ -100,3 +100,70 @@ def test_earthquake_forces_satellite_and_sheds_low_priority():
             kinds = {l.kind.value for l in twin.path_links(st.path or [])}
             assert "satellite" in kinds, "唯一生路是衛星"
     assert best.projected.services["svc-guest"].admitted_mbps == 0.0, "訪客 Wi-Fi 應被停用"
+
+
+# --------------------------------------------------- 難度模型：配額 / 需求 / 保底
+
+
+@pytest.mark.parametrize("scenario_id", sorted(SCENARIOS))
+def test_equal_priority_critical_services_all_get_a_floor(scenario_id):
+    """同優先級的關鍵業務不得有人吃飽、有人歸零。
+
+    早期的單階段貪婪會讓排序第一的 P0 把配額上限吃光，同為 P0 的第二個
+    服務拿到 0 —— 急診活著、加護病房斷線。兩階段允入（保底＋加碼）修掉它。
+    """
+    twin = DigitalTwin()
+    twin.apply_scenario(SCENARIOS[scenario_id])
+    for plan in generate_plans(twin):
+        crit = {
+            sid: st.admitted_mbps
+            for sid, st in plan.projected.services.items()
+            if twin.services[sid].is_critical and st.reachable
+        }
+        served = [v for v in crit.values() if v > 0]
+        starved = [sid for sid, v in crit.items() if v <= 0]
+        if served and starved:
+            # 有人被餓死時，其他人不得超過自己的最低需求（表示資源真的不夠，
+            # 而不是被先到先得吃光）
+            for sid, v in crit.items():
+                if v > 0:
+                    assert v <= twin.min_mbps(sid) + 1e-6, (
+                        f"{scenario_id}/{plan.strategy}：{sid} 拿到 {v:.1f} Mbps 超過保底，"
+                        f"但 {starved} 卻歸零"
+                    )
+
+
+def test_quota_cap_binds_before_link_capacity():
+    """嚴格配速的策略下，衛星流量不得超過「撐完整場事件」的速率。"""
+    twin = DigitalTwin()
+    twin.apply_scenario(SCENARIOS["earthquake-dual-loss"])
+    sustainable = _quota_cap_mbps(twin, "w-sat", 1.0)
+    link = twin.links["w-sat"]
+    assert sustainable < link.effective_capacity_mbps, "配額必須比天線容量更早成為瓶頸"
+
+    plan = next(p for p in generate_plans(twin) if p.strategy == "lowest_cost")
+    load = plan.projected.links["w-sat"].load_mbps
+    assert load <= sustainable + 1e-6, f"費用優先策略用了 {load:.1f} Mbps，超過可持續的 {sustainable:.1f}"
+    assert plan.projected.quota_hours_left["w-sat"] >= twin.event_hours - 1e-6
+
+
+def test_demand_surge_scales_requirements():
+    """災害不只打斷線路，也改變需求。"""
+    twin = DigitalTwin()
+    base = twin.required_mbps("svc-guest")
+    twin.apply_scenario(SCENARIOS["typhoon-fiber-cut"])
+    assert twin.required_mbps("svc-guest") == pytest.approx(base * 2.5)
+    assert twin.min_mbps("svc-guest") == pytest.approx(
+        twin.services["svc-guest"].slo.min_bandwidth_mbps * 2.5
+    )
+    twin.clear_faults()
+    assert twin.required_mbps("svc-guest") == pytest.approx(base), "清除故障後需求要回到平常水準"
+
+
+def test_shared_duct_is_visible_in_the_model():
+    """院區對外光纖與 5G 回程共用市政管道 —— 帳面上的備援其實會一起斷。"""
+    twin = DigitalTwin()
+    fiber_path = ["cpe-fiber", "pop-fiber"]
+    backhaul_path = ["gnb-5g", "dc-hicloud"]
+    assert twin.shared_duct_risk(fiber_path, backhaul_path) == {"duct-civic-north"}
+    assert twin.shared_duct_risk(fiber_path, ["sat-vsat", "gw-sat"]) == set()

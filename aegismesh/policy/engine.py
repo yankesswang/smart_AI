@@ -34,7 +34,7 @@ class Finding:
     message: str
 
     def render(self) -> str:
-        tag = "拒絕" if self.effect == DENY else "需核准"
+        tag = "不准執行" if self.effect == DENY else "需主管核准"
         return f"[{self.rule_id}｜{tag}] {self.rule_name}：{self.message}"
 
 
@@ -72,7 +72,7 @@ class PolicyEngine:
         if kind == "critical_regression":
             if after.critical_availability_pct < before.critical_availability_pct - 1e-6:
                 return (
-                    f"關鍵業務可用率由 {before.critical_availability_pct:.0f}% "
+                    f"救命服務正常率由 {before.critical_availability_pct:.0f}% "
                     f"降至 {after.critical_availability_pct:.0f}%"
                 )
             return None
@@ -90,7 +90,7 @@ class PolicyEngine:
                 ]
                 if worse:
                     names = "、".join(twin.services[w].name for w in worse)
-                    return f"{twin.services[d].name}（P{d_pri}）零頻寬，但較低優先級的 {names} 仍有配置"
+                    return f"「{twin.services[d].name}」（重要度 P{d_pri}）完全分不到頻寬，比它次要的 {names} 卻還有"
             return None
 
         if kind == "critical_floor":
@@ -98,7 +98,7 @@ class PolicyEngine:
                 svc = twin.services[sid]
                 if svc.priority == 0 and st.reachable and st.admitted_mbps < svc.slo.min_bandwidth_mbps:
                     return (
-                        f"{svc.name} 配置 {st.admitted_mbps:.0f} Mbps，"
+                        f"「{svc.name}」只分到 {st.admitted_mbps:.0f} Mbps，"
                         f"低於臨床最低需求 {svc.slo.min_bandwidth_mbps:.0f} Mbps"
                     )
             return None
@@ -110,26 +110,62 @@ class PolicyEngine:
                 if st.admitted_mbps > 0 and sat_links.intersection(st.link_ids)
             ]
             if using:
-                return f"下列業務將改由衛星鏈路承載：{'、'.join(using)}"
+                return f"下列醫療服務將改走衛星連線（每 GB 費用約為固網的 50 倍）：{'、'.join(using)}"
+            return None
+
+        if kind == "quota_exhaustion":
+            # 容量夠不代表用得起。把「還能撐幾小時」拿去跟事件長度比，
+            # 才看得出這個方案是不是在借未來的頻寬救現在。
+            margin = float(params.get("margin", 1.0))
+            for lid, hours in after.quota_hours_left.items():
+                if hours == float("inf"):
+                    continue
+                if hours < twin.event_hours * margin:
+                    return (
+                        f"{twin.link_label(lid)}的流量配額只夠再撐 {hours:.1f} 小時，"
+                        f"但這場事件預估要 {twin.event_hours:.0f} 小時"
+                    )
+            return None
+
+        if kind == "duct_spof":
+            # 帳面上分散在三條路，實際上若都穿過同一條市政管道，
+            # 一鏟子下去全部一起斷。人工檢查幾乎不可能記住這層對應。
+            crit = [
+                sid for sid, st in after.services.items()
+                if twin.services[sid].is_critical and st.reachable and st.admitted_mbps > 0
+            ]
+            if len(crit) < 2:
+                return None
+            duct_sets = [
+                {twin.links[lid].duct for lid in after.services[sid].link_ids if twin.links[lid].duct}
+                for sid in crit
+            ]
+            common = set.intersection(*duct_sets) if all(duct_sets) else set()
+            if common:
+                names = "、".join(twin.services[s].name for s in crit)
+                return (
+                    f"{names} 全部經過同一條實體管道（{'、'.join(sorted(common))}），"
+                    f"該管道一旦受損會同時中斷"
+                )
             return None
 
         if kind == "cost_ceiling":
             ceiling = float(params.get("monthly_ntd", 0))
             if after.monthly_cost_ntd > ceiling:
-                return f"推演月成本 NT${after.monthly_cost_ntd:,.0f} 超過上限 NT${ceiling:,.0f}"
+                return f"模擬後每月費用 NT${after.monthly_cost_ntd:,.0f}，超過上限 NT${ceiling:,.0f}"
             return None
 
         if kind == "cost_multiplier":
             factor = float(params.get("factor", 3.0))
             if before.monthly_cost_ntd > 0 and after.monthly_cost_ntd > before.monthly_cost_ntd * factor:
                 ratio = after.monthly_cost_ntd / before.monthly_cost_ntd
-                return f"成本增為事故前的 {ratio:.1f} 倍（上限 {factor:.1f} 倍）"
+                return f"費用變成災害前的 {ratio:.1f} 倍（規定上限 {factor:.1f} 倍）"
             return None
 
         if kind == "blast_radius":
             cap = int(params.get("max_actions", 6))
             if len(plan.actions) > cap:
-                return f"計畫含 {len(plan.actions)} 個變更動作，超過上限 {cap}"
+                return f"這個方案要動到 {len(plan.actions)} 個地方，超過一次最多 {cap} 個的規定"
             return None
 
         if kind == "service_suspension":
@@ -139,7 +175,7 @@ class PolicyEngine:
                 if st.admitted_mbps <= 0.0 and twin.services[sid].priority <= max_pri
             ]
             if suspended:
-                return f"將停用：{'、'.join(suspended)}"
+                return f"將完全暫停下列服務：{'、'.join(suspended)}"
             return None
 
         raise ValueError(f"policies.yaml 使用了未實作的規則種類：{kind}")
@@ -156,7 +192,7 @@ class PolicyEngine:
         if after is None:
             return PolicyDecision(
                 DENY,
-                [Finding("POL-000", "計畫未經推演", DENY, 100, "缺少孿生推演結果，禁止執行")],
+                [Finding("POL-000", "方案未經模擬驗證", DENY, 100, "沒有電腦模擬結果，一律禁止執行")],
                 100.0,
             )
 
@@ -186,5 +222,9 @@ class PolicyEngine:
         result = self.evaluate(twin, plan, before, plan.projected)
         plan.policy_decision = result.decision
         plan.policy_findings = result.messages
+        plan.policy_findings_detail = [
+            {"rule_id": f.rule_id, "rule_name": f.rule_name, "effect": f.effect, "message": f.message}
+            for f in result.findings
+        ]
         plan.risk_score = result.risk_score
         return result

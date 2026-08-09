@@ -11,20 +11,21 @@ from typing import Any
 
 from ..domain import NetworkSnapshot, RecoveryPlan
 from ..llm import compact_json
+from ..optimizer import STRATEGY_LABELS
 from ..policy.engine import ALLOW, DENY, PolicyEngine
 from ..twin.engine import DigitalTwin
-from .base import Agent, AgentResult
+from .base import PLAIN_LANGUAGE, Agent, AgentResult
 
 
 class PolicyAgent(Agent):
     name = "Policy Agent"
     stage = "govern"
     system_prompt = (
-        "你是電信維運的變更管理與法遵稽核人員。"
-        "政策引擎已對復原計畫做出裁決（allow / require_approval / deny），"
-        "這個裁決是最終結果，你不能更改。"
-        "請用繁體中文寫 1-2 句話向值班主管說明：為什麼是這個裁決、"
-        "以及核准前應該確認什麼。"
+        "你負責向值班主管說明這次網路變更的審查結果。"
+        "規則引擎已對方案做出判定（可直接執行 / 需主管核准 / 不准執行），"
+        "這個判定是最終結果，你不能更改，也不可以把「不准執行」講成可以執行。"
+        "請用繁體中文寫 1-2 句話說明：為什麼是這個結果、以及主管按下核准前該確認什麼。"
+        + PLAIN_LANGUAGE +
         '輸出 JSON：{"briefing": "1-2 句核准說明"}'
     )
 
@@ -48,6 +49,7 @@ class PolicyAgent(Agent):
             "evaluations": [
                 {
                     "plan_id": p.id,
+                    "strategy_label": STRATEGY_LABELS.get(p.strategy, p.strategy),
                     "decision": p.policy_decision,
                     "risk_score": round(p.risk_score, 1),
                     "findings": p.policy_findings,
@@ -60,20 +62,21 @@ class PolicyAgent(Agent):
 
         def fallback() -> dict[str, Any]:
             if selected is None:
-                return {"briefing": "所有候選計畫皆違反治理政策，已全數擋下，須人工介入處理。"}
+                return {"briefing": "三個方案都違反了管理規則，已全數擋下，必須由人工介入處理。"}
+            picked = STRATEGY_LABELS.get(selected.strategy, selected.strategy)
             if selected.policy_decision == ALLOW:
-                return {"briefing": f"計畫 {selected.id} 未觸發任何治理規則，可自動執行。"}
-            reasons = "；".join(selected.policy_findings) or "觸發需核准規則"
+                return {"briefing": f"「{picked}」方案沒有踩到任何管理規則，可以直接執行。"}
+            reasons = "；".join(selected.policy_findings) or "觸發了需要核准的規則"
             return {
                 "briefing": (
-                    f"計畫 {selected.id} 風險評分 {selected.risk_score:.0f}，"
-                    f"須人工核准：{reasons}"
+                    f"「{picked}」方案風險評分 {selected.risk_score:.0f} 分，"
+                    f"依規定須由值班主管核准：{reasons}"
                 )
             }
 
         out = self._ask(
-            f"政策裁決結果：{compact_json(facts['evaluations'])}\n"
-            f"選定計畫：{selected.id if selected else '無'}",
+            f"審查結果（請用 strategy_label 稱呼方案）：{compact_json(facts['evaluations'])}\n"
+            f"選定方案：{STRATEGY_LABELS.get(selected.strategy, '無') if selected else '無'}",
             fallback,
         )
 

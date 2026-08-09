@@ -12,7 +12,7 @@ from typing import Any
 from ..domain import NetworkSnapshot, RecoveryPlan
 from ..llm import compact_json
 from ..twin.engine import DigitalTwin
-from .base import Agent, AgentResult
+from .base import PLAIN_LANGUAGE, Agent, AgentResult
 
 _LATENCY_TOLERANCE_MS = 5.0     # 預測與實測的可接受落差
 _AVAILABILITY_TOLERANCE_PCT = 0.1
@@ -22,9 +22,11 @@ class VerificationAgent(Agent):
     name = "Verification Agent"
     stage = "verify"
     system_prompt = (
-        "你是網路變更後的驗收工程師。你會收到變更前、預測、與變更後的三組實測指標。"
-        "請用繁體中文寫 2-3 句話說明：關鍵業務是否恢復、量化改善幅度為何、"
-        "以及孿生推演的預測是否準確。只能引用給定數據。"
+        "你負責在網路調整完成後驗收成效並向院方報告。"
+        "你會收到災害前、電腦模擬預測、以及實際調整後的三組量測數字。"
+        "請用繁體中文寫 2-3 句話說明：救命服務是否恢復、改善了多少（要講具體數字）、"
+        "以及事前的電腦模擬預測得準不準。只能引用給定數據。"
+        + PLAIN_LANGUAGE +
         '輸出 JSON：{"verdict": "2-3 句驗收結論"}'
     )
 
@@ -85,15 +87,15 @@ class VerificationAgent(Agent):
         }
 
         def fallback() -> dict[str, Any]:
-            status = "已完全恢復" if crit_recovered else f"仍有 {len(still_failing)} 項未恢復"
-            acc = "與推演預測一致" if not drift else f"有 {len(drift)} 項與預測不符"
+            status = "已全部恢復" if crit_recovered else f"仍有 {len(still_failing)} 項沒有恢復"
+            acc = "與事前的電腦模擬完全一致" if not drift else f"有 {len(drift)} 項與模擬預測不符"
             return {
                 "verdict": (
-                    f"生命關鍵業務{status}：可用率自事故當下的 "
-                    f"{incident.critical_availability_pct:.0f}% 回升至 "
+                    f"救命服務{status}：正常率自災害當下的 "
+                    f"{incident.critical_availability_pct:.0f}% 回升到 "
                     f"{actual.critical_availability_pct:.0f}%，"
-                    f"整體 SLA 達成率 {incident.slo_compliance_pct:.0f}% → "
-                    f"{actual.slo_compliance_pct:.0f}%。實測結果{acc}。"
+                    f"整體服務達標率 {incident.slo_compliance_pct:.0f}% → "
+                    f"{actual.slo_compliance_pct:.0f}%。實際量測結果{acc}。"
                 )
             }
 

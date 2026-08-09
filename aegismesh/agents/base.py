@@ -15,6 +15,20 @@ from typing import Any
 
 from ..llm import LLMClient
 
+# 五個 Agent 共用的用字規範。
+#
+# 敘述是戰情室畫面上字最多、最多人讀的區塊，而 facts 裡塞的是 w-fiber、
+# svc-ed-vitals 這種內部代號 —— 不明講的話模型會直接照抄，最顯眼的地方
+# 反而變成最看不懂的地方。規範集中在這裡，五個 Agent 才不會各自走調。
+PLAIN_LANGUAGE = (
+    "讀者是不具電信背景的醫院管理者與競賽評審。請全程使用一般人看得懂的繁體中文："
+    "不可出現 w-fiber、svc-ed-vitals 這類內部代號（改用它們的中文名稱）；"
+    "不要使用 SLA、SLO、CPE、VSAT、gNB、QoS、Mbps 以外的英文縮寫，"
+    "必要時改說「服務品質標準」「對外設備」「衛星天線」「基地台」。"
+    "「關鍵業務」請一律說成「救命服務」或「生命關鍵醫療服務」，"
+    "「可用率」說成「正常率」，「延遲」說成「反應時間」。"
+)
+
 
 @dataclass
 class AgentResult:

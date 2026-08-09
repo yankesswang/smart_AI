@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from functools import partial
 from pathlib import Path
 
 from rich.console import Console
@@ -19,6 +20,7 @@ from rich.table import Table
 
 from .audit import AuditLog
 from .domain import RecoveryPlan
+from .optimizer import STRATEGY_LABELS
 from .orchestrator import Orchestrator, auto_approve
 from .twin.engine import DigitalTwin
 from .twin.scenarios import SCENARIOS, get_scenario
@@ -90,7 +92,7 @@ def _plan_table(plans: list[RecoveryPlan], selected_id: str | None) -> Table:
         pr = p.projected
         style = _DECISION_STYLE.get(p.policy_decision, "white")
         chosen = p.id == selected_id
-        label = ("▶ " if chosen else "  ") + p.strategy
+        label = ("▶ " if chosen else "  ") + STRATEGY_LABELS.get(p.strategy, p.strategy)
         t.add_row(
             f"[bold]{label}[/bold]" if chosen else label,
             str(len(p.actions)),
@@ -104,14 +106,14 @@ def _plan_table(plans: list[RecoveryPlan], selected_id: str | None) -> Table:
     return t
 
 
-def _interactive_approval(plan: RecoveryPlan) -> bool:
+def _interactive_approval(twin: DigitalTwin, plan: RecoveryPlan) -> bool:
     console.print()
     console.print(Panel(
         "\n".join(
             [f"[bold]計畫[/bold] {plan.id}　[bold]風險評分[/bold] {plan.risk_score:.0f}/100", ""]
             + [f"  • {f}" for f in plan.policy_findings]
             + ["", "[bold]將執行的動作：[/bold]"]
-            + [f"  {i}. {a.describe()}" for i, a in enumerate(plan.actions, 1)]
+            + [f"  {i}. {twin.describe_action(a)}" for i, a in enumerate(plan.actions, 1)]
         ),
         title="[yellow]⚠ 需要人工核准[/yellow]",
         border_style="yellow",
@@ -186,7 +188,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
         elif kind == "replan":
             console.print(f"[yellow]↻ 驗證未通過，啟動第 {payload['round'] + 1} 輪重規劃[/yellow]")
 
-    approval = auto_approve if args.auto_approve else _interactive_approval
+    approval = auto_approve if args.auto_approve else partial(_interactive_approval, orch_twin)
     result = orch.run(scenario, approval_fn=approval, max_rounds=args.max_rounds, on_stage=on_stage)
 
     console.print()
