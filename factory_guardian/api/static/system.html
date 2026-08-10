@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Factory Guardian AI 的問題定義、Agent 分工、決策閉環與安全治理機制。">
+<title>AGENT SYSTEM / FACTORY GUARDIAN AI</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/static/agent-system.webp" as="image" type="image/webp">
+<link rel="stylesheet" href="/static/hmi.css">
+<style>
+:root{--page-max:1440px}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg)}
+.system-page{min-height:100dvh;background:var(--line);display:grid;gap:1px}
+.top{position:sticky;top:0;z-index:4;max-width:100vw}
+.top .brand{flex:0 0 auto}
+.top .fill{min-width:12px}
+
+/* Hero：左側把價值主張講完，右側是真實工廠情境，不做假 Dashboard。 */
+.hero{background:var(--panel);display:grid;grid-template-columns:minmax(360px,.86fr) minmax(520px,1.5fr);min-height:calc(100dvh - 58px);max-height:900px;overflow:hidden}
+.hero-copy{padding:clamp(36px,6vw,86px) clamp(24px,5vw,72px);display:flex;flex-direction:column;justify-content:space-between;gap:40px}
+.hero-kicker{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--red);font-weight:800}
+.hero h2{font-family:var(--cjk);font-size:clamp(2.35rem,4.6vw,5.4rem);line-height:1.02;letter-spacing:-.055em;max-width:10ch;margin-top:16px}
+.hero-lead{font-family:var(--cjk);font-size:clamp(.95rem,1.25vw,1.15rem);line-height:1.75;color:var(--fg-2);max-width:34ch;margin-top:24px}
+.hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+.hero-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:43px;padding:9px 16px;border:1px solid var(--line-hi);font-size:var(--t-meta);letter-spacing:.08em;text-transform:uppercase;font-weight:700;white-space:nowrap;transition:background .18s ease,color .18s ease,border-color .18s ease,transform .12s ease}
+.hero-actions a.primary{background:var(--red);border-color:var(--red);color:#080808}
+.hero-actions a:hover{background:var(--fg);border-color:var(--fg);color:#080808}
+.hero-actions a:active{transform:translateY(1px)}
+.hero-visual{position:relative;min-width:0;background:#0d0d0d}
+.hero-visual img{width:100%;height:100%;object-fit:cover;object-position:center;display:block;filter:saturate(.9) contrast(1.06)}
+.hero-visual::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(16,16,16,.62),transparent 32%);pointer-events:none}
+.visual-caption{position:absolute;left:20px;bottom:18px;z-index:1;background:rgba(10,10,10,.88);border-left:3px solid var(--red);padding:10px 13px;max-width:300px;font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--fg-2)}
+
+.section{background:var(--panel);padding:clamp(54px,8vw,112px) clamp(20px,5vw,72px)}
+.section-inner{max-width:var(--page-max);margin:0 auto}
+.section h2{font-family:var(--cjk);font-size:clamp(1.9rem,4vw,4.4rem);line-height:1.08;letter-spacing:-.045em;max-width:13ch}
+.section-intro{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.85;color:var(--fg-2);max-width:58ch;margin-top:20px}
+.micro-label{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--red);font-weight:800;margin-bottom:15px}
+
+/* 問題不是三張同型卡：一個主矛盾加兩個次要風險。 */
+.problem-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr);gap:1px;background:var(--line);margin-top:48px;border:1px solid var(--line)}
+.problem-main{background:var(--red);color:#080808;padding:clamp(28px,4vw,56px);min-height:370px;display:flex;flex-direction:column;justify-content:space-between}
+.problem-main .problem-no{font-size:var(--t-micro);letter-spacing:.1em;font-weight:800}
+.problem-main h3{font-family:var(--cjk);font-size:clamp(1.8rem,3.5vw,3.7rem);line-height:1.08;letter-spacing:-.04em;max-width:12ch}
+.problem-main p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.75;max-width:48ch}
+.problem-stack{display:grid;grid-template-rows:1fr 1fr;gap:1px;background:var(--line)}
+.problem-side{background:var(--panel-2);padding:28px;display:flex;flex-direction:column;justify-content:space-between;gap:32px}
+.problem-side .problem-no{font-size:var(--t-micro);letter-spacing:.1em;color:var(--dimmer)}
+.problem-side h3{font-family:var(--cjk);font-size:1.35rem;line-height:1.3;max-width:15ch}
+.problem-side p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.75;color:var(--dim);max-width:40ch}
+
+/* 核心機制：中央是六個 Agent，兩側清楚標出共同世界與治理護欄。 */
+.mechanism{background:var(--panel-2)}
+.mechanism-map{display:grid;grid-template-columns:minmax(210px,.65fr) minmax(430px,1.4fr) minmax(210px,.65fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:52px}
+.rail{background:var(--panel);padding:24px;display:flex;flex-direction:column;gap:22px}
+.rail h3{font-size:var(--t-meta);letter-spacing:.09em;text-transform:uppercase;color:var(--red)}
+.rail-copy{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.8;color:var(--dim)}
+.rail-block{margin-top:auto;border-top:1px solid var(--line-hi);padding-top:18px}
+.rail-block b{display:block;font-size:var(--t-body);margin-bottom:8px}
+.rail-block span{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.7;color:var(--dim)}
+.agent-chain{background:var(--panel-3);padding:18px}
+.agent-node{display:grid;grid-template-columns:50px minmax(145px,.75fr) minmax(0,1.35fr);gap:16px;align-items:center;padding:18px 16px;background:var(--panel-2);border-left:3px solid var(--line-hi)}
+.agent-node + .agent-node{margin-top:1px}
+.agent-node .agent-index{font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.1em}
+.agent-node h3{font-family:var(--cjk);font-size:1rem;line-height:1.35}
+.agent-node h3 span{display:block;font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.08em;color:var(--red);text-transform:uppercase;margin-bottom:4px}
+.agent-node p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim)}
+.agent-node strong{color:var(--fg);font-weight:700}
+.agent-node{position:relative}
+.agent-node:not(:last-child)::after{content:"↓";position:absolute;left:31px;bottom:-11px;z-index:1;background:var(--red);color:#080808;width:20px;height:20px;display:grid;place-items:center;font-weight:900}
+.agent-node.safety{border-left-color:var(--red);background:#211313}
+
+/* LLM 邊界：以對照欄位說清楚，避免把整套系統誤認成聊天機器人。 */
+.boundary{display:grid;grid-template-columns:minmax(300px,.7fr) minmax(520px,1.3fr);gap:clamp(40px,7vw,100px);align-items:start}
+.boundary-copy{position:sticky;top:108px}
+.boundary-table{display:grid;grid-template-columns:1fr 1fr;background:var(--line);gap:1px;border:1px solid var(--line)}
+.boundary-col{background:var(--panel-2);padding:28px}
+.boundary-col.rule{background:var(--red);color:#080808}
+.boundary-col h3{font-family:var(--cjk);font-size:1.45rem;margin-bottom:26px}
+.boundary-item{padding:17px 0;border-bottom:1px solid var(--line-hi)}
+.boundary-item:last-child{border-bottom:0}
+.boundary-item b{display:block;font-family:var(--cjk);font-size:var(--t-body);margin-bottom:6px}
+.boundary-item span{display:block;font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim)}
+.boundary-col.rule .boundary-item{border-color:rgba(0,0,0,.25)}
+.boundary-col.rule .boundary-item span{color:rgba(8,8,8,.78)}
+
+/* 具體案例採橫向時間軸，讓觀眾從異常一路讀到驗證。 */
+.case{background:var(--panel-2)}
+.case-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:end}
+.case-fact{font-size:var(--t-meta);letter-spacing:.07em;color:var(--dim);text-align:right;line-height:1.8}
+.case-flow{display:grid;grid-template-columns:repeat(6,minmax(190px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin-top:46px;overflow-x:auto;scroll-snap-type:x proximity}
+.case-step{background:var(--panel);padding:22px 18px;min-height:250px;display:flex;flex-direction:column;scroll-snap-align:start}
+.case-step .verb{font-family:var(--cjk);font-size:1rem;font-weight:700;padding-bottom:13px;border-bottom:3px solid var(--line-hi)}
+.case-step.alert .verb{border-color:var(--red)}
+.case-step .input{font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer);margin-top:22px}
+.case-step p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.7;color:var(--dim);margin-top:8px}
+.case-step .output{margin-top:auto;padding-top:20px;font-size:var(--t-body);line-height:1.55;color:var(--fg);font-weight:700}
+.case-step.alert .output{color:var(--red)}
+
+.guard-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:48px}
+.guard-main{background:var(--panel-2);padding:clamp(28px,5vw,64px)}
+.guard-main h3{font-family:var(--cjk);font-size:clamp(1.55rem,2.5vw,2.6rem);line-height:1.2;max-width:17ch}
+.guard-main p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.8;color:var(--fg-2);max-width:52ch;margin-top:20px}
+.verdicts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:36px}
+.verdict{background:var(--panel-3);padding:17px}
+.verdict b{display:block;font-size:var(--t-meta);letter-spacing:.08em;margin-bottom:8px}
+.verdict span{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--dim)}
+.verdict.block{background:var(--red);color:#080808}
+.verdict.block span{color:rgba(8,8,8,.78)}
+.guard-proof{background:var(--panel);padding:30px;display:flex;flex-direction:column;justify-content:space-between;gap:40px}
+.guard-proof h3{font-size:var(--t-meta);text-transform:uppercase;letter-spacing:.1em;color:var(--red)}
+.proof-list{display:grid;gap:22px}
+.proof-item b{display:block;font-family:var(--cjk);font-size:var(--t-body);margin-bottom:6px}
+.proof-item span{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.7;color:var(--dim)}
+
+.closing{background:var(--red);color:#080808;padding:clamp(48px,8vw,100px) clamp(20px,5vw,72px)}
+.closing-inner{max-width:var(--page-max);margin:0 auto;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:50px;align-items:end}
+.closing h2{font-family:var(--cjk);font-size:clamp(2rem,4.7vw,5rem);line-height:1.05;letter-spacing:-.05em;max-width:13ch}
+.closing-side p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.75;max-width:38ch}
+.closing-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.closing-actions a{display:inline-flex;align-items:center;min-height:43px;padding:9px 15px;border:1px solid #080808;color:#080808;font-size:var(--t-meta);letter-spacing:.08em;text-transform:uppercase;font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,transform .12s ease}
+.closing-actions a.primary{background:#080808;color:var(--fg)}
+.closing-actions a:hover{background:var(--fg);color:#080808}
+.closing-actions a:active{transform:translateY(1px)}
+
+@media(max-width:1020px){
+  .hero{grid-template-columns:1fr;max-height:none}
+  .hero-copy{min-height:520px}
+  .hero-visual{min-height:52vw}
+  .hero-visual::after{background:linear-gradient(180deg,rgba(16,16,16,.38),transparent 35%)}
+  .mechanism-map{grid-template-columns:1fr}
+  .rail{min-height:220px}
+  .boundary{grid-template-columns:1fr}
+  .boundary-copy{position:static}
+  .case-head{grid-template-columns:1fr}
+  .case-fact{text-align:left}
+}
+@media(max-width:720px){
+  html{scroll-behavior:auto}
+  .top{position:static}
+  .top .brand{width:100%;border-bottom:1px solid var(--line)}
+  .top .fill{display:none}
+  .hero{min-height:auto}
+  .hero-copy{min-height:500px;padding:42px 20px}
+  .hero h2{font-size:clamp(2.4rem,13vw,4rem)}
+  .hero-visual{min-height:62vw}
+  .visual-caption{position:static;border-left:0;border-top:3px solid var(--red);max-width:none}
+  .problem-grid,.guard-grid,.closing-inner{grid-template-columns:1fr}
+  .problem-main{min-height:340px}
+  .mechanism-map{margin-top:36px}
+  .agent-chain{padding:10px}
+  .agent-node{grid-template-columns:34px 1fr;gap:10px;padding:16px 12px}
+  .agent-node p{grid-column:2}
+  .agent-node:not(:last-child)::after{left:18px}
+  .boundary-table{grid-template-columns:1fr}
+  .verdicts{grid-template-columns:1fr}
+  .case-flow{grid-template-columns:repeat(6,82vw)}
+  .closing-side{max-width:none}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero-actions a,.closing-actions a{transition:none}}
+</style>
+</head>
+<body>
+<main class="system-page">
+  <header class="top">
+    <div class="brand"><h1 class="wordmark">FACTORY&nbsp;GUARDIAN<span class="reg">®</span></h1></div>
+    <div class="slot"><span class="k">Document</span><span class="v">AGENT SYSTEM</span></div>
+    <div class="fill"></div>
+    <div class="slot"><span class="k">Console</span><span class="v"><a href="/">WAR ROOM</a></span></div>
+    <div class="slot"><span class="k">Evidence</span><span class="v"><a href="/benchmark">BENCHMARK</a></span></div>
+    <div class="synth"><b>◆ SYNTHETIC DEMO DATA</b></div>
+  </header>
+
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-copy">
+      <div>
+        <div class="hero-kicker">Agentic factory operations</div>
+        <h2 id="heroTitle">AI 不只回答問題，它要安全地完成處置</h2>
+        <p class="hero-lead">把異常偵測、根因診斷、方案比較、安全治理與結果驗證，接成一條可稽核的決策閉環。</p>
+      </div>
+      <div class="hero-actions">
+        <a class="primary" href="#mechanism">看 Agent 機制</a>
+        <a href="/">執行互動 Demo</a>
+      </div>
+    </div>
+    <figure class="hero-visual">
+      <img src="/static/agent-system.webp" width="1600" height="901" alt="智慧工廠內的生產設備、感測節點與安全作業區" fetchpriority="high">
+      <figcaption class="visual-caption">同一個工廠狀態，同時由設備訊號、訂單、拓撲與影像觀測組成。</figcaption>
+    </figure>
+  </section>
+
+  <section class="section" aria-labelledby="problemTitle">
+    <div class="section-inner">
+      <div class="micro-label">The operating gap</div>
+      <h2 id="problemTitle">工廠缺的不是告警，是下一步</h2>
+      <p class="section-intro">傳統系統能告訴你哪裡亮紅燈，卻常把診斷、影響評估與安全責任留給不同人員手動拼接。</p>
+      <div class="problem-grid">
+        <article class="problem-main">
+          <span class="problem-no">核心矛盾</span>
+          <h3>每一分鐘都在損失，但錯誤動作可能造成更大風險</h3>
+          <p>現場需要快速處置，也必須知道原因、替代方案、訂單影響與工安限制。速度和治理不能二選一。</p>
+        </article>
+        <div class="problem-stack">
+          <article class="problem-side">
+            <span class="problem-no">資訊斷裂</span>
+            <h3>資料很多，決策仍靠人腦串接</h3>
+            <p>感測器、維修手冊、歷史案例、MES 訂單與攝影機彼此分散。</p>
+          </article>
+          <article class="problem-side">
+            <span class="problem-no">責任斷裂</span>
+            <h3>建議可以生成，後果卻沒人驗證</h3>
+            <p>沒有政策閘門、人工核准與事後量測，AI 建議就無法進入真實產線。</p>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section mechanism" id="mechanism" aria-labelledby="mechanismTitle">
+    <div class="section-inner">
+      <h2 id="mechanismTitle">六個 Agent，各自負責一個可驗證的決策</h2>
+      <p class="section-intro">Orchestrator 控制順序與重試。每個 Agent 只讀取需要的證據，輸出結構化結果，再交給下一個角色。</p>
+      <div class="mechanism-map">
+        <aside class="rail">
+          <h3>Shared world</h3>
+          <p class="rail-copy">Agent 看到的是同一份 Factory Snapshot，不會讀取模擬器內的故障真相。</p>
+          <div class="rail-block"><b>設備與環境</b><span>溫度、振動、電流、轉速、健康度、攝影機觀測</span></div>
+          <div class="rail-block"><b>營運與知識</b><span>訂單、產線拓撲、維修手冊、歷史案例與 SOP</span></div>
+        </aside>
+
+        <div class="agent-chain" aria-label="Agent 決策流程">
+          <article class="agent-node">
+            <span class="agent-index">MON</span>
+            <h3><span>Monitoring Agent</span>發現異常</h3>
+            <p>把多感測器門檻、趨勢與健康度轉成<strong>具證據的異常事件</strong>。</p>
+          </article>
+          <article class="agent-node">
+            <span class="agent-index">DIA</span>
+            <h3><span>Diagnosis Agent</span>判斷根因</h3>
+            <p>比對故障指紋、歷史先驗與文件證據，輸出<strong>候選根因與信心度</strong>。</p>
+          </article>
+          <article class="agent-node">
+            <span class="agent-index">PRO</span>
+            <h3><span>Production Agent</span>計算營運影響</h3>
+            <p>沿產線拓撲追出受影響訂單，量化<strong>產量缺口與交期風險</strong>。</p>
+          </article>
+          <article class="agent-node">
+            <span class="agent-index">PLN</span>
+            <h3><span>Optimizer</span>模擬並排名方案</h3>
+            <p>在診斷信念模型中乾跑方案，以安全、產出、交期、成本等固定準則<strong>計算排名</strong>。</p>
+          </article>
+          <article class="agent-node safety">
+            <span class="agent-index">SAF</span>
+            <h3><span>Safety Agent</span>執行政策裁決</h3>
+            <p>依現場影像、SOP 與動作風險輸出 <strong>ALLOW、APPROVAL 或 BLOCK</strong>。</p>
+          </article>
+          <article class="agent-node">
+            <span class="agent-index">VER</span>
+            <h3><span>Verification Agent</span>量測處置結果</h3>
+            <p>比較實際結果、方案預測與不處置基準，決定<strong>通過、重試或升級人工</strong>。</p>
+          </article>
+        </div>
+
+        <aside class="rail">
+          <h3>Governed loop</h3>
+          <p class="rail-copy">Orchestrator 不替 Agent 猜答案。它負責階段控制、信心度閘門、人工核准、失敗重試與完整稽核。</p>
+          <div class="rail-block"><b>證據不足</b><span>繼續觀察並重新診斷，不急著動設備。</span></div>
+          <div class="rail-block"><b>高風險動作</b><span>停機或控制狀態改變必須通過政策與人工核准。</span></div>
+          <div class="rail-block"><b>結果未達標</b><span>停止自動處置，重試替代方案或升級人工。</span></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="boundaryTitle">
+    <div class="section-inner boundary">
+      <div class="boundary-copy">
+        <div class="micro-label">Decision boundary</div>
+        <h2 id="boundaryTitle">LLM 負責解釋，不握方向盤</h2>
+        <p class="section-intro">所有會改變設備狀態的決定，都由可重現的數值方法、規則引擎與核准流程控制。</p>
+      </div>
+      <div class="boundary-table">
+        <article class="boundary-col">
+          <h3>LLM 可以做</h3>
+          <div class="boundary-item"><b>整理證據</b><span>把感測器、手冊與歷史案例轉成可讀敘述。</span></div>
+          <div class="boundary-item"><b>說明判斷</b><span>解釋根因候選、方案差異與風險原因。</span></div>
+          <div class="boundary-item"><b>協助溝通</b><span>產生交班摘要與決策脈絡，降低資訊落差。</span></div>
+        </article>
+        <article class="boundary-col rule">
+          <h3>規則與模型決定</h3>
+          <div class="boundary-item"><b>根因排名</b><span>故障指紋、歷史先驗與文件支持度加權計算。</span></div>
+          <div class="boundary-item"><b>方案排序</b><span>數位孿生乾跑與固定多準則分數決定。</span></div>
+          <div class="boundary-item"><b>安全裁決</b><span>Policy Engine 可直接阻擋方案，LLM 無權覆寫。</span></div>
+          <div class="boundary-item"><b>實際執行</b><span>只有通過政策、核准與驗證的動作才能完成閉環。</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section case" aria-labelledby="caseTitle">
+    <div class="section-inner">
+      <div class="case-head">
+        <div><h2 id="caseTitle">一次軸承劣化，系統怎麼處理</h2><p class="section-intro">以下是靜態流程示例。互動頁會用模擬器即時產生每一步結果。</p></div>
+        <p class="case-fact">輸入：設備訊號與訂單狀態<br>輸出：可執行、可核准、可驗證的處置</p>
+      </div>
+      <div class="case-flow">
+        <article class="case-step alert"><div class="verb">偵測振動趨勢</div><span class="input">Monitoring</span><p>振動持續偏離正常值，健康度下滑並跨過警告門檻。</p><div class="output">建立 WARNING 事件</div></article>
+        <article class="case-step"><div class="verb">累積足夠證據</div><span class="input">Diagnosis</span><p>若信心度不足 65%，先繼續觀察，不立刻改變設備狀態。</p><div class="output">軸承劣化成為首位候選</div></article>
+        <article class="case-step"><div class="verb">追出訂單影響</div><span class="input">Production</span><p>依機台、產線、產品與訂單關係計算延遲和產能缺口。</p><div class="output">量化不處置的代價</div></article>
+        <article class="case-step"><div class="verb">乾跑替代方案</div><span class="input">Optimizer</span><p>比較降載、停機維修與轉單等方案，不直接碰真實設備。</p><div class="output">選出分數最高的可行方案</div></article>
+        <article class="case-step alert"><div class="verb">通過安全閘門</div><span class="input">Safety</span><p>檢查危險區人員、PPE、SOP 與高風險設備動作。</p><div class="output">阻擋、核准或放行</div></article>
+        <article class="case-step"><div class="verb">執行後再量測</div><span class="input">Verification</span><p>用實際產量、延遲與設備健康度檢查是否符合方案預測。</p><div class="output">通過才算真正完成</div></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="safetyTitle">
+    <div class="section-inner">
+      <h2 id="safetyTitle">自主不代表無人負責</h2>
+      <p class="section-intro">系統把責任邊界寫進流程，讓每個動作都能回答：根據什麼、誰核准、做了什麼、結果如何。</p>
+      <div class="guard-grid">
+        <article class="guard-main">
+          <h3>政策閘門在執行之前，驗證閘門在執行之後</h3>
+          <p>安全 Agent 與 Policy Engine 可以阻擋任何不符合 SOP 的方案。高風險動作保留人工核准，執行後還要量測結果，失敗就停止自動流程。</p>
+          <div class="verdicts">
+            <div class="verdict"><b>ALLOW</b><span>低風險且符合所有安全規則，可以執行。</span></div>
+            <div class="verdict"><b>APPROVAL</b><span>高風險動作等待具名操作員核准。</span></div>
+            <div class="verdict block"><b>BLOCK</b><span>違反硬性規則，直接從候選方案移除。</span></div>
+          </div>
+        </article>
+        <aside class="guard-proof">
+          <h3>Audit evidence</h3>
+          <div class="proof-list">
+            <div class="proof-item"><b>每個結論附來源</b><span>感測器、手冊、歷史案例、視覺、拓撲或規則。</span></div>
+            <div class="proof-item"><b>每個分數可重算</b><span>權重、門檻、候選方案與投影結果都保留。</span></div>
+            <div class="proof-item"><b>每個動作可追責</b><span>政策裁決、核准人、執行效果與驗證結果完整記錄。</span></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing" aria-labelledby="closingTitle">
+    <div class="closing-inner">
+      <h2 id="closingTitle">從看懂機制，到看見它完成一次閉環</h2>
+      <div class="closing-side">
+        <p>前往戰情中心選擇案例，逐步查看每個 Agent 的輸入、計算、理由與結果。</p>
+        <div class="closing-actions"><a class="primary" href="/">執行 Demo</a><a href="/benchmark">查看 Benchmark</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

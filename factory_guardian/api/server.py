@@ -247,6 +247,11 @@ def create_app() -> FastAPI:
         """三組對照組 Benchmark 報告頁。"""
         return _page("benchmark.html")
 
+    @app.get("/system", response_class=HTMLResponse)
+    def system_page() -> HTMLResponse:
+        """Agent 機制、問題定義與安全治理說明頁。"""
+        return _page("system.html")
+
     return app
 
 

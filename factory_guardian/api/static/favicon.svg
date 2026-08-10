@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Factory Guardian">
+  <rect width="64" height="64" fill="#0a0a0a"/>
+  <path d="M8 8h48v48H8z" fill="none" stroke="#3a3a3a" stroke-width="2"/>
+  <path d="M32 11 50 18v13c0 11.5-7.3 18.7-18 22-10.7-3.3-18-10.5-18-22V18z" fill="#ff2a2a"/>
+  <path d="M22 25h20v6H28v8h8v-5h6v10H22z" fill="#0a0a0a"/>
+</svg>

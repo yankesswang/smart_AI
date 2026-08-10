@@ -146,6 +146,15 @@ def test_static_css_is_served(client):
     assert "--red:" in css.text.replace(" ", "")
 
 
+def test_favicon_is_served_and_linked(client):
+    icon = client.get("/static/favicon.svg")
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+    link = '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">'
+    assert link in client.get("/").text
+    assert link in client.get("/benchmark").text
+
+
 def test_benchmark_page_renders(client):
     page = client.get("/benchmark")
     assert page.status_code == 200
@@ -157,6 +166,19 @@ def test_benchmark_page_renders(client):
 def test_both_pages_cross_link(client):
     assert 'href="/benchmark"' in client.get("/").text
     assert 'href="/"' in client.get("/benchmark").text
+
+
+def test_agent_system_page_renders_and_is_linked(client):
+    page = client.get("/system")
+    hero = client.get("/static/agent-system.webp")
+    assert page.status_code == 200
+    assert hero.status_code == 200
+    assert hero.headers["content-type"].startswith("image/webp")
+    assert "六個 Agent" in page.text
+    assert "LLM 負責解釋" in page.text
+    assert "/static/agent-system.webp" in page.text
+    assert 'href="/system"' in client.get("/").text
+    assert 'href="/system"' in client.get("/benchmark").text
 
 
 def test_offline_machine_is_not_flagged_as_abnormal(client):

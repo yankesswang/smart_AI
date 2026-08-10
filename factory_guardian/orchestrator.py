@@ -86,6 +86,7 @@ class LoopResult:
     event: AnomalyEvent | None = None
     detection_tick: int | None = None
     confirmation_ticks: int = 0     # 為了累積證據而多等的 tick 數
+    confidence_threshold: float = 0.0   # 動設備前要求的最低診斷信心度
     diagnosis: Diagnosis | None = None
     impact: ImpactAssessment | None = None
     plans: list[RecoveryPlan] = field(default_factory=list)
@@ -125,6 +126,7 @@ class LoopResult:
             "triggered": self.triggered,
             "detection_tick": self.detection_tick,
             "confirmation_ticks": self.confirmation_ticks,
+            "confidence_threshold": self.confidence_threshold,
             "event": self.event.to_dict() if self.event else None,
             "diagnosis": self.diagnosis.to_dict() if self.diagnosis else None,
             "impact": self.impact.to_dict() if self.impact else None,
@@ -254,7 +256,15 @@ class Orchestrator:
                     threshold=self.min_confidence,
                     reason="診斷信心度未達門檻，持續累積證據，暫不執行任何設備動作。",
                 )
-        self._emit("confirm", {"waited_ticks": waited, "diagnosis": diagnosis.to_dict()})
+        self._emit(
+            "confirm",
+            {
+                "waited_ticks": waited,
+                "max_confirm_ticks": self.max_confirm_ticks,
+                "min_confidence": self.min_confidence,
+                "diagnosis": diagnosis.to_dict(),
+            },
+        )
         return diagnosis, waited
 
     def handle_event(self, event: AnomalyEvent) -> LoopResult:
@@ -264,7 +274,9 @@ class Orchestrator:
         那份清單裡的投影都過期了。所以每一次嘗試都重跑
         Diagnose → Impact → Plan → Safety → Rank，這才是真正的閉環重試。
         """
-        result = LoopResult(triggered=True, event=event, detection_tick=event.tick)
+        result = LoopResult(
+            triggered=True, event=event, detection_tick=event.tick, confidence_threshold=self.min_confidence
+        )
         machine_id = event.machine_id
         result.kpi_before = self.twin.kpi()
         tried: set[str] = set()

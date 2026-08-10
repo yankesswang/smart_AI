@@ -345,6 +345,10 @@ class RootCauseCandidate:
     confidence: float
     evidence: list[Evidence]
     recommended_actions: list[str] = field(default_factory=list)
+    # 排名的三個原始訊號與加權後的合分（cosine / prior / docs / combined）。
+    # 信心度本身是 softmax 後的結果，看不出它是怎麼來的；沒有這份明細，
+    # 畫面上就只剩一個「88%」，講不出「88% 是 0.92 的指紋相似度換來的」。
+    scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -353,6 +357,7 @@ class RootCauseCandidate:
             "confidence": round(self.confidence, 3),
             "evidence": [e.to_dict() for e in self.evidence],
             "recommended_actions": self.recommended_actions,
+            "scores": {k: round(v, 3) for k, v in self.scores.items()},
         }
 
 
@@ -363,6 +368,11 @@ class Diagnosis:
     narrative: str
     latency_ms: float = 0.0
     llm_mode: str = "offline"
+    # --- 推理過程（讓前端能重現排名是怎麼算出來的）---------------------------------
+    signal_strength: float = 0.0                                   # 觀測偏離向量的長度
+    weights: dict[str, float] = field(default_factory=dict)        # 三個訊號的權重
+    thresholds: dict[str, float] = field(default_factory=dict)     # 訊號強度的兩個門檻
+    observations: list[dict[str, Any]] = field(default_factory=list)  # 每個訊號的觀測值與偏離量
 
     @property
     def top(self) -> RootCauseCandidate | None:
@@ -377,6 +387,10 @@ class Diagnosis:
             "narrative": self.narrative,
             "latency_ms": round(self.latency_ms, 1),
             "llm_mode": self.llm_mode,
+            "signal_strength": round(self.signal_strength, 3),
+            "weights": self.weights,
+            "thresholds": self.thresholds,
+            "observations": self.observations,
         }
 
 

@@ -197,7 +197,18 @@ factory-guardian serve      # http://127.0.0.1:8000
   - `SCHEMATIC` ——原本的黑紅戰情示意圖，俯視佈局、輸送帶流量標數字、
     停機打斜線、CRITICAL 轉紅底、攝影機視角錐；正式截圖與列印用這個
   - 兩者吃同一份 `/api/state`；選擇記在 localStorage。點示意圖上的機台會捲到下方對應的遙測卡
+- **CAM-01 工安監視畫面**（[`api/static/camview.js`](factory_guardian/api/static/camview.js)）——
+  Safety Agent 的裁決寫著「Camera 偵測到人員進入運轉中危險區」，這塊就是那句話的畫面。
+  刻意不放實景照片：照片是死的，人員離開危險區後它不會變，會成為畫面上唯一與資料對不上的東西。
+  這裡每一格都綁在 `CameraObservation` 的欄位上——`person_count` 決定畫幾個人、
+  `person_in_hazard_zone` 決定他站不站在黃黑警示帶裡（帶子轉紅閃爍）、`ppe_compliant`
+  決定戴不戴安全帽、`smoke_detected` 決定冒不冒煙、`fall_detected` 決定躺不躺著，
+  疊在人身上的 CV 偵測框標的是 `confidence`。VLM 後端換成真模型時這裡一行都不用改
 - 三台機台的感測器遙測，含階梯式 sparkline、LED 節段健康度條
+- **六格步驟卡可展開推理**：每一步點開後看得到「看到什麼 → 怎麼算 → 為什麼不是別的 → 結論」。
+  診斷那格會把 88% 拆成算式（指紋餘弦 × 0.75 ＋ 歷史先驗 × 0.15 ＋ 文件支持 × 0.10），
+  並列出落選候選各自的餘弦值；方案那格拆出六個準則的加權貢獻與落後幅度；
+  工安那格逐條列出 `SR-xx` 規則與擋下的理由。全部取自後端算過的數字，前端不補敘述
 - Agent 閉環八階段軌跡即時點亮（進行中反白、被擋下轉紅）
 - 根因候選信心度條、LLM 敘述、可引用的 Evidence 清單
 - 方案矩陣（含 Safety 裁決與加權分數；被 BLOCK 的方案紅底刪除線並列出理由）

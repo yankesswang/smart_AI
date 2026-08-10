@@ -21,40 +21,8 @@
 (function () {
 "use strict";
 
-/* ------------------------------------------------------------------ 點陣字
-   3×5 的字模。每個字五列，每列用一個八進位數字表示三個位元（4=左 2=中 1=右）。
-   例如 A = 010 / 101 / 111 / 101 / 101 → "25755"。 */
-const GLYPH = {
-  A:"25755", B:"65656", C:"34443", D:"65556", E:"74647", F:"74644", G:"34553",
-  H:"55755", I:"72227", J:"11152", K:"55655", L:"44447", M:"57755", N:"57775",
-  O:"25552", P:"65644", Q:"25573", R:"65655", S:"34216", T:"72222", U:"55557",
-  V:"55552", W:"55775", X:"55255", Y:"55222", Z:"71247",
-  "0":"75557","1":"26227","2":"61247","3":"61616","4":"55711","5":"74616",
-  "6":"34757","7":"71222","8":"75757","9":"75716",
-  " ":"00000","-":"00700","/":"11244",".":"00002",":":"02020","%":"51245",
-  "!":"22202","+":"02720","(":"12441",")":"42114","x":"00525",
-};
-const GW = 4;   // 每字佔的寬度（3 點 + 1 空隙）
-const GH = 5;
-
-/* --------------------------------------------------------------- NES 調色盤 */
-const C = {
-  ink:"#101018", white:"#FFFFFF",
-  sky:"#5C94FC", skyHi:"#8CB4FC", cloud:"#FFFFFF", cloudSh:"#B8D4FC",
-  hill:"#00A844", hillHi:"#58D854",
-  brick:"#C84C0C", brickHi:"#E88030", brickLo:"#7C2A08", mortar:"#3A1404",
-  steel:"#8C8C9C", steelHi:"#C8C8D8", steelLo:"#4C4C5C",
-  belt:"#32323C", beltHi:"#5A5A6A", roller:"#A0A0B0",
-  crate:"#E39B2A", crateHi:"#F7C463", crateLo:"#8C5410",
-  boxDone:"#38B8F8", boxDoneHi:"#7CD8FF", boxDoneLo:"#1858A8",
-  lampOk:"#58D854", lampWarn:"#FCD800", lampBad:"#F83800", lampOff:"#3A3A46",
-  hpOk:"#58D854", hpMid:"#FCD800", hpBad:"#F83800", hpBg:"#282830",
-  skin:"#FCB08C", cap:"#E43B44", suit:"#2038EC", vest:"#FF7A1A",
-  helmet:"#FCD800", tool:"#C8C8D8",
-  smoke:"#B0B0C0", smokeBad:"#6C6C7C", spark:"#FCD800",
-  hud:"#000000", hudDim:"#9C9CB4", hazard:"#F83800", hazardAlt:"#FCD800",
-  accentMach:"#2E6BE6", accentPack:"#F08000",
-};
+/* 點陣字、調色盤與低階繪圖都在 pixel.js（與 CAM 監視器視圖共用）。 */
+const C = Pixel.C;
 
 /* ------------------------------------------------------------------ 版面常數
    精靈本身固定 40×26 個虛擬像素，場景的寬鬆度靠 cellW / siloW / truckW 調。
@@ -78,52 +46,18 @@ const A = {
   cells:{}, stages:[], belts:[], silo:null, truck:null, ground:0,
   kind:{}, rated:{}, snap:null, live:null,
   t:0, last:0, raf:0, active:false, ready:false, ui:null,
-  textCache:new Map(), ro:null, reduce:false,
+  ro:null, reduce:false,
 };
 
-/* --------------------------------------------------------- 低階繪圖工具 */
-const R = v => Math.round(v * A.px);
-function rect(x, y, w, h, col){
-  const x0 = R(x), y0 = R(y);
-  A.ctx.fillStyle = col;
-  A.ctx.fillRect(x0, y0, R(x + w) - x0, R(y + h) - y0);
-}
-/* 外框：先畫一圈墨色再填色，NES 精靈的輪廓感就是這樣來的 */
-function box(x, y, w, h, col){
-  rect(x - 1, y - 1, w + 2, h + 2, C.ink);
-  rect(x, y, w, h, col);
-}
-
-/* 文字先畫進離螢幕畫布再貼上。整場景每幀有上百個字，
-   逐點 fillRect 會讓 CPU 白白燒在同樣的字串上。 */
-function textW(str, s){ return (str.length * GW - 1) * s; }
-function text(str, x, y, col, s){
-  s = s || 1;
-  const key = str + "|" + s + "|" + col + "|" + A.px;
-  let cv = A.textCache.get(key);
-  if(!cv){
-    const w = Math.max(1, R(textW(str, s))), h = Math.max(1, R(GH * s));
-    cv = document.createElement("canvas");
-    cv.width = w; cv.height = h;
-    const c = cv.getContext("2d");
-    c.fillStyle = col;
-    for(let i = 0; i < str.length; i++){
-      const g = GLYPH[str[i]] || GLYPH[str[i].toUpperCase()] || GLYPH[" "];
-      for(let r = 0; r < GH; r++){
-        const bits = parseInt(g[r], 8);
-        for(let b = 0; b < 3; b++){
-          if(!(bits & (4 >> b))) continue;
-          const px0 = R((i * GW + b) * s), py0 = R(r * s);
-          c.fillRect(px0, py0, R((i * GW + b + 1) * s) - px0, R((r + 1) * s) - py0);
-        }
-      }
-    }
-    if(A.textCache.size > 160) A.textCache.clear();
-    A.textCache.set(key, cv);
-  }
-  A.ctx.drawImage(cv, R(x), R(y));
-}
-function textR(str, xRight, y, col, s){ text(str, xRight - textW(str, s || 1), y, col, s); }
+/* --------------------------------------------------------- 低階繪圖工具
+   實作在 pixel.js。這裡包一層同名同簽章的別名，好讓下面幾百個呼叫點
+   維持原樣 —— P 在 init() 才建立，用箭頭函式延後取值。 */
+let P = null;
+const rect  = (x, y, w, h, col) => P.rect(x, y, w, h, col);
+const box   = (x, y, w, h, col) => P.box(x, y, w, h, col);
+const text  = (str, x, y, col, s) => P.text(str, x, y, col, s);
+const textR = (str, xR, y, col, s) => P.textR(str, xR, y, col, s);
+const textW = (str, s) => P.textW(str, s);
 
 /* ====================================================================== 版面 */
 function layout(topo){
@@ -227,7 +161,7 @@ function resize(){
   A.cv.height = Math.round(A.vh * A.px);
   A.cv.style.width = "100%";
   A.cv.style.height = "auto";
-  A.textCache.clear();
+  P.setScale(A.px);
   draw();
 }
 
@@ -619,6 +553,7 @@ function stop(){ if(A.raf){ cancelAnimationFrame(A.raf); A.raf = 0; } }
 window.Arcade = {
   init(host, topo){
     if(!host || !host.getContext && !host.appendChild) return false;
+    if(!window.Pixel) return false;
     if(!layout(topo)) return false;
     A.host = host;
     host.innerHTML = "";
@@ -629,6 +564,7 @@ window.Arcade = {
     host.appendChild(A.cv);
     A.ctx = A.cv.getContext("2d", {alpha:true});
     A.ctx.imageSmoothingEnabled = false;
+    P = Pixel.create(A.ctx);
     A.ready = true;
 
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");

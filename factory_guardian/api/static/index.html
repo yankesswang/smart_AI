@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>FACTORY GUARDIAN AI / 產線戰情中心</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/hmi.css">
 <style>
 /* ---- 版面骨架 ----------------------------------------------------------
@@ -44,20 +45,76 @@
 .demo-flow-head h2{font-family:var(--cjk);font-size:1rem;letter-spacing:.01em}
 .demo-flow-head p{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim)}
 .demo-steps{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line)}
-.demo-step{background:var(--panel-2);padding:12px 11px;min-height:112px;position:relative;transition:background .2s ease,color .2s ease}
+/* 步驟卡是按鈕：點開才看得到 Agent 的推理過程。這裡把 hmi.css 的按鈕外觀
+   （大寫、字距、邊框、hover 反白）全部退掉，只留下可點擊與鍵盤可及。 */
+.demo-step{background:var(--panel-2);padding:12px 11px;min-height:112px;position:relative;transition:background .2s ease,color .2s ease;
+  display:block;width:100%;text-align:left;border:0;cursor:pointer;font:inherit;color:var(--fg);letter-spacing:inherit;text-transform:none}
+.demo-step:disabled{opacity:1;cursor:default}
+/* color 必須一起寫回來：hmi.css 的 button:hover 會把文字轉成 #000（反白按鈕用的），
+   套在這張暗底卡片上會讓標題整個消失。 */
+.demo-step:not(.live):not(.fail):hover:not(:disabled){background:var(--panel-3);color:var(--fg)}
 .demo-step::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-hi)}
-.demo-step .ds-agent{font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer)}
+.demo-step .ds-agent{font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer);padding-right:52px;display:block}
 .demo-step h3{font-family:var(--cjk);font-size:var(--t-body);margin-top:6px}
 .demo-step p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.55;color:var(--dim);margin-top:6px}
 .demo-step .ds-value{font-size:var(--t-micro);letter-spacing:.06em;color:var(--fg);margin-top:8px;overflow-wrap:anywhere}
+.demo-step .ds-open{position:absolute;right:10px;top:12px;font-size:var(--t-micro);letter-spacing:.06em;color:var(--dimmer);white-space:nowrap}
+.demo-step[aria-expanded="true"]{background:var(--panel-3);box-shadow:inset 0 -3px 0 var(--fg)}
+.demo-step[aria-expanded="true"] .ds-open{color:var(--fg)}
 .demo-step.done::before{background:var(--fg)}
 .demo-step.done .ds-agent{color:var(--fg)}
 .demo-step.live{background:var(--fg);color:#000}
 .demo-step.live::before{background:var(--red);animation:agent-critical 1s steps(2,start) infinite}
-.demo-step.live .ds-agent,.demo-step.live p,.demo-step.live .ds-value{color:#202020}
+.demo-step.live .ds-agent,.demo-step.live p,.demo-step.live .ds-value,.demo-step.live .ds-open{color:#202020}
 .demo-step.fail{background:var(--red);color:#000}
 .demo-step.fail::before{background:#000}
-.demo-step.fail .ds-agent,.demo-step.fail p,.demo-step.fail .ds-value{color:#111}
+.demo-step.fail .ds-agent,.demo-step.fail p,.demo-step.fail .ds-value,.demo-step.fail .ds-open{color:#111}
+
+/* ---- 步驟推理面板 ------------------------------------------------------
+   六格是同一列 grid，卡片自己往下長會把整列都拉高（grid row 預設等高），
+   於是沒被點的五格會跟著空撐。所以展開的內容放在跨滿整列的第七格：
+   視覺上仍然接在被點的那一步下面，但不會把其他格子撐變形。 */
+.step-why{grid-column:1/-1;background:var(--panel-3)}
+.step-why[hidden]{display:none}
+.dw-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+      padding:9px 13px;background:var(--panel-2);border-bottom:1px solid var(--line-hi)}
+.dw-h .agent{font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--red);font-weight:700}
+.dw-h b{font-family:var(--cjk);font-size:var(--t-prose);margin-left:8px}
+.dw-h button{padding:4px 9px;font-size:var(--t-micro)}
+.dw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:1px;background:var(--line)}
+.dw-slot{background:var(--panel-3);padding:11px 13px;min-width:0}
+.dw-slot > .micro{display:block;margin-bottom:7px;color:var(--fg)}
+.dw-slot > .micro .no{color:var(--dimmer);margin-right:5px}
+
+/* 一般資料列：左欄是欄位名，右欄是數值＋補充。補充語（em）刻意做成中文小字，
+   數值本身維持等寬對齊，掃視時先看到數字。 */
+.dw-row{display:flex;gap:9px;align-items:baseline;padding:4px 0;font-size:var(--t-meta);
+        line-height:1.6;border-bottom:1px dotted var(--line)}
+.dw-row:last-child{border-bottom:0}
+.dw-row .k{flex:0 0 92px;color:var(--dim);font-size:var(--t-micro);letter-spacing:.05em;overflow-wrap:anywhere}
+.dw-row .v{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;color:var(--fg)}
+.dw-row .v em{font-style:normal;font-family:var(--cjk);color:var(--dim);letter-spacing:.01em}
+.dw-row.bad .k{color:var(--red)}
+.dw-row.bad .v{color:var(--red)}
+.dw-row.bad .v em{color:var(--red)}
+.dw-row.win .v{font-weight:700}
+
+/* 算式列：左邊寫「什麼 × 權重」，右邊是這一項的貢獻，最後一列是合計。
+   這是整個面板的重點 —— 分數不是憑空出現的。 */
+.dw-eq{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:4px 0;
+       font-size:var(--t-meta);font-variant-numeric:tabular-nums;align-items:baseline}
+.dw-eq .t{color:var(--dim);overflow-wrap:anywhere}
+.dw-eq b{color:var(--fg)}
+.dw-eq.sum{border-top:1px solid var(--line-hi);margin-top:5px;padding-top:6px}
+.dw-eq.sum .t{color:var(--fg-2)}
+
+.dw-note{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dimmer);line-height:1.75;margin-top:9px}
+.dw-foot{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dimmer);line-height:1.75;
+         padding:9px 13px;border-top:1px solid var(--line)}
+.dw-verdict{display:inline-block;font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;
+            font-weight:700;padding:2px 7px;margin-bottom:8px;background:var(--fg);color:#000}
+.dw-verdict.bad{background:var(--red);color:#000}
+.dw-verdict.ok{background:var(--green);color:#081006}
 
 .demo-result{background:var(--panel);padding:18px;display:grid;grid-template-columns:minmax(220px,.72fr) minmax(0,1.55fr);gap:1px}
 .demo-result[hidden]{display:none}
@@ -263,6 +320,14 @@
 .arc canvas{display:block;width:100%;height:auto;image-rendering:pixelated;
             image-rendering:crisp-edges}
 
+/* ---- CAM-01 監視畫面 ---------------------------------------------------
+   跟 ARCADE 同一套處理：canvas 自己是彩色的，外框留在 HMI 的黑底裡。
+   這是 Vision Agent 判讀欄位的視覺化，不是裝飾圖。 */
+.cam{background:#000;line-height:0;border-bottom:1px solid var(--line)}
+.cam canvas{display:block;width:100%;height:auto;image-rendering:pixelated;
+            image-rendering:crisp-edges}
+.cam:empty{display:none}
+
 /* 視圖切換。做成一組互斥的分段按鈕，不用下拉選單：現場是用滑鼠點的。 */
 .vsw{display:inline-flex;border:1px solid var(--line-hi)}
 .vsw button{border:0;border-right:1px solid var(--line-hi);padding:4px 9px;
@@ -427,6 +492,7 @@
     <div class="slot"><span class="k">LLM</span><span class="v" id="tLlm">--</span></div>
     <div class="slot"><span class="k">Run ID</span><span class="v" id="tRun">--</span></div>
     <div class="fill"></div>
+    <div class="slot"><span class="k">System</span><span class="v"><a href="/system">AGENT MECHANISM <span class="gl" aria-hidden="true">▸</span></a></span></div>
     <div class="slot"><span class="k">Report</span><span class="v"><a href="/benchmark">BENCHMARK <span class="gl" aria-hidden="true">▸</span></a></span></div>
     <div class="synth"><b><span class="gl" aria-hidden="true">◆</span> SYNTHETIC DEMO DATA</b></div>
   </header>
@@ -458,14 +524,15 @@
   </section>
 
   <section class="demo-flow" aria-labelledby="flowTitle">
-    <div class="demo-flow-head"><div><h2 id="flowTitle">Agent 現在做到哪裡？</h2><p>每一步都顯示輸入、判斷與帶來的價值。</p></div><span class="micro" id="demoFlowMeta">WAITING FOR CASE</span></div>
+    <div class="demo-flow-head"><div><h2 id="flowTitle">Agent 現在做到哪裡？</h2><p>點任一步展開：看到什麼、怎麼算、為什麼不是別的。</p></div><span class="micro" id="demoFlowMeta">WAITING FOR CASE</span></div>
     <div class="demo-steps" id="demoSteps">
-      <article class="demo-step" data-demo-step="detect"><span class="ds-agent">Monitoring Agent</span><h3>發現異常</h3><p>把感測器變化轉成可處理事件。</p><div class="ds-value">尚未開始</div></article>
-      <article class="demo-step" data-demo-step="diagnose"><span class="ds-agent">Diagnosis Agent</span><h3>找出根因</h3><p>交叉比對手冊、歷史與即時訊號。</p><div class="ds-value">等待異常</div></article>
-      <article class="demo-step" data-demo-step="impact"><span class="ds-agent">Impact Agent</span><h3>算出影響</h3><p>確認產量、訂單與下游機台風險。</p><div class="ds-value">等待診斷</div></article>
-      <article class="demo-step" data-demo-step="plan"><span class="ds-agent">Planning Agent</span><h3>比較方案</h3><p>模擬每個方案並選出最佳解。</p><div class="ds-value">等待影響評估</div></article>
-      <article class="demo-step" data-demo-step="safety"><span class="ds-agent">Safety + Policy</span><h3>守住安全邊界</h3><p>阻擋危險方案，高風險動作保留核准。</p><div class="ds-value">等待方案</div></article>
-      <article class="demo-step" data-demo-step="verify"><span class="ds-agent">Execution Agent</span><h3>執行並驗證</h3><p>套用處置，再用量測結果確認修復。</p><div class="ds-value">等待核准</div></article>
+      <button type="button" class="demo-step" data-demo-step="detect" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Monitoring Agent</span><span class="ds-open"></span><h3>發現異常</h3><p>把感測器變化轉成可處理事件。</p><div class="ds-value">尚未開始</div></button>
+      <button type="button" class="demo-step" data-demo-step="diagnose" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Diagnosis Agent</span><span class="ds-open"></span><h3>找出根因</h3><p>交叉比對手冊、歷史與即時訊號。</p><div class="ds-value">等待異常</div></button>
+      <button type="button" class="demo-step" data-demo-step="impact" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Impact Agent</span><span class="ds-open"></span><h3>算出影響</h3><p>確認產量、訂單與下游機台風險。</p><div class="ds-value">等待診斷</div></button>
+      <button type="button" class="demo-step" data-demo-step="plan" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Planning Agent</span><span class="ds-open"></span><h3>比較方案</h3><p>模擬每個方案並選出最佳解。</p><div class="ds-value">等待影響評估</div></button>
+      <button type="button" class="demo-step" data-demo-step="safety" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Safety + Policy</span><span class="ds-open"></span><h3>守住安全邊界</h3><p>阻擋危險方案，高風險動作保留核准。</p><div class="ds-value">等待方案</div></button>
+      <button type="button" class="demo-step" data-demo-step="verify" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Execution Agent</span><span class="ds-open"></span><h3>執行並驗證</h3><p>套用處置，再用量測結果確認修復。</p><div class="ds-value">等待核准</div></button>
+      <div class="step-why" id="stepWhy" role="region" aria-label="這一步的推理過程" hidden></div>
     </div>
   </section>
 
@@ -592,6 +659,9 @@
 
       <section class="sec">
         <div class="sec-h"><b>Safety Vision / Work Order</b><span class="meta" id="camMeta">CAM-01</span></div>
+        <!-- 監視畫面放在 #safety 外面：renderSafety() 每次 render 都會整塊換掉
+             innerHTML，canvas 若放在裡面會被丟掉再重建。 -->
+        <div class="cam" id="camview"></div>
         <div class="sec-b" id="safety"><span class="empty">NO CAMERA FEED</span></div>
       </section>
 
@@ -611,7 +681,10 @@
   </div>
 </div>
 
+<!-- pixel.js 要排在最前面：另外兩支在 IIFE 裡就取用 Pixel.C，載入順序不能換。 -->
+<script src="/static/pixel.js"></script>
 <script src="/static/arcade.js"></script>
+<script src="/static/camview.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -668,6 +741,7 @@ function resetDemoUI(){
   $("demoFlowMeta").textContent="WAITING FOR CASE"; $("demoProgress").textContent="正在準備案例...";
 }
 function clearAnalysisPanels(){
+  expandedStep=null; confirmInfo=null; renderStepReasoning();
   auditCount=0; $("log").innerHTML=""; $("rankWrap").hidden=true; $("approvalBox").innerHTML="";
   $("plans").innerHTML='<span class="empty">NO PLANS GENERATED</span>';
   $("verify").innerHTML='<span class="empty">NOT VERIFIED</span>';
@@ -676,8 +750,10 @@ function clearAnalysisPanels(){
   $("dxMeta").textContent="NO EVENT"; $("auditMeta").textContent="0 RECORDS";
 }
 
+/* 手動控制（INJECT / RUN AGENT LOOP）跑出來的閉環也要點得亮這六格 —— 只要
+   session 裡有階段產出就更新，不再限定一鍵 Demo。 */
 function syncDemoFlowFromState(){
-  if(!demoRunning&&!demoScenario) return;
+  if(!demoRunning&&!demoScenario&&!state.last_loop&&!Object.keys(state.live||{}).length) return;
   const live=state.live||{}, loop=state.last_loop||{};
   const event=loop.event||(live.detect||{}).event;
   const diagnosis=loop.diagnosis||(live.diagnose||{}).diagnosis;
@@ -712,6 +788,368 @@ function syncDemoFlowFromState(){
   if(live.execute) setDemoStep("verify","live","處置已執行，正在量測驗證");
   if(verification) setDemoStep("verify",verification.passed?"done":"fail",verification.passed?"所有驗證條件通過":"驗證未通過，已升級人工處理");
 }
+
+/* ================= 步驟推理 =================
+   點開一格步驟卡看到的東西。原則跟整套系統一致：只呈現後端真的算過的數字，
+   前端不補敘述、不重算、不猜。每一步自己決定要開幾個槽位，沒有資料的槽位
+   直接不畫 —— 用「N/A」佔位只會讓人以為系統少算了什麼。 */
+
+const SIG_LABEL={temperature:"溫度",vibration:"振動",current:"電流",rpm_pct:"轉速"};
+const BAND_LABEL={normal:"正常",warning:"警告",critical:"危險"};
+const CRIT_LABEL={safety:"工安裕度",production:"產線達成率",delivery:"交期",recovery:"復原時間",cost:"成本",equipment:"設備保全"};
+const VERDICT_LABEL={ALLOW:"放行",APPROVAL_REQUIRED:"需人工核准",BLOCK:"阻擋"};
+
+let expandedStep=null, confirmInfo=null;
+const safetyRules={};   // rule_id -> {rule_id, title, verdict, sop_ref}，boot 時取自 /api/policy
+const pctOf=v=>(v===null||v===undefined||Number.isNaN(v))?NODATA:`${Math.round(v*100)}%`;
+const signed=(v,d=2)=>`${v>0?"+":""}${fmt(v,d)}`;
+
+/* 閉環跑到一半看 live，跑完看 last_loop —— 兩邊欄位同名，這裡統一取一次。 */
+function stepSources(){
+  const live=state.live||{}, loop=state.last_loop||lastLoop||{};
+  const attempts=loop.attempts||[];
+  const plans=loop.plans||(live.plan||{}).plans||null;
+  return {
+    loop, live, plans,
+    event:     loop.event     ||(live.detect||{}).event     ||null,
+    diagnosis: loop.diagnosis ||(live.diagnose||{}).diagnosis||(confirmInfo||{}).diagnosis||null,
+    impact:    loop.impact    ||(live.impact||{}).impact    ||null,
+    ranking:   loop.ranking   ||(live.rank||{}).ranking     ||null,
+    // 方案審查完後 safety 掛在方案上；還沒排名時只有 safety 階段的事件。
+    reviews:   (plans||[]).filter(p=>p.safety).map(p=>({...p.safety,title:p.title}))
+               .concat(plans?[]:((live.safety||{}).reviews||[])),
+    attempt:   attempts.length?attempts[attempts.length-1]:null,
+  };
+}
+
+/* 觸發字串（threshold:vibration=CRITICAL / trend:+0.081/tick / health:74<75）
+   是 Monitoring Agent 寫進事件裡的規則紀錄，這裡只翻譯，不重新判斷。 */
+function explainTrigger(t){
+  let m;
+  if((m=/^threshold:(.+)=(.+)$/.exec(t)))
+    return {k:"門檻規則",v:`${SIG_LABEL[m[1]]||m[1]} 進入 ${BAND_LABEL[m[2].toLowerCase()]||m[2]} 區間`,bad:true};
+  if((m=/^trend:([+-][\d.]+)\/tick$/.exec(t)))
+    return {k:"趨勢規則",v:`${m[1]}/tick`,tail:"正規化斜率超過門檻，且健康度已開始下滑才採信",bad:true};
+  if((m=/^health:([\d.]+)<([\d.]+)$/.exec(t)))
+    return {k:"健康度規則",v:`${m[1]} < ${m[2]}`,tail:"Agent 自己從觀測值估的，不是讀模擬器",bad:true};
+  if((m=/^safety:(.+)$/.exec(t))){
+    // 只印編號等於沒說。SR-03 是「高溫仍維持運轉」、SR-04 是「偵測到煙霧仍維持運轉」，
+    // 各自的判準也不同 —— 不能一律標成「影像觸發」。
+    const rule=safetyRules[m[1]];
+    return {k:"工安規則",v:`${m[1]}　${rule?rule.title:""}`.trim(),
+            tail:rule?`依 ${rule.sop_ref}；由 Safety Agent 觸發，不必等設備訊號變化`
+                     :"由 Safety Agent 觸發，不必等設備訊號變化",bad:true};
+  }
+  return {k:"觸發條件",v:t,bad:true};
+}
+
+function reasonDetect(s){
+  const e=s.event; if(!e) return null;
+  const mon=(state.monitoring||{})[e.machine_id]||{};
+  const seen=Object.entries(e.readings||{}).map(([n,r])=>({
+    k:SIG_LABEL[n]||n, v:`${fmt(r.value,2)} ${r.unit}`,
+    tail:BAND_LABEL[r.band]||r.band, bad:r.band!=="normal"}));
+  seen.push({k:"健康度",v:fmt(e.health,1),tail:"觸發當下，Agent 自行估算",bad:e.health<75});
+  // 趨勢與風險是 monitoring 對「現在」的摘要，機台一旦停機／維修就沒有可評估的訊號，
+  // 這時候顯示 0.00 會被誤讀成「不嚴重」。沒有意義就不畫。
+  if(mon.online) {
+    seen.push({k:"惡化斜率",v:`${signed(mon.worst_trend,4)}/tick`,tail:"目前，所有訊號中最壞的一條"});
+    seen.push({k:"故障風險",v:fmt(mon.failure_risk,2),tail:"目前"});
+  }
+
+  const others=Object.values((state.snapshot||{}).machines||{})
+    .filter(m=>m.machine_id!==e.machine_id).map(m=>({
+      k:m.machine_id,
+      v:m.online?`${BAND_LABEL[m.worst_band]||m.worst_band} · 健康度 ${fmt(m.health,0)}`:"離線",
+      tail:m.online?"未達任何觸發條件":"停機／維修中不做異常判斷"}));
+
+  return {
+    headline:`${e.machine_id} 觸發 ${e.severity.toUpperCase()} 異常`,
+    slots:[
+      {label:"看到什麼",rows:seen,note:"這些是帶量測雜訊的感測器讀值，Agent 看不到模擬器的真實健康度與故障標籤。"},
+      {label:"觸發規則",rows:(e.triggers||[]).map(explainTrigger)},
+      {label:"其他機台為什麼沒觸發",rows:others},
+      {label:"結論",verdict:e.severity.toUpperCase(),verdictBad:e.severity!=="warning",rows:[
+        {k:"事件",v:e.event_id},
+        {k:"時間",v:`第 ${e.tick} tick（T+${fmt(e.sim_minutes,0)} 分）`},
+        {k:"偵測器",v:e.detector},
+        {k:"類型",v:e.kind==="safety"?"工安事件":"設備異常"},
+      ]},
+    ],
+  };
+}
+
+function reasonDiagnose(s){
+  const d=s.diagnosis; if(!d) return null;
+  const cands=d.candidates||[], top=cands[0]||{}, w=d.weights||{}, th=d.thresholds||{};
+  const sc=top.scores||{};
+
+  const seen=(d.observations||[]).map(o=>({
+    k:SIG_LABEL[o.name]||o.name, v:`${fmt(o.value,2)} ${o.unit}`,
+    tail:`正常 ${fmt(o.nominal,2)}｜偏離 ${signed(o.deviation)}｜${BAND_LABEL[o.band]||o.band}`,
+    bad:o.band!=="normal"}));
+  seen.push({k:"偏離向量長度",v:fmt(d.signal_strength,2),tail:"四個訊號合成的訊號強度"});
+
+  // 怎麼算：三項加權相加 → softmax。權重寫死在 diagnosis.py，不由 LLM 決定。
+  const eqs=[], rows=[];
+  if(sc.cosine!==undefined){
+    const cos=Math.max(0,sc.cosine);
+    eqs.push({t:`指紋餘弦相似度 ${fmt(sc.cosine,3)}${sc.cosine<0?"（負值取 0）":""} × ${fmt(w.signature,2)}`,v:fmt(cos*w.signature,3)});
+    eqs.push({t:`歷史先驗 ${fmt(sc.prior,3)} × ${fmt(w.prior,2)}`,v:fmt(sc.prior*w.prior,3)});
+    eqs.push({t:`文件支持度 ${fmt(sc.docs,3)} × ${fmt(w.docs,2)}`,v:fmt(sc.docs*w.docs,3)});
+    eqs.push({sum:true,t:"合計（再經 softmax 轉信心度）",v:fmt(sc.combined,3)});
+  }
+  if(th.strength_full!==undefined){
+    const strong=d.signal_strength>=th.strength_full;
+    rows.push({k:"訊號強度閘",v:`${fmt(d.signal_strength,2)} ${strong?"≥":"<"} ${fmt(th.strength_full,2)}`,
+      tail:strong?"訊號夠強，信心度不打折":"訊號仍弱，信心度往均勻分布拉",bad:!strong});
+  }
+  const waited=s.loop.confirmation_ticks??(confirmInfo||{}).waited_ticks;
+  const gate=s.loop.confidence_threshold??(confirmInfo||{}).min_confidence;
+  if(waited) rows.push({k:"證據不足",v:`多觀察 ${waited} tick`,
+    tail:`首次研判低於門檻 ${pctOf(gate)}，期間不執行任何設備動作`,bad:true});
+
+  const rejected=cands.slice(1,4).map(c=>({
+    k:c.label, v:pctOf(c.confidence),
+    tail:(c.scores||{}).cosine!==undefined
+      ? `指紋餘弦 ${fmt(c.scores.cosine,3)}，第一名 ${fmt(sc.cosine,3)}`
+      : ((c.evidence||[])[0]||{}).statement||""}));
+
+  const verdictRows=[{k:"故障代碼",v:top.fault_id||NODATA},{k:"信心度",v:pctOf(top.confidence),win:true}];
+  (top.evidence||[]).slice(0,3).forEach(x=>verdictRows.push({k:x.source,v:x.reference,tail:x.statement}));
+
+  return {
+    headline:`${top.label||"根因待確認"}　${pctOf(top.confidence)}`,
+    slots:[
+      {label:"看到什麼",rows:seen,note:"偏離量 =（觀測值 − 正常值）÷ 訊號 scale，這個向量就是指紋比對的唯一輸入。"},
+      {label:`怎麼算出 ${pctOf(top.confidence)}`,eqs,rows},
+      {label:"為什麼不是其他候選",rows:rejected},
+      {label:"結論",rows:verdictRows},
+    ],
+    note:"權重 0.75 / 0.15 / 0.10 寫死在 diagnosis.py，排名由數值比對決定；LLM 只負責把這份結果寫成人話，不能改動排名與信心度。",
+  };
+}
+
+function reasonImpact(s){
+  const im=s.impact; if(!im) return null;
+  const orders=im.affected_orders||[];
+  const atRisk=orders.filter(o=>o.at_risk);
+  return {
+    headline:`${orders.length} 張訂單依賴 ${im.machine_id}，${atRisk.length} 張有交期風險`,
+    slots:[
+      {label:"看到什麼",rows:[
+        {k:"下游機台",v:(im.downstream_machines||[]).join(" · ")||"無"},
+        {k:"依賴訂單",v:`${orders.length} 張`,tail:"沿 Knowledge Graph（機台→產線→產品→訂單）追出來"},
+        {k:"目前達成率",v:`${fmt((state.snapshot||{}).production_pct,1)}%`},
+      ]},
+      // 已依延遲由大到小排序，列前四張；其餘只給筆數，不假裝全部列完。
+      {label:"怎麼算",rows:orders.slice(0,4).map(o=>({
+        k:o.order_id,
+        v:o.delay_min>0?`延遲 ${fmt(o.delay_min,0)} 分`:"可準時",
+        tail:`剩 ${fmt(o.remaining,0)} 件｜預估完成 ${fmt(o.projected_finish_min,0)} 分 vs 交期 ${fmt(o.due_in_min,0)} 分`,
+        bad:o.delay_min>0}))
+        .concat(orders.length>4?[{k:"其餘",v:`${orders.length-4} 張`,tail:"延遲較小，未逐張列出"}]:[])
+        .concat([{k:"產能損失",v:`${fmt(im.production_loss_units,0)} 件`,
+                  tail:`達成率缺口 ${fmt(im.production_loss_pct,1)}% × 30 分鐘規劃視野`}])},
+      {label:"結論",rows:[
+        {k:"受影響訂單",v:`${orders.length} 張`,win:true},
+        {k:"交期風險",v:`${atRisk.length} 張`,bad:atRisk.length>0},
+        {k:"總延遲",v:`${fmt(im.total_delay_min,0)} 分`},
+      ]},
+    ],
+    note:"完成時間由模擬器推算，不是 LLM 估的；產能損失是「維持現況 30 分鐘」的推估值。",
+  };
+}
+
+function reasonPlan(s){
+  const plans=s.plans; if(!plans||!plans.length) return null;
+  const rk=s.ranking||{}, weights=rk.weights||{}, norm=rk.normalized||{};
+  const sorted=plans.slice().sort((a,b)=>a.rank-b.rank);
+  const win=sorted.find(p=>p.feasible)||sorted[0];
+
+  const seen=sorted.map(p=>({
+    k:p.plan_id, v:p.title,
+    tail:`產出 ${fmt(p.projection.production_pct,0)}%｜延遲 ${fmt(p.projection.max_order_delay_min,0)} 分｜成本 ${Math.round(p.projection.cost_ntd/1000)}K｜${p.projection.recovered?`復原 ${fmt(p.projection.recovery_min,0)} 分`:"未復原"}`}));
+
+  const eqs=[];
+  const wk=Object.keys(weights);
+  if(win&&wk.length){
+    wk.forEach(c=>{
+      const n=(norm[win.plan_id]||{})[c];
+      eqs.push({t:`${CRIT_LABEL[c]||c} 得分 ${fmt(n,2)} × 權重 ${fmt(weights[c],2)}`,
+                v:fmt((win.score_breakdown||{})[c],3)});
+    });
+    eqs.push({sum:true,t:`${win.plan_id} 加權總分`,v:fmt(win.score,3)});
+  }
+
+  // 落後最多的準則就是這個方案輸在哪裡 —— 和 optimizer.explain_ranking 同一套算法。
+  const worstOf=p=>wk.reduce((best,c)=>
+    ((win.score_breakdown||{})[c]-(p.score_breakdown||{})[c]) >
+    ((win.score_breakdown||{})[best]-(p.score_breakdown||{})[best]) ? c : best, wk[0]);
+  const rejected=sorted.filter(p=>p!==win).map(p=>p.feasible
+    ? {k:p.plan_id,v:`分數 ${fmt(p.score,3)}`,tail:`落後 ${fmt(win.score-p.score,3)}，主要劣勢在${CRIT_LABEL[worstOf(p)]||worstOf(p)}`}
+    : {k:p.plan_id,v:"不可行",tail:p.infeasible_reason,bad:true});
+
+  return {
+    headline:win?`推薦 ${win.plan_id}｜${win.title}`:"沒有可行方案",
+    slots:[
+      {label:"看到什麼（模擬器乾跑結果）",rows:seen,
+       note:"每個方案都在「診斷信念模型」上乾跑 30 分鐘，數字是跑出來的，不是估的。"},
+      {label:"怎麼排名",eqs,rows:[{k:"硬限制",v:"Safety BLOCK 直接出局",tail:"不進入加權比較"}]},
+      {label:"為什麼不是其他方案",rows:rejected},
+      {label:"結論",rows:win?[
+        {k:"推薦方案",v:`${win.plan_id}｜${win.title}`,win:true},
+        {k:"加權總分",v:fmt(win.score,3)},
+        {k:"動作",v:(win.actions||[]).map(a=>a.kind.toUpperCase()).join(" → ")},
+      ]:[{k:"結果",v:"所有方案都被擋下，需人工重新規劃",bad:true}]},
+    ],
+    note:"六個準則用固定尺規換算成 0~1（不是 min–max 正規化），所以分數在不同情境之間可以直接比較。排名由 optimizer.py 計算，LLM 沒有參與。",
+  };
+}
+
+function reasonSafety(s){
+  const reviews=s.reviews||[], pending=state.pending_approval;
+  if(!reviews.length&&!pending) return null;
+  const cam=((state.snapshot||{}).cameras||[])[0]||{};
+  const machine=((state.snapshot||{}).machines||{})[(s.event||{}).machine_id]||{};
+
+  const seen=[];
+  if(cam.camera_id){
+    seen.push({k:"攝影機",v:`${cam.camera_id} / ${cam.zone_id}`,tail:`信心 ${fmt(cam.confidence,2)}`});
+    seen.push({k:"現場人員",v:`${cam.person_count} 人`,tail:cam.person_in_hazard_zone?"位於危險區內":"不在危險區",bad:!!cam.person_in_hazard_zone});
+    seen.push({k:"防護具",v:cam.ppe_compliant?"合規":"未合規",bad:cam.ppe_compliant===false});
+    if(cam.smoke_detected) seen.push({k:"煙霧",v:"偵測到",bad:true});
+    if(cam.caption) seen.push({k:"影像描述",v:cam.caption});
+  }
+  if(machine.state) seen.push({k:"機台狀態",v:machine.state.toUpperCase(),tail:`健康度 ${fmt(machine.health,0)}`});
+
+  const findings=[];
+  reviews.forEach(r=>(r.findings||[]).forEach(f=>findings.push({
+    k:f.rule_id, v:`${r.plan_id} → ${VERDICT_LABEL[f.verdict]||f.verdict}`,
+    tail:f.message, bad:f.verdict==="BLOCK"})));
+
+  const blocked=reviews.filter(r=>r.verdict==="BLOCK");
+  const needAppr=reviews.filter(r=>r.verdict==="APPROVAL_REQUIRED");
+  const verdictRows=[
+    {k:"審查方案",v:`${reviews.length} 個`},
+    {k:"阻擋",v:`${blocked.length} 個`,tail:blocked.map(r=>r.plan_id).join(" · "),bad:blocked.length>0},
+    {k:"需核准",v:`${needAppr.length} 個`,tail:needAppr.map(r=>r.plan_id).join(" · ")},
+  ];
+  if(pending){
+    verdictRows.push({k:"等待核准",v:pending.plan.plan_id,tail:pending.plan.title,bad:true});
+    verdictRows.push({k:"風險等級",v:(pending.policy.risk||"").toUpperCase(),tail:(pending.policy.reasons||[]).join("；"),bad:true});
+  }
+
+  return {
+    headline:pending?`${pending.plan.plan_id} 需要人工核准`:`${blocked.length} 個方案被安全規則擋下`,
+    slots:[
+      // 影像與機台狀態是「現在」的畫面；裁決當下的事實留在下面每條 finding 的訊息裡。
+      {label:"看到什麼（現場即時）",rows:seen},
+      {label:"規則裁決",rows:findings,
+       note:"BLOCK 是硬限制：Optimizer 直接把方案標成不可行，LLM 無權推翻。"},
+      {label:"結論",verdict:pending?"AWAITING APPROVAL":(blocked.length?"BLOCKED":"CLEARED"),
+       verdictBad:!!(pending||blocked.length),rows:verdictRows},
+    ],
+    note:"停機、改變控制狀態這類高風險動作依 Policy Engine 一律保留人工核准；核准逾時的預設行為是不執行。",
+  };
+}
+
+function reasonVerify(s){
+  const a=s.attempt; if(!a) return null;
+  const v=a.verification, loop=s.loop;
+
+  const seen=[{k:"執行方案",v:`${a.plan.plan_id}｜${a.plan.title}`}];
+  // 底線換成空白，否則 CREATE_WORK_ORDER 這種長 token 會被硬斷成「CREATE_WORK / _ORDER」。
+  (a.plan.actions||[]).forEach(x=>
+    seen.push({k:x.kind.toUpperCase().replace(/_/g," "),v:x.target,tail:x.rationale}));
+  seen.push({k:"政策風險",v:(a.policy.risk||"").toUpperCase(),tail:(a.policy.reasons||[]).join("；")});
+  seen.push({k:"核准",v:`${a.approval.approved?"✓":"✕"} ${a.approval.approver}`,tail:a.approval.reason,bad:!a.approval.approved});
+  if(!a.executed) seen.push({k:"未執行",v:a.blocked_reason,bad:true});
+  (a.execution_effects||[]).forEach((e,i)=>seen.push({k:i?"":"執行結果",v:e.message||""}));
+
+  // 判定式是「實際值 comparator 預測值」，寫成「預測 X >= 實際 Y」會把方向講反。
+  const checks=(v?v.checks:[]).map(c=>({
+    k:c.passed?"PASS":"FAIL",
+    v:`實際 ${fmt(c.actual,1)} ${c.comparator} 預測 ${fmt(c.expected,1)}`,
+    tail:c.name, bad:!c.passed}));
+
+  const verdictRows=[];
+  if(v){
+    verdictRows.push({k:"驗證",v:v.passed?"全數通過":"未通過",win:v.passed,bad:!v.passed});
+    ["production_pct","max_order_delay_min","factory_health"].forEach(k=>{
+      if(v.before[k]===undefined) return;
+      verdictRows.push({k:{production_pct:"達成率",max_order_delay_min:"最大延遲",factory_health:"工廠健康度"}[k],
+        v:`${fmt(v.before[k],1)} → ${fmt(v.after[k],1)}`});
+    });
+  }
+  if(loop.escalated) verdictRows.push({k:"升級",v:loop.escalation_reason,bad:true});
+
+  return {
+    headline:v?(v.passed?"處置已通過量測驗證":"驗證未通過，已停止自動處置"):"尚未取得驗證結果",
+    slots:[
+      {label:"執行了什麼",rows:seen},
+      {label:"驗證怎麼比",rows:checks,
+       note:"基準不是「事故前的狀態」——設備劣化是進行式的，那樣比任何方案都會變差。比的是方案自己的預測，以及「什麼都不做」的反事實基準。"},
+      {label:"結論",verdict:v?(v.passed?"VERIFIED":"FAILED"):"PENDING",
+       verdictOk:!!(v&&v.passed),verdictBad:!!(v&&!v.passed),rows:verdictRows},
+    ],
+    note:"驗證跑在真實孿生體上，規劃階段跑的是診斷信念模型 —— 診斷錯了會在這一步被抓出來。",
+  };
+}
+
+const STEP_META={
+  detect:  {agent:"Monitoring Agent",              build:reasonDetect},
+  diagnose:{agent:"Diagnosis Agent",               build:reasonDiagnose},
+  impact:  {agent:"Production Agent",              build:reasonImpact},
+  plan:    {agent:"Production Agent + Optimizer",  build:reasonPlan},
+  safety:  {agent:"Safety Agent + Policy Engine",  build:reasonSafety},
+  verify:  {agent:"Orchestrator + Verification Agent", build:reasonVerify},
+};
+
+const dwRow=r=>`<div class="dw-row${r.bad?" bad":""}${r.win?" win":""}">
+  <span class="k">${esc(r.k)}</span>
+  <span class="v">${esc(r.v)}${r.tail?`<em> ${esc(r.tail)}</em>`:""}</span></div>`;
+const dwEq=e=>`<div class="dw-eq${e.sum?" sum":""}"><span class="t">${esc(e.t)}</span><b>${esc(e.v)}</b></div>`;
+const dwSlot=(sl,i)=>`<div class="dw-slot">
+  <span class="micro"><span class="no">${pad(i+1,2)}</span>${esc(sl.label)}</span>
+  ${sl.verdict?`<span class="dw-verdict${sl.verdictOk?" ok":sl.verdictBad?" bad":""}">${esc(sl.verdict)}</span>`:""}
+  ${(sl.eqs||[]).map(dwEq).join("")}
+  ${(sl.rows||[]).map(dwRow).join("")}
+  ${sl.note?`<div class="dw-note">${esc(sl.note)}</div>`:""}</div>`;
+
+function renderStepReasoning(){
+  const src=state?stepSources():null;
+  const built={};
+  DEMO_ORDER.forEach(k=>{ built[k]=src?STEP_META[k].build(src):null; });
+
+  document.querySelectorAll("[data-demo-step]").forEach(btn=>{
+    const key=btn.dataset.demoStep, open=expandedStep===key&&!!built[key];
+    btn.disabled=!built[key];
+    btn.setAttribute("aria-expanded",String(open));
+    btn.querySelector(".ds-open").textContent=!built[key]?"":(open?"▲ 收合":"▼ 推理");
+  });
+
+  const host=$("stepWhy"), data=expandedStep?built[expandedStep]:null;
+  if(!data){ host.hidden=true; host.innerHTML=""; return; }
+  const meta=STEP_META[expandedStep];
+  const slots=data.slots.filter(sl=>(sl.rows||[]).length||(sl.eqs||[]).length);
+  host.hidden=false;
+  host.innerHTML=`<div class="dw-h">
+      <span><span class="agent">${esc(meta.agent)}</span><b>${esc(data.headline)}</b></span>
+      <button type="button" class="ghost" id="stepWhyClose">✕ 收合</button></div>
+    <div class="dw-grid">${slots.map(dwSlot).join("")}</div>
+    ${data.note?`<div class="dw-foot">${esc(data.note)}</div>`:""}`;
+  $("stepWhyClose").onclick=()=>{ expandedStep=null; renderStepReasoning(); };
+}
+
+document.querySelectorAll("[data-demo-step]").forEach(btn=>{
+  btn.onclick=()=>{
+    expandedStep = expandedStep===btn.dataset.demoStep ? null : btn.dataset.demoStep;
+    renderStepReasoning();
+    if(expandedStep) $("stepWhy").scrollIntoView({block:"nearest",
+      behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+  };
+});
 
 function incidentMetrics(st){
   const event=((st.live||{}).detect||{}).event;
@@ -799,6 +1237,14 @@ async function boot(){
     try{ topoData = await getJSON("/api/topology"); buildFloor(); }
     catch(err){ $("floorSec").hidden = true; }
 
+    // 工安規則表：畫面上只給 SR-03 這個編號等於沒說，要能講出規則名稱與 SOP 出處。
+    try{
+      const pol = await getJSON("/api/policy");
+      (pol.rules||[]).forEach(r=>{ safetyRules[r.rule_id]=r; });
+    }catch(err){ /* 拿不到就退回只顯示編號，不影響其他面板 */ }
+
+    if(window.CamView) CamView.init($("camview"));
+
     const sc = await getJSON("/api/scenarios");
     const sel = $("scenario");
     sel.innerHTML = "";
@@ -880,13 +1326,15 @@ function render(){
   renderAgentSignal(agentPresentation);
 
   renderFloor(s);
+  if(window.CamView && CamView.ready) CamView.sync(state);
   renderMachines(s);
   renderOrders(s);
   if(state.last_loop && state.last_loop!==lastLoop){ lastLoop=state.last_loop; renderLoop(lastLoop); }
   else if(!state.last_loop) restoreLive(state.live||{});
   renderSafety(s);
   renderApproval(state.pending_approval);
-  if(demoRunning||demoScenario) syncDemoFlowFromState();
+  syncDemoFlowFromState();
+  renderStepReasoning();
 
   const busy = state.running;
   ["btnRun","btnTick1","btnTick10","btnInject"].forEach(id=>$(id).disabled=busy);
@@ -1527,6 +1975,9 @@ function listen(){
 
 function onEvent(e){
   activeAgentStage=e.stage;
+  // confirm 階段不在 session 的 live 快取裡（它只是「還在觀察」的過程紀錄），
+  // 但「信心不足所以多等了幾個 tick」正是最值得展示的一段推理，所以留一份。
+  if(e.stage==="confirm"){ confirmInfo=e.payload; renderStepReasoning(); }
   const st=STAGE_MAP[e.stage];
   if(st){
     const idx=STAGES.findIndex(s=>s[0]===st);

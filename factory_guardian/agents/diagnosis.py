@@ -130,6 +130,10 @@ class DiagnosisAgent(Agent):
             narrative=narrative,
             latency_ms=timing.get("latency_ms", 0.0),
             llm_mode=self.ctx.llm.mode if self.ctx.llm else "offline",
+            signal_strength=strength,
+            weights={"signature": W_SIGNATURE, "prior": W_PRIOR, "docs": W_DOCS},
+            thresholds={"strength_full": STRENGTH_FULL, "no_fault": NO_FAULT_STRENGTH},
+            observations=self._observations(machine, readings, observed),
         )
         self.log(
             "diagnose",
@@ -183,6 +187,36 @@ class DiagnosisAgent(Agent):
                 "確認人員撤離危險區並完成 LOTO 後才可復機。",
             ],
         )
+
+    @staticmethod
+    def _observations(machine, readings: dict[str, float], observed: dict[str, float]) -> list[dict[str, object]]:
+        """Agent 這一步「看到什麼」：每個訊號的觀測值、正常值與正規化偏離量。
+
+        偏離量是排名的唯一輸入（指紋比對比的就是這個向量），
+        所以它必須跟著診斷結果一起送到前端，否則畫面只能顯示結論、無法顯示依據。
+        """
+        rows: list[tuple[float, dict[str, object]]] = []
+        for spec in machine.signals:
+            value = readings.get(spec.name)
+            if value is None:
+                continue
+            deviation = observed.get(spec.name, 0.0)
+            rows.append(
+                (
+                    deviation,
+                    {
+                        "name": spec.name,
+                        "unit": spec.unit,
+                        "value": round(value, 2),
+                        "nominal": round(spec.nominal, 2),
+                        "deviation": round(deviation, 2),
+                        "band": spec.band(value).value,
+                    },
+                )
+            )
+        # 偏離量大的排前面：主導這次判斷的訊號要先被看到。
+        rows.sort(key=lambda row: -abs(row[0]))
+        return [row for _, row in rows]
 
     @staticmethod
     def _deviation_vector(machine, readings: dict[str, float]) -> dict[str, float]:
@@ -293,6 +327,12 @@ class DiagnosisAgent(Agent):
             confidence=confidence,
             evidence=evidence,
             recommended_actions=actions,
+            scores={
+                "cosine": match.cosine,
+                "prior": match.prior,
+                "docs": match.docs,
+                "combined": match.combined,
+            },
         )
 
     # ------------------------------------------------------------------ 敘述
