@@ -1,0 +1,335 @@
+/* ==========================================================================
+   FACTORY GUARDIAN AI - HMI 設計系統
+   Tactical Telemetry / CRT Terminal
+   --------------------------------------------------------------------------
+   規則（刻意約束，不要放寬）：
+
+   · 單一強調色 = hazard red。狀態分級靠「強度與反白」，不靠彩虹色盤。
+     正常 = 暗前景／警告 = 紅框線＋白值／危險 = 紅底反白。
+     這比紅黃綠三色更接近真實航太 HUD，暗色投影時也更容易分辨。
+   · terminal green 全站只用在一個地方：驗證通過的鋼印。
+   · 沒有圓角、沒有陰影、沒有漸層按鈕。分隔線一律靠 grid gap 1px 打出來。
+   · 字體全部走系統堆疊，不下載 web font。競賽場地的網路不能賭。
+
+   可及性下限（新增，不可退讓）：
+
+   · 所有承載資訊的文字對 --bg / --panel-3 至少 4.5:1。
+     舊版的 #333333（1.6:1）與 #565656（2.7:1）已淘汰，只留給髮絲線。
+   · 字級最小 11px，且全部用 rem，使用者放大瀏覽器字級時版面要跟著長。
+   · 紅色只表示「異常」。鍵盤 focus 一律用白框，不跟警報搶語意。
+   · 動態一律包在 prefers-reduced-motion 之後；掃描線包在 prefers-contrast 之後。
+   ========================================================================== */
+
+:root{
+  color-scheme: dark;
+
+  --bg:        #0A0A0A;
+  --panel:     #101010;
+  --panel-2:   #151515;
+  --panel-3:   #1A1A1A;
+
+  /* 髮絲線。這三個永遠不做文字色。 */
+  --line:      #262626;
+  --line-hi:   #3A3A3A;
+  --line-lo:   #1F1F1F;
+
+  /* 文字階梯，四級都過 AA（對 --bg 與 --panel-3 皆是） */
+  --fg:        #EAEAEA;   /* 16.5:1  數值、標題 */
+  --fg-2:      #C8C8C8;   /* 11.4:1  中文敘述 */
+  --dim:       #ABABAB;   /*  7.6:1  次要標籤 */
+  --dimmer:    #858585;   /*  4.7:1  最低可用階，再暗就不准放資訊 */
+
+  --red:       #FF2A2A;   /*  5.3:1  唯一強調色 */
+  --red-deep:  #E61919;
+  --red-ghost: rgba(255,42,42,.12);
+  --green:     #4AF626;   /* 全站唯一用途：VERIFIED 鋼印 */
+
+  /* 字級。用 rem，跟著使用者的瀏覽器字級走。 */
+  --t-micro:   0.6875rem; /* 11px  標籤、tag */
+  --t-meta:    0.75rem;   /* 12px  次要資料 */
+  --t-body:    0.8125rem; /* 13px  表格、log */
+  --t-prose:   0.875rem;  /* 14px  中文敘述 */
+
+  /* 字距。小字級配大字距等於不可讀，上限收在 .12em。 */
+  --tr-label:  .12em;
+  --tr-data:   .04em;
+
+  --mono: ui-monospace,"SF Mono","JetBrains Mono","IBM Plex Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans: "Helvetica Neue",Inter,"Arial Black",system-ui,sans-serif;
+  --cjk: "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;border-radius:0}
+
+html{background:var(--bg)}
+
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:var(--mono),var(--cjk);
+  font-size:var(--t-body);
+  line-height:1.45;
+  letter-spacing:var(--tr-data);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+
+/* --- 類比劣化：掃描線 + 機械雜訊 ---------------------------------------
+   固定定位、pointer-events:none，不會拖累捲動時的重繪。
+   舊版用 mix-blend-mode:multiply 疊 30% 黑，等於把全站文字壓暗一成，
+   投影機上尤其糊。改成一般混色的細條紋，質感留著、對比不賠。 */
+@media (prefers-contrast: no-preference){
+  body::before{
+    content:"";position:fixed;inset:0;z-index:9998;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.16) 2px 3px);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.03;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+::selection{background:var(--red);color:#000}
+
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line-hi);border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* Focus 一律白框。紅色保留給「異常」這個語意，不跟鍵盤焦點搶。 */
+:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+
+/* ==========================================================================
+   排版
+   ========================================================================== */
+.wordmark{
+  font-family:var(--sans);font-weight:900;
+  letter-spacing:-.045em;line-height:.9;text-transform:uppercase;
+}
+.macro{
+  font-family:var(--mono);font-weight:700;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.05em;line-height:.86;
+}
+.micro{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim);font-weight:600;
+}
+.num{font-variant-numeric:tabular-nums;letter-spacing:0}
+.dim{color:var(--dim)}
+.dimmer{color:var(--dimmer)}
+.cjk{font-family:var(--cjk);letter-spacing:.01em}
+
+/* ==========================================================================
+   頁首列（兩頁共用，先前在兩份 HTML 各抄一次）
+   ========================================================================== */
+/* 一定要能換行。頁首是一排固定寬度的欄位，在 1024px 這種投影／筆電寬度下
+   放不進一行；不換行的話它會把 .shell 撐寬，連帶把 KPI 帶一起推出視窗外。 */
+.top{background:var(--panel-2);display:flex;align-items:stretch;flex-wrap:wrap}
+.top .brand{display:flex;align-items:center;gap:12px;padding:11px 16px;border-right:1px solid var(--line)}
+.top .brand h1{font-size:1.25rem}
+.top .brand .reg{font-size:.5em;vertical-align:super;color:var(--red)}
+.top .slot{
+  display:flex;flex-direction:column;justify-content:center;gap:2px;
+  padding:8px 14px;border-right:1px solid var(--line);white-space:nowrap;
+}
+.top .slot .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);color:var(--dim);text-transform:uppercase}
+.top .slot .v{font-size:var(--t-meta);color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:var(--tr-data)}
+.top .fill{flex:1 1 auto;border-right:1px solid var(--line)}
+.top .synth{display:flex;align-items:center;gap:9px;padding:8px 16px;background:var(--red);color:#000}
+.top .synth b{font-size:var(--t-micro);letter-spacing:var(--tr-label);font-weight:800}
+
+/* ==========================================================================
+   結構：grid gap 1px 打出髮絲分隔線
+   ========================================================================== */
+.rig{background:var(--line);display:grid;gap:1px}
+.rig > *{background:var(--panel)}
+
+.sec{background:var(--panel);position:relative;display:flex;flex-direction:column;min-width:0}
+.sec-h{
+  display:flex;align-items:center;justify-content:space-between;gap:4px 10px;
+  padding:8px 11px;border-bottom:1px solid var(--line);
+  background:var(--panel-2);flex:0 0 auto;flex-wrap:wrap;
+}
+.sec-h b{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  font-weight:700;color:var(--fg);white-space:nowrap;
+}
+.sec-h b::before{content:"[ ";color:var(--dimmer)}
+.sec-h b::after{content:" ]";color:var(--dimmer)}
+/* min-width:0 + overflow-wrap 缺一不可：面板標題的中繼資料裡有
+   M-A=bearing_degradation 這種不可斷的長字串，flex item 的自動最小尺寸
+   會讓它把整個頁面推寬，而不是自己換行。 */
+.sec-h .meta{
+  font-size:var(--t-micro);letter-spacing:.08em;color:var(--dim);
+  text-transform:uppercase;text-align:right;min-width:0;overflow-wrap:anywhere;
+}
+.sec-b{padding:11px;flex:1 1 auto;min-height:0}
+.sec-b.flush{padding:0}
+.sec-b.scroll{overflow-y:auto}
+
+hr.rule{border:0;border-top:1px solid var(--line);margin:10px 0}
+hr.rule.hi{border-top-color:var(--line-hi)}
+
+/* 危險斜紋。只掛在需要人工核准的區塊上，不做裝飾用。 */
+.hazard-stripe{
+  height:6px;
+  background:repeating-linear-gradient(45deg,
+    var(--red) 0 9px, #0A0A0A 9px 18px);
+}
+
+/* ==========================================================================
+   狀態分級 - 單一強調色，靠強度與反白升級
+   ========================================================================== */
+.lv-normal   { color:var(--fg) }
+.lv-warning  { color:var(--fg) }
+.lv-critical { color:#000; background:var(--red) }
+
+.tag{
+  display:inline-block;font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;
+  padding:2px 6px;border:1px solid var(--line-hi);color:var(--dim);
+  white-space:nowrap;font-weight:600;
+}
+.tag.on{border-color:var(--fg);color:var(--fg)}
+.tag.alarm{border-color:var(--red);color:var(--red)}
+.tag.solid{background:var(--red);border-color:var(--red);color:#000;font-weight:700}
+.tag.ok{border-color:var(--green);color:var(--green)}
+
+.blink{animation:blink 1.05s steps(2,start) infinite}
+@keyframes blink{50%{opacity:.35}}
+
+/* ==========================================================================
+   控制元件
+   ========================================================================== */
+button,select{
+  font-family:var(--mono),var(--cjk);font-size:var(--t-meta);letter-spacing:var(--tr-label);
+  text-transform:uppercase;font-weight:600;
+  background:var(--panel-3);color:var(--fg);
+  border:1px solid var(--line-hi);
+  padding:8px 13px;cursor:pointer;
+  touch-action:manipulation;
+  transition:background .1s linear,color .1s linear,border-color .1s linear;
+}
+button:hover:not(:disabled),select:hover{background:var(--fg);color:#000;border-color:var(--fg)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--red);border-color:var(--red);color:#000;font-weight:700}
+button.primary:hover:not(:disabled){background:#fff;border-color:#fff;color:#000}
+button.ghost{background:transparent;color:var(--dim)}
+button.ghost:hover:not(:disabled){color:#000}
+select{padding:8px 10px;min-width:210px}
+select option{background:var(--panel-3);color:var(--fg)}
+
+/* 按鈕與連結裡的幾何符號（◆ ▸ ▶ ↺ ◂）純屬造型。
+   讓讀螢幕跳過它們的是標記上的 aria-hidden，不是 CSS：
+   speak 屬性早就被規格移除，沒有任何瀏覽器實作。這個類別只用來標示意圖。 */
+.gl{font-family:var(--mono)}
+
+a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--line-hi)}
+a:hover{color:var(--red);border-bottom-color:var(--red)}
+
+/* ==========================================================================
+   資料表
+   ========================================================================== */
+/* 寬資料表在自己的容器裡橫向捲動。方案矩陣有八欄，在手機上壓不下去，
+   讓它自己捲比讓整個頁面橫捲好。
+   position:relative 不是裝飾：表格裡的 .vh（僅供讀螢幕的「最佳／最差」註記）
+   是 position:absolute，若這層不是定位祖先，它們的包含塊會往上找到 .sec，
+   於是逃出捲動裁切、停在 x=549 把整份文件撐寬。 */
+.tbl{overflow-x:auto;max-width:100%;position:relative}
+
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{
+  font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+  font-weight:600;text-align:left;padding:7px 8px;
+  border-bottom:1px solid var(--line-hi);white-space:nowrap;
+}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top;font-size:var(--t-body)}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+tbody tr.pick{background:var(--panel-3);box-shadow:inset 3px 0 0 var(--fg)}
+tbody tr.void{color:var(--dim);background:var(--red-ghost);box-shadow:inset 3px 0 0 var(--red)}
+
+/* LED 節段長條 */
+.led{height:8px;background:var(--panel-3);border:1px solid var(--line);position:relative;overflow:hidden}
+.led > i{
+  display:block;height:100%;background:var(--fg);
+  -webkit-mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px);
+  mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px);
+  transition:width .35s linear,background .2s linear;
+}
+.led.warn > i{background:var(--fg)}
+.led.crit > i{background:var(--red)}
+
+/* ==========================================================================
+   空 / 載入 / 錯誤
+   Demo 現場最怕的是 API 掛掉但畫面一片空白，看起來像沒寫完。
+   三種狀態都要看得出「系統知道自己現在是什麼情況」。
+   ========================================================================== */
+.empty{
+  color:var(--dimmer);font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;
+}
+
+.loading{padding:26px 16px;text-align:center}
+.loading .t{
+  font-size:var(--t-meta);letter-spacing:.22em;text-transform:uppercase;color:var(--dim);
+}
+.loading .b{
+  width:min(260px,70%);height:5px;background:var(--panel-3);border:1px solid var(--line);
+  margin:16px auto 0;overflow:hidden;
+}
+.loading .b i{display:block;height:100%;width:32%;background:var(--red);animation:sweep 1.15s linear infinite}
+@keyframes sweep{0%{transform:translateX(-105%)}100%{transform:translateX(330%)}}
+
+.errbox{border:1px solid var(--red);background:var(--red-ghost);padding:13px 15px}
+.errbox .t{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--red);font-weight:700;
+}
+.errbox .d{font-family:var(--cjk);font-size:var(--t-meta);color:var(--fg-2);line-height:1.75;margin-top:7px}
+.errbox .d code{font-family:var(--mono);color:var(--fg)}
+
+/* ==========================================================================
+   工具
+   ========================================================================== */
+.stack{display:flex;flex-direction:column}
+.row{display:flex;align-items:center}
+.between{justify-content:space-between}
+.gap4{gap:4px} .gap6{gap:6px} .gap8{gap:8px} .gap12{gap:12px}
+.wrap{flex-wrap:wrap}
+.grow{flex:1 1 auto;min-width:0}
+.mt6{margin-top:6px} .mt10{margin-top:10px} .mt14{margin-top:14px}
+.pre{white-space:pre-wrap;word-break:break-word}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.center{text-align:center}
+.vh{
+  position:absolute;width:1px;height:1px;overflow:hidden;
+  clip-path:inset(50%);white-space:nowrap;
+}
+
+/* ==========================================================================
+   減少動態
+   閃爍的核准警示只是「引起注意」的手段，不是唯一手段：關掉動畫之後
+   紅底 + 危險斜紋 + 文案本身仍然把嚴重性講清楚了。
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+  .blink{opacity:1}
+  .loading .b i{width:100%;transform:none}
+}
+
+/* ==========================================================================
+   列印 / PDF
+   提案書要截圖與轉 PDF，掃描線與雜訊層在紙上只會變成髒污。
+   ========================================================================== */
+@media print{
+  body::before,body::after{display:none}
+  body{background:#fff;color:#000}
+  .sec,.sec-h,.top{background:#fff;color:#000;border-color:#999}
+  .top .synth{background:#000;color:#fff}
+  a{color:#000}
+}
