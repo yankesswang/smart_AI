@@ -29,27 +29,27 @@ const GLYPH = {
 const GW = 4;   // 每字佔的寬度（3 點 + 1 空隙）
 const GH = 5;
 
-/* --------------------------------------------------------------- NES 調色盤 */
+/* ---------------------------------------------------------- 冷鋼灰 / 工業青綠調色盤 */
 const C = {
-  ink:"#101018", white:"#FFFFFF",
-  sky:"#5C94FC", skyHi:"#8CB4FC", cloud:"#FFFFFF", cloudSh:"#B8D4FC",
-  hill:"#00A844", hillHi:"#58D854",
-  brick:"#C84C0C", brickHi:"#E88030", brickLo:"#7C2A08", mortar:"#3A1404",
-  steel:"#8C8C9C", steelHi:"#C8C8D8", steelLo:"#4C4C5C",
-  belt:"#32323C", beltHi:"#5A5A6A", roller:"#A0A0B0",
-  crate:"#E39B2A", crateHi:"#F7C463", crateLo:"#8C5410",
-  boxDone:"#38B8F8", boxDoneHi:"#7CD8FF", boxDoneLo:"#1858A8",
-  lampOk:"#58D854", lampWarn:"#FCD800", lampBad:"#F83800", lampOff:"#3A3A46",
-  hpOk:"#58D854", hpMid:"#FCD800", hpBad:"#F83800", hpBg:"#282830",
-  skin:"#FCB08C", hair:"#3A2A1C", cap:"#E43B44", suit:"#2038EC", vest:"#FF7A1A",
-  helmet:"#FCD800", tool:"#C8C8D8",
-  smoke:"#B0B0C0", smokeBad:"#6C6C7C", spark:"#FCD800",
-  hud:"#000000", hudDim:"#9C9CB4", hazard:"#F83800", hazardAlt:"#FCD800",
-  accentMach:"#2E6BE6", accentPack:"#F08000",
+  ink:"#163044", white:"#F8FAF9",
+  sky:"#D9E2E5", skyHi:"#EEF3F4", cloud:"#F8FAF9", cloudSh:"#C8D4D8",
+  hill:"#9FB1B8", hillHi:"#C8D4D8",
+  brick:"#667E88", brickHi:"#9FB1B8", brickLo:"#314C5D", mortar:"#163044",
+  steel:"#9FB1B8", steelHi:"#D9E2E5", steelLo:"#516B78",
+  belt:"#314C5D", beltHi:"#667E88", roller:"#C8D4D8",
+  crate:"#667E88", crateHi:"#9FB1B8", crateLo:"#314C5D",
+  boxDone:"#0B756E", boxDoneHi:"#77AAA6", boxDoneLo:"#075D58",
+  lampOk:"#0B756E", lampWarn:"#516B78", lampBad:"#163044", lampOff:"#9FB1B8",
+  hpOk:"#0B756E", hpMid:"#516B78", hpBad:"#163044", hpBg:"#D9E2E5",
+  skin:"#C8D4D8", hair:"#163044", cap:"#0B756E", suit:"#314C5D", vest:"#667E88",
+  helmet:"#9FB1B8", tool:"#D9E2E5",
+  smoke:"#9FB1B8", smokeBad:"#516B78", spark:"#0B756E",
+  hud:"#163044", hudDim:"#C8D4D8", hazard:"#0B756E", hazardAlt:"#9FB1B8",
+  accentMach:"#0B756E", accentPack:"#516B78",
   // 監視器專用：室內牆面與地板，以及 CV 疊圖的框線
-  wall:"#26262E", wallHi:"#34343E", wallLo:"#1A1A22",
-  floor:"#3A3A44", floorHi:"#4A4A56", floorLo:"#2A2A32",
-  boxOk:"#58D854", boxBad:"#F83800",
+  wall:"#D9E2E5", wallHi:"#EEF3F4", wallLo:"#C8D4D8",
+  floor:"#C8D4D8", floorHi:"#D9E2E5", floorLo:"#9FB1B8",
+  boxOk:"#0B756E", boxBad:"#163044",
 };
 
 /* 建立一組綁在某個 2D context 上的繪圖工具。

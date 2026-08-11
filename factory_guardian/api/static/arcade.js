@@ -283,7 +283,7 @@ function drawTruck(shipped){
   // 車頭
   box(t.x + t.w - 14, t.y + 6, 14, t.h - 12, C.cap);
   rect(t.x + t.w - 12, t.y + 8, 6, 5, C.boxDoneHi);
-  rect(t.x + t.w - 14, t.y + 6, 14, 1, "#F87878");
+  rect(t.x + t.w - 14, t.y + 6, 14, 1, C.boxDoneHi);
   // 輪子
   [t.x + 4, t.x + 14, t.x + t.w - 8].forEach(x => {
     box(x, A.ground - 7, 7, 7, C.ink);

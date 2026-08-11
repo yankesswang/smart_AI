@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#E9EEF1">
+<meta name="description" content="了解 Factory Guardian AI Demo 的產線配置、設備用途、產品路徑與轉單邏輯。">
+<title>搞懂產線配置 / FACTORY GUARDIAN AI</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/static/factory-line-real.webp" as="image" type="image/webp">
+<link rel="stylesheet" href="/static/hmi.css">
+<style>
+:root{color-scheme:light;--bg:#E9EEF1;--panel:#F8FAF9;--panel-2:#EEF3F4;--panel-3:#E2EAEC;--line:#C8D4D8;--line-hi:#9FB1B8;--line-lo:#D9E2E5;--fg:#163044;--fg-2:#314C5D;--dim:#516B78;--dimmer:#667E88;--accent:#0B756E;--red:var(--accent);--red-deep:#075D58;--red-ghost:rgba(11,117,110,.12);--green:var(--accent);--ink-on:#F8FAF9;--page-max:1440px}
+html{scroll-behavior:smooth}body{background:var(--bg);color:var(--fg)}body::before{background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(22,48,68,.045) 2px 3px)}body::after{opacity:.012}::selection{background:var(--accent);color:var(--ink-on)}
+.factory-page{min-height:100dvh;background:var(--line);display:grid;gap:1px}.top{position:sticky;top:0;z-index:4;max-width:100vw}.top .brand{flex:0 0 auto}.top .fill{min-width:12px}.top .synth{color:var(--ink-on)}
+.hero{background:var(--panel);display:grid;grid-template-columns:minmax(310px,.72fr) minmax(600px,1.5fr);min-height:calc(100dvh - 58px);max-height:860px;overflow:hidden}
+.hero-copy{padding:clamp(34px,5vw,72px) clamp(22px,4.5vw,64px);display:flex;flex-direction:column;justify-content:space-between;gap:36px}.hero-label{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--accent);font-weight:800}.hero h2{font-family:var(--cjk);font-size:clamp(2.4rem,4.7vw,5rem);line-height:1.02;letter-spacing:-.055em;max-width:8ch;margin-top:13px}.hero-lead{font-family:var(--cjk);font-size:clamp(.95rem,1.2vw,1.1rem);line-height:1.72;color:var(--fg-2);max-width:31ch;margin-top:20px}.hero-actions{display:flex;gap:9px;flex-wrap:wrap}.hero-actions a,.closing a{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:9px 15px;border:1px solid var(--line-hi);font-size:var(--t-meta);letter-spacing:.07em;text-transform:uppercase;font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,transform .12s ease}.hero-actions a.primary{background:var(--accent);border-color:var(--accent);color:var(--ink-on)}.hero-actions a:hover,.closing a:hover{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}.hero-actions a:active,.closing a:active{transform:translateY(1px)}
+.hero-map{padding:18px;background:var(--panel-2);display:flex;flex-direction:column;justify-content:center;min-width:0}.factory-photo{background:var(--fg);min-height:0;height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto;overflow:hidden}.factory-photo img{display:block;width:100%;height:100%;min-height:420px;object-fit:cover;object-position:center}.photo-key{display:grid;grid-template-columns:1.1fr .9fr 1fr;gap:1px;background:var(--line)}.photo-key div{background:var(--panel);padding:12px 14px}.photo-key b{display:block;font-size:var(--t-micro);letter-spacing:.08em;color:var(--accent)}.photo-key span{display:block;font-family:var(--cjk);font-size:var(--t-micro);line-height:1.5;color:var(--dim);margin-top:3px}
+.topology-wrap{margin-top:38px;padding:14px;background:var(--panel-3)}.map-meta{display:flex;justify-content:space-between;gap:12px;font-size:var(--t-micro);letter-spacing:.08em;color:var(--dimmer);margin-bottom:10px}.map-meta b{color:var(--fg)}
+.route{display:grid;grid-template-columns:minmax(360px,1.32fr) 92px minmax(220px,.68fr);gap:1px;background:var(--line)}.stage{background:var(--panel);padding:13px}.stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:var(--t-micro);letter-spacing:.07em;color:var(--dimmer)}.stage-head b{color:var(--fg)}.cnc-pair{display:grid;grid-template-columns:1.1fr .9fr;gap:8px}.machine{min-height:176px;padding:15px;background:var(--panel-2);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;gap:15px}.machine.primary{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}.machine-code{font-size:var(--t-micro);letter-spacing:.1em;color:var(--accent);font-weight:800}.machine.primary .machine-code{color:var(--ink-on);opacity:.7}.machine h3{font-family:var(--cjk);font-size:1.12rem;margin-top:5px}.machine p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.58;color:var(--dim)}.machine.primary p{color:var(--ink-on);opacity:.82}.machine-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}.machine-stats span{padding:7px;background:var(--panel);font-size:var(--t-micro);color:var(--dim)}.machine.primary .machine-stats{background:rgba(248,250,249,.2)}.machine.primary .machine-stats span{background:var(--fg);color:var(--ink-on)}.transfer{background:var(--panel-3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:8px}.transfer strong{font-size:1.6rem;color:var(--accent)}.transfer b{font-size:var(--t-micro);letter-spacing:.07em}.transfer span{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.5;color:var(--dim)}.map-caption{padding:11px 13px;background:var(--panel-3);border-left:3px solid var(--accent);font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--fg-2)}
+.section{background:var(--panel);padding:clamp(50px,7vw,94px) clamp(18px,5vw,70px)}.section.alt{background:var(--panel-2)}.inner{max-width:var(--page-max);margin:0 auto}.section h2{font-family:var(--cjk);font-size:clamp(1.9rem,3.7vw,4rem);line-height:1.08;letter-spacing:-.045em;max-width:13ch}.section-intro{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.72;color:var(--fg-2);max-width:47ch;margin-top:15px}
+.machine-layout{display:grid;grid-template-columns:1.12fr .88fr;gap:1px;background:var(--line);margin-top:38px}.machine-feature{background:var(--fg);color:var(--ink-on);display:grid;grid-template-rows:minmax(280px,1fr) auto auto;min-height:650px}.machine-feature>img{display:block;width:100%;height:100%;min-height:280px;object-fit:cover}.machine-feature-copy{padding:clamp(22px,3vw,38px)}.machine-feature .machine-code{color:var(--ink-on);opacity:.7}.machine-feature h3{font-family:var(--cjk);font-size:clamp(1.7rem,3vw,3.2rem);line-height:1.1;margin-top:8px}.machine-feature p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.7;color:var(--ink-on);opacity:.8;max-width:38ch;margin-top:14px}.fact-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(248,250,249,.2)}.fact{background:var(--fg);padding:13px}.fact small{display:block;font-size:var(--t-micro);color:var(--ink-on);opacity:.62}.fact strong{display:block;font-size:1.15rem;margin-top:4px}.machine-support{display:grid;grid-template-rows:1fr 1fr;gap:1px;background:var(--line)}.support-item{background:var(--panel);display:grid;grid-template-columns:minmax(180px,.85fr) minmax(190px,1fr) auto;align-items:stretch;gap:0;min-height:324px}.support-item>img{display:block;width:100%;height:100%;min-height:220px;object-fit:cover}.support-copy{padding:clamp(18px,2.4vw,28px)}.support-item h3{font-family:var(--cjk);font-size:1.25rem;margin-top:5px}.support-item p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);max-width:38ch;margin-top:10px}.support-rate{font-size:1rem;font-weight:800;color:var(--accent);white-space:nowrap;padding:20px 16px;border-left:1px solid var(--line);writing-mode:vertical-rl;text-orientation:mixed}
+.product-routes{display:grid;gap:10px;margin-top:38px}.product-route{display:grid;grid-template-columns:160px minmax(180px,1fr) 54px minmax(180px,.72fr) 150px;align-items:stretch;background:var(--line);gap:1px}.product-name,.route-node,.route-output{background:var(--panel);padding:17px}.product-name b,.route-node b{display:block;font-family:var(--cjk);font-size:var(--t-body)}.product-name span,.route-node span,.route-output span{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);line-height:1.55;margin-top:5px}.product-route .arrow{background:var(--panel-3);display:grid;place-items:center;color:var(--accent);font-size:1.3rem}.route-output{background:var(--accent);color:var(--ink-on);display:flex;flex-direction:column;justify-content:center}.route-output span{color:var(--ink-on);opacity:.8}
+.decision-map{margin-top:38px;display:grid;grid-template-columns:minmax(220px,.78fr) 52px minmax(260px,1fr) 52px minmax(220px,.8fr);align-items:stretch}.decision-node{background:var(--panel-2);border:1px solid var(--line-hi);padding:20px}.decision-node.hot{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}.decision-node b{font-family:var(--cjk);font-size:var(--t-body)}.decision-node p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);margin-top:8px}.decision-node.hot p{color:var(--ink-on);opacity:.78}.decision-arrow{display:grid;place-items:center;color:var(--accent);font-size:1.35rem}.decision-list{margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}.decision-list div{background:var(--panel);padding:15px}.decision-list b{display:block;font-family:var(--cjk);font-size:var(--t-meta)}.decision-list span{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);line-height:1.55;margin-top:5px}
+.closing{background:var(--accent);color:var(--ink-on);padding:clamp(44px,7vw,84px) clamp(18px,5vw,70px)}.closing-inner{max-width:var(--page-max);margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:36px;align-items:end}.closing h2{font-family:var(--cjk);font-size:clamp(2rem,4vw,4.2rem);line-height:1.06;letter-spacing:-.045em;max-width:13ch}.closing p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.7;max-width:40ch;margin-top:14px}.closing a{background:var(--ink-on);border-color:var(--ink-on);color:var(--fg)}
+@media(max-width:1100px){.hero{grid-template-columns:1fr;max-height:none}.hero-copy{min-height:450px}.hero-map{padding:14px}.factory-photo img{min-height:52vw}.route{grid-template-columns:minmax(360px,1.3fr) 82px minmax(210px,.7fr)}.machine-layout{grid-template-columns:1fr}.machine-feature{min-height:auto}.machine-support{grid-template-columns:1fr 1fr;grid-template-rows:auto}.support-item{grid-template-columns:1fr;grid-template-rows:minmax(230px,1fr) auto auto}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:140px minmax(170px,1fr) 46px minmax(170px,.8fr) 130px}}
+@media(max-width:720px){html{scroll-behavior:auto}.top{position:static}.top .brand{width:100%;border-bottom:1px solid var(--line)}.top .fill{display:none}.hero{min-height:auto}.hero-copy{min-height:430px;padding:38px 19px}.hero h2{font-size:clamp(2.4rem,13vw,3.8rem)}.hero-map{padding:8px}.factory-photo img{min-height:62vw}.photo-key{grid-template-columns:1fr}.topology-wrap{padding:9px;margin-top:30px}.map-meta{align-items:flex-start;flex-direction:column}.route{grid-template-columns:1fr}.cnc-pair{grid-template-columns:1fr}.transfer{min-height:72px}.transfer strong{transform:rotate(90deg)}.section{padding:46px 15px}.machine-feature{min-height:auto}.machine-feature>img{min-height:62vw}.machine-support{grid-template-columns:1fr}.support-item{grid-template-columns:1fr;grid-template-rows:auto}.support-item>img{min-height:62vw}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:1fr}.product-route .arrow{min-height:46px}.product-route .arrow span{transform:rotate(90deg)}.decision-map{grid-template-columns:1fr}.decision-arrow{min-height:46px;transform:rotate(90deg)}.decision-list{grid-template-columns:1fr}.closing-inner{grid-template-columns:1fr}.closing a{width:100%}}
+</style>
+</head>
+<body>
+<main class="factory-page">
+  <header class="top">
+    <div class="brand"><h1 class="wordmark">FACTORY&nbsp;GUARDIAN<span class="reg">®</span></h1></div>
+    <div class="slot"><span class="k">Page</span><span class="v">FACTORY CONFIG</span></div>
+    <div class="fill"></div>
+    <div class="slot"><span class="k">Live</span><span class="v"><a href="/">WAR ROOM <span class="gl" aria-hidden="true">▸</span></a></span></div>
+    <div class="slot"><span class="k">System</span><span class="v"><a href="/system">AGENT MECHANISM <span class="gl" aria-hidden="true">▸</span></a></span></div>
+    <div class="slot"><span class="k">Report</span><span class="v"><a href="/benchmark">BENCHMARK <span class="gl" aria-hidden="true">▸</span></a></span></div>
+    <div class="synth"><b>SYNTHETIC FACTORY</b></div>
+  </header>
+
+  <section class="hero" aria-labelledby="factoryTitle">
+    <div class="hero-copy">
+      <div><div class="hero-label">Factory configuration</div><h2 id="factoryTitle">搞懂產線配置</h2><p class="hero-lead">三台機器、兩個製程。先理解設備角色與產品流向，再進入 Agent Demo。</p></div>
+      <div class="hero-actions"><a class="primary" href="/#demoLab">進入 Demo →</a><a href="#machines">查看設備用途</a></div>
+    </div>
+    <div class="hero-map">
+      <figure class="factory-photo">
+        <img src="/static/factory-line-real.webp" width="1600" height="901" alt="現代精密零件產線，左側為兩台封閉式 CNC 加工中心，右側為自動包裝設備與輸送帶">
+        <figcaption class="photo-key"><div><b>M-A / PRIMARY CNC</b><span>主要加工機，Demo 事故位置</span></div><div><b>M-B / FLEX CNC</b><span>可承接轉單的替代機</span></div><div><b>M-C / PACKAGING</b><span>共同下游包裝設備</span></div></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="machines" aria-labelledby="machinesTitle"><div class="inner">
+    <h2 id="machinesTitle">每台機器負責什麼？</h2><p class="section-intro">Agent 不是只看單機警報，它必須知道設備能力、替代關係與維修限制。</p>
+    <div class="topology-wrap" aria-label="LINE-1 產線拓撲圖">
+      <div class="map-meta"><b>LINE-1 / 精密零件產線</b><span>3 MACHINES / 2 STAGES / 2 PRODUCTS</span></div>
+      <div class="route">
+        <div class="stage"><div class="stage-head"><b>CNC 加工站</b><span>並行設備</span></div><div class="cnc-pair">
+          <article class="machine primary"><div><span class="machine-code">M-A / PRIMARY CNC</span><h3>主要加工機</h3></div><p>負責 P-100，Demo 的故障與安全事件發生位置。</p><div class="machine-stats"><span>120 U/HR</span><span>維修 40 MIN</span></div></article>
+          <article class="machine"><div><span class="machine-code">M-B / FLEX CNC</span><h3>替代加工機</h3></div><p>可承接 P-100 與 P-200，也是 Agent 的轉單選項。</p><div class="machine-stats"><span>140 U/HR</span><span>換線 12 MIN</span></div></article>
+        </div></div>
+        <div class="transfer"><strong aria-hidden="true">→</strong><b>半成品</b><span>P-100<br>P-200</span></div>
+        <div class="stage"><div class="stage-head"><b>後段包裝</b><span>共同下游</span></div><article class="machine"><div><span class="machine-code">M-C / PACKAGING</span><h3>後段包裝機</h3></div><p>接收兩台 CNC 的產出，上游停機時會缺料等待。</p><div class="machine-stats"><span>200 U/HR</span><span>兩種產品</span></div></article></div>
+      </div>
+      <p class="map-caption">核心關係：M-A 異常時，M-B 能否承接訂單，決定 M-C 是否持續有料可包裝。</p>
+    </div>
+    <div class="machine-layout">
+      <article class="machine-feature"><img src="/static/factory-machine-a-real.webp" width="1200" height="800" loading="lazy" decoding="async" alt="M-A 主要 CNC 加工機，具有封閉加工室、主軸與實體控制面板"><div class="machine-feature-copy"><span class="machine-code">M-A / PRIMARY CNC</span><h3>主要加工機</h3><p>加工 P-100 精密軸承座。主軸的振動、溫度、電流與轉速，是 Diagnosis Agent 判別軸承劣化或冷卻失效的主要證據。</p></div><div class="fact-grid"><div class="fact"><small>額定產能</small><strong>120 U/HR</strong></div><div class="fact"><small>標準維修</small><strong>40 MIN</strong></div><div class="fact"><small>可生產</small><strong>P-100</strong></div><div class="fact"><small>Demo 角色</small><strong>事故主機</strong></div></div></article>
+      <div class="machine-support">
+        <article class="support-item"><img src="/static/factory-machine-b-real.webp" width="1200" height="800" loading="lazy" decoding="async" alt="M-B 替代 CNC 加工機，配置自動換盤、進料暫存與控制面板"><div class="support-copy"><span class="machine-code">M-B / FLEX CNC</span><h3>替代加工機</h3><p>同時支援 P-100 與 P-200。承接 M-A 訂單前需換線，Agent 會把換線時間與既有排程一起納入方案比較。</p></div><strong class="support-rate">140 U/HR</strong></article>
+        <article class="support-item"><img src="/static/factory-machine-c-real.webp" width="1200" height="800" loading="lazy" decoding="async" alt="M-C 後段自動包裝機，包含零件進料、紙箱成型與出料輸送帶"><div class="support-copy"><span class="machine-code">M-C / PACKAGING</span><h3>後段包裝機</h3><p>兩種產品的共同下游。它本身可能完全正常，卻會因上游停機而缺料，這是 Impact Agent 必須追蹤的連鎖影響。</p></div><strong class="support-rate">200 U/HR</strong></article>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="section alt" aria-labelledby="productsTitle"><div class="inner">
+    <h2 id="productsTitle">產品怎麼走？</h2><p class="section-intro">兩種產品共用包裝站，但加工路徑不同，因此轉單不能只看哪台機器有空。</p>
+    <div class="product-routes">
+      <div class="product-route"><div class="product-name"><b>P-100</b><span>精密軸承座</span></div><div class="route-node"><b>M-A 或 M-B</b><span>主要機或替代機完成 CNC 加工</span></div><div class="arrow"><span aria-hidden="true">→</span></div><div class="route-node"><b>M-C</b><span>後段包裝</span></div><div class="route-output"><b>完成品</b><span>加工與包裝皆完成</span></div></div>
+      <div class="product-route"><div class="product-name"><b>P-200</b><span>通用連接件</span></div><div class="route-node"><b>M-B</b><span>只能由替代加工機生產</span></div><div class="arrow"><span aria-hidden="true">→</span></div><div class="route-node"><b>M-C</b><span>後段包裝</span></div><div class="route-output"><b>完成品</b><span>需保留 M-B 原有產能</span></div></div>
+    </div>
+  </div></section>
+
+  <section class="section" aria-labelledby="decisionTitle"><div class="inner">
+    <h2 id="decisionTitle">這些配置如何影響 Agent？</h2><p class="section-intro">同一個 M-A 異常，處置方案會沿著產線關係影響訂單、下游與安全決策。</p>
+    <div class="decision-map"><div class="decision-node hot"><b>M-A 發生異常</b><p>振動、溫度或工安事件超出可接受範圍。</p></div><div class="decision-arrow" aria-hidden="true">→</div><div class="decision-node"><b>比較處置方案</b><p>繼續降速、停機維修，或把 P-100 訂單轉到 M-B。</p></div><div class="decision-arrow" aria-hidden="true">→</div><div class="decision-node"><b>驗證整線結果</b><p>確認 M-A 安全、M-B 排程可行，且 M-C 沒有缺料。</p></div></div>
+    <div class="decision-list"><div><b>Diagnosis Agent</b><span>用 M-A 感測器與設備手冊判斷根因。</span></div><div><b>Impact Agent</b><span>沿產品路徑計算訂單與 M-C 的下游影響。</span></div><div><b>Planning Agent</b><span>把 M-B 換線與既有 P-200 排程放進模擬。</span></div></div>
+  </div></section>
+
+  <section class="closing"><div class="closing-inner"><div><h2>現在開始看 Agent 處理事故</h2><p>回到 War Room 選擇案例，畫面會依序聚焦每個 Agent 的判斷與執行結果。</p></div><a href="/#demoLab">前往 Demo →</a></div></section>
+</main>
+</body>
+</html>

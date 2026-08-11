@@ -239,6 +239,35 @@ factory-guardian serve      # http://127.0.0.1:8000
 
 ---
 
+## TabFM 時序預測
+
+Dashboard 的「預測」分頁會把現有遙測歷史轉為 supervised temporal table：
+`value / lag_1 / lag_3 / rolling mean / rolling std / slope / factory KPI`，再預測指定機台的
+health、temperature、vibration、current 或 rpm。資料來源仍是 Agent 可見的 `/api/state.history`，
+不會讀取 Digital Twin 的故障標籤或 `fault_progress`。
+
+Runtime 採 adapter 設計：
+
+- `auto`：TabFM 可用時走官方 `TabFMRegressor`，否則明確降級為 Ridge 時序基線。
+- `tabfm`：官方 [google-research/tabfm](https://github.com/google-research/tabfm)；目前需 Python 3.11+，依官方方式從原始碼安裝 backend。
+- `ridge`：無額外 ML dependency 的確定性基線，供本機 Demo、CI 與模型服務故障時使用。
+
+```bash
+# 另建 Python 3.11+ 的模型環境；CPU 可選 JAX 或 PyTorch backend
+git clone https://github.com/google-research/tabfm.git
+cd tabfm
+pip install -e '.[pytorch]'
+
+# Factory Guardian 會 lazy-load，不安裝也不影響監控與 Agent 閉環
+export FACTORY_GUARDIAN_TABFM_BACKEND=pytorch
+```
+
+> TabFM 程式碼是 Apache-2.0，但官方 v1.0.0 預訓練權重為
+> `tabfm-non-commercial-v1.0`，只允許非商業、非 production 使用。正式商用部署需替換為
+> 具合適授權的自有 checkpoint／模型服務；API 與前端不需改動。
+
+---
+
 ## 主要 API
 
 | 端點 | 用途 |
@@ -254,6 +283,8 @@ factory-guardian serve      # http://127.0.0.1:8000
 | `GET /api/knowledge/search?q=` | 手冊 / SOP / 維修紀錄檢索 |
 | `GET /api/audit` | 稽核軌跡 |
 | `POST /api/benchmark` | 對照組比較 |
+| `GET /api/prediction/models` | 可用模型、runtime 狀態、授權提示與預測目標 |
+| `POST /api/prediction/forecast` | 指定機台、目標、horizon 與模型執行時序預測 |
 
 `/api/session/*` 就是規格中的 **Simulator API**。真實導入時由 OPC-UA / MQTT / MES Adapter 取代，
 Agent 層完全不動 —— 這是「Hardware-agnostic Agentic Factory Operations Architecture」的具體介面。
@@ -272,6 +303,7 @@ Agent 層完全不動 —— 這是「Hardware-agnostic Agentic Factory Operatio
 | `FG_SEED` | `20260809` | 模擬亂數種子（決定性） |
 | `FG_TICK_SECONDS` | `60` | 一個 tick 代表幾秒模擬時間 |
 | `FG_NO_DOTENV` | — | 設 `1` 不讀 `.env`（測試用） |
+| `FACTORY_GUARDIAN_TABFM_BACKEND` | `pytorch` | 官方 TabFM adapter 使用 `pytorch` 或 `jax` backend |
 
 ---
 

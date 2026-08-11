@@ -81,7 +81,7 @@ function drawFloor() {
    一列只畫十來個 rect，不是逐點填 —— 逐點在 60fps 下會燒掉一顆核心。 */
 function drawHazardZone(active, blink) {
   const on = active ? (blink ? C.hazard : C.hazardAlt) : C.hazardAlt;
-  const off = active ? C.ink : "#2A2A20";
+  const off = active ? C.ink : C.steelLo;
   const period = 8, run = 4;
   for (let i = 0; i < ZONE.h; i++) {
     const t = i / ZONE.h, y = ZONE.y + i;

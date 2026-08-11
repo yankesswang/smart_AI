@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..agents.base import AgentContext
@@ -50,6 +51,8 @@ class DemoSession:
         self.last_loop: LoopResult | None = None
         self.live: dict[str, Any] = {}     # 閉環進行中的各階段產出（供頁面重新整理後還原）
         self.history: list[dict[str, Any]] = []      # 給前端畫趨勢圖用的時間序列
+        self.machine_logs: list[dict[str, Any]] = []  # 給 Demo / 外部 adapter 的機台遙測批次
+        self.started_at = datetime.now(timezone.utc)
         self.reset()
 
     # ------------------------------------------------------------------ 生命週期
@@ -72,10 +75,13 @@ class DemoSession:
             self.last_loop = None
             self.live = {}
             self.history = []
+            self.machine_logs = []
+            self.started_at = datetime.now(timezone.utc)
             self.scenario_id = scenario_id
             if scenario_id:
                 self.twin.schedule(get_scenario(scenario_id).injections)
         self._record_history()
+        self._record_machine_logs(self.twin.snapshot(), source="session_reset")
         self._push("reset", {"scenario_id": scenario_id, "run_id": self.audit.run_id})
         return self.state()
 
@@ -105,6 +111,7 @@ class DemoSession:
             self.orch.monitoring.detect(snapshot, self.twin.topo)
             self.orch.safety.perceive(snapshot)
             self._record_history()
+            self._record_machine_logs(snapshot, source="simulator_tick")
         self._push("tick", {"tick": self.twin.tick})
         return self.state()
 
@@ -193,6 +200,65 @@ class DemoSession:
             if len(self.history) > 400:
                 del self.history[: len(self.history) - 400]
 
+    def _record_machine_logs(self, snapshot: Any, source: str) -> None:
+        """把一個 Twin snapshot 轉成接近 PLC/MES 的遙測批次。
+
+        這裡只使用 Agent 可見的 snapshot，不會把 fault、fault_progress 或
+        其他 Ground Truth 寫進 Demo log。每個 tick 對每台機台產生一筆心跳，
+        方便畫面展示，也讓未來替換成 OPC-UA/MQTT adapter 時保持相同 schema。
+        """
+        timestamp = self.started_at + timedelta(minutes=snapshot.sim_minutes)
+        rows: list[dict[str, Any]] = []
+        for machine_id, machine in snapshot.machines.items():
+            worst_band = machine.worst_band.value
+            if not machine.online:
+                message = "machine offline / maintenance state"
+            elif worst_band == "critical":
+                message = "sensor threshold exceeded"
+            elif worst_band == "warning":
+                message = "sensor deviation detected"
+            else:
+                message = "heartbeat nominal"
+            rows.append({
+                "timestamp": timestamp.isoformat(timespec="seconds"),
+                "tick": snapshot.tick,
+                "sim_minutes": round(snapshot.sim_minutes, 1),
+                "source": source,
+                "machine_id": machine_id,
+                "machine_name": machine.name,
+                "state": machine.state.value,
+                "online": machine.online,
+                "health": round(machine.health, 1),
+                "utilization_pct": round(machine.utilization_pct, 1),
+                "production_rate_uph": round(machine.production_rate_uph, 1),
+                "worst_band": worst_band,
+                "message": message,
+                "readings": {
+                    name: {
+                        "value": reading.value,
+                        "unit": reading.unit,
+                        "band": reading.band.value,
+                    }
+                    for name, reading in machine.readings.items()
+                },
+            })
+        with self._lock:
+            self.machine_logs.extend(rows)
+            if len(self.machine_logs) > 1200:
+                del self.machine_logs[: len(self.machine_logs) - 1200]
+
+    def logs_since(self, since_tick: int = 0, machine_id: str | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            return [
+                row for row in self.machine_logs
+                if row["tick"] >= since_tick and (machine_id is None or row["machine_id"] == machine_id)
+            ]
+
+    def prediction_history(self) -> list[dict[str, Any]]:
+        """Return an immutable snapshot for model inference outside the session lock."""
+        with self._lock:
+            return [point.copy() for point in self.history]
+
     def state(self) -> dict[str, Any]:
         snapshot = self.twin.snapshot()
         monitoring = self.orch.monitoring.snapshot_summary(snapshot, self.twin.topo)
@@ -208,6 +274,7 @@ class DemoSession:
             "last_loop": self.last_loop.to_dict() if self.last_loop else None,
             "live": self.live,
             "history": self.history[-120:],
+            "machine_logs": self.machine_logs[-120:],
             "settings": self.settings.describe(),
         }
 

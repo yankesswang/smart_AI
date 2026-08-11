@@ -25,6 +25,8 @@ from ..config import get_settings
 from ..knowledge.corpus import MAINTENANCE_HISTORY, MANUALS
 from ..knowledge.retriever import default_kb
 from ..policy.engine import PolicyEngine
+from ..prediction import ForecastRequest as ForecastSpec
+from ..prediction import ForecastService
 from ..twin.faults import FAULTS
 from ..twin.scenarios import SCENARIOS
 from .session import DemoSession
@@ -62,6 +64,14 @@ class BenchmarkRequest(BaseModel):
     scenario_ids: list[str] | None = None
 
 
+class PredictionRequest(BaseModel):
+    machine_id: str
+    target: str = "health"
+    horizon: int = Field(default=12, ge=1, le=60)
+    context_window: int = Field(default=60, ge=8, le=100)
+    model: str = "auto"
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
@@ -70,6 +80,7 @@ def create_app() -> FastAPI:
         description="Agentic AI 智慧工廠自主營運與風險管理平台（競賽 MVP）",
     )
     session = DemoSession(settings=settings)
+    prediction = ForecastService()
     app.state.session = session
 
     # ---------------------------------------------------------------- 基本資訊
@@ -186,6 +197,46 @@ def create_app() -> FastAPI:
     def events(since: int = 0) -> dict[str, Any]:
         return {"events": session.events_since(since), "seq": session.seq}
 
+    @app.get("/api/logs")
+    def logs(since_tick: int = 0, machine_id: str | None = None) -> dict[str, Any]:
+        """回傳由數位孿生產生的機台 telemetry log，不含 Ground Truth。"""
+        return {
+            "logs": session.logs_since(since_tick=since_tick, machine_id=machine_id),
+            "latest_tick": session.twin.tick,
+            "schema": "synthetic-machine-telemetry/v1",
+            "disclaimer": DATA_DISCLAIMER,
+        }
+
+    # ---------------------------------------------------------------- 預測
+    @app.get("/api/prediction/models")
+    def prediction_models() -> dict[str, Any]:
+        """列出 runtime 能力；不會因 TabFM 未安裝而讓主系統無法啟動。"""
+        return prediction.models()
+
+    @app.post("/api/prediction/forecast")
+    def prediction_forecast(req: PredictionRequest) -> dict[str, Any]:
+        if req.machine_id not in session.twin.topo.machines:
+            raise HTTPException(404, f"未知機台 {req.machine_id}")
+        try:
+            result = prediction.forecast(
+                session.prediction_history(),
+                ForecastSpec(
+                    machine_id=req.machine_id,
+                    target=req.target,
+                    horizon=req.horizon,
+                    context_window=req.context_window,
+                    model=req.model,
+                ),
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        session.audit.log(
+            "forecast", "prediction-service", machine_id=req.machine_id,
+            target=req.target, runtime=result["runtime"], horizon=req.horizon,
+            fallback=result["fallback"],
+        )
+        return result
+
     @app.get("/api/stream")
     async def stream(since: int = 0) -> StreamingResponse:
         async def generator():
@@ -251,6 +302,11 @@ def create_app() -> FastAPI:
     def system_page() -> HTMLResponse:
         """Agent 機制、問題定義與安全治理說明頁。"""
         return _page("system.html")
+
+    @app.get("/factory", response_class=HTMLResponse)
+    def factory_page() -> HTMLResponse:
+        """工廠產線配置、設備用途與產品路徑說明頁。"""
+        return _page("factory.html")
 
     return app
 
