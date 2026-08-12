@@ -7,7 +7,9 @@ name = "factory-guardian"
 version = "0.1.0"
 description = "Factory Guardian AI — Agentic AI 智慧工廠自主營運與風險管理平台（競賽 MVP）"
 readme = "README.md"
-requires-python = ">=3.10"
+# TabFM 需要 3.11+；主系統本身不用那麼新，但統一版本才不會出現
+# 「用錯直譯器 → TabFM 靜默降級成 Ridge」這種難查的落差。
+requires-python = ">=3.11"
 dependencies = [
     "networkx>=3.2",
     "openai>=1.30",
@@ -21,9 +23,33 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "httpx>=0.27"]
+# TabFM 時序預測 runtime。未安裝時 ForecastService 會降級為 Ridge 基線，
+# 主系統與 Agent 閉環不受影響，所以刻意留在 optional。
+# jax 是必要的：tabfm 的型別註解用到 jaxtyping.Array，而該符號只在
+# JAX 存在時才會被 re-export，純 pytorch 安裝會在 import 期就失敗。
+# torch 要直接列在這裡（而不是只靠 tabfm[pytorch] 遞移帶進來），
+# 否則下面 [tool.uv.sources] 的 CPU index 綁不上去，會裝到 2.5GB 的 CUDA wheel。
+tabfm = [
+    "tabfm @ git+https://github.com/google-research/tabfm.git",
+    "torch",
+    "jax",
+    "jaxlib",
+    "safetensors",
+]
 
 [project.scripts]
 factory-guardian = "factory_guardian.cli:main"
+
+# torch 預設會拉 CUDA wheel（~2.5GB）。這個 forecast 每次只跑幾十列，
+# CPU 綽綽有餘，所以固定走 CPU-only index 省磁碟。
+# 要改用 GPU 的話移除這兩段並重跑 uv sync。
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
 
 [tool.setuptools.packages.find]
 include = ["factory_guardian*"]

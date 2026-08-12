@@ -13,14 +13,20 @@
 
 ## 60 秒上手
 
-```bash
-pip install -e ".[dev]"
+環境由 [uv](https://docs.astral.sh/uv/) 管理；`uv sync` 會依 `.python-version`（3.12）
+自動取得直譯器並照 `uv.lock` 還原相依，不需要事先建 venv。
 
-factory-guardian demo bearing-degradation     # 舞台 Demo：完整閉環 + 互動核准
-factory-guardian benchmark                    # 三組對照組 KPI 比較
-factory-guardian serve                        # Web Dashboard → http://127.0.0.1:8000
-pytest -q                                     # 102 個測試，離線 4 秒跑完
+```bash
+uv sync --extra dev                                # 建立環境（不含 TabFM）
+
+uv run factory-guardian demo bearing-degradation   # 舞台 Demo：完整閉環 + 互動核准
+uv run factory-guardian benchmark                  # 三組對照組 KPI 比較
+uv run factory-guardian serve                      # Web Dashboard → http://127.0.0.1:8000
+uv run pytest -q                                   # 122 個測試，離線 5 秒跑完
 ```
+
+`uv run` 一律走專案環境。若改用系統 `python3`／`pip`，會因直譯器不符而
+讓 TabFM 靜默降級成 Ridge 基線——這是最容易誤判成「模型壞掉」的狀況。
 
 不需要 OpenAI 金鑰也能跑完整 Demo：沒有金鑰時 LLM 敘述會自動退回**確定性離線敘述器**。
 有金鑰（`.env` 的 `OPENAI_API_KEY`）則會用 LLM 產生更自然的說明文字 —— 但 LLM 的角色僅止於此。
@@ -108,14 +114,34 @@ min–max 是相對比較：候選方案在某個準則上差距很小時，正�
 而且反事實比較只在「什麼都不做」本身合法時才成立 —— 工安事件本來就是用產能換安全，
 那不是失敗，那正是系統該做的事。
 
-### 5. 診斷靠數值指紋，RAG 只提供證據
+### 5. 診斷的知識來自手冊與交機記錄，不是模擬器參數
 
-三份手冊都會提到同樣那四個訊號，純文字相似度的鑑別力很有限。
-所以排名由**感測器指紋餘弦相似度（0.75）**主導，加上**歷史先驗（0.15）**與
-**文件支持度（0.10）**。RAG 的價值在於產生可引用的 Evidence，而不是決定答案。
+這是整個系統可信度的根。**Agent 沒有拿到答案，所以它會真的判錯。**
 
-信心度另外會被訊號強度壓抑：訊號還微弱時，即使指紋指向某個故障也不該給 90% 信心。
-Orchestrator 因此會在信心不足時**先繼續觀察**（`confirm_diagnosis`），不急著動設備。
+早期版本把模擬器的故障參數（`FAULTS[].deltas`）除以 scale 當成「感測器指紋」給 Agent 比對。
+那在數學上站不住腳：模擬器產生訊號用的是同一份 deltas，觀測向量與指紋共線，
+而餘弦相似度對純量免疫 —— 正確答案的餘弦**恆等於 1.0**。那是查表，不是診斷。
+
+現在診斷分三步，全部只用工程師手上真的會有的東西：
+
+1. **以「這台機器自己的交機基準」算偏離量**（`knowledge/commissioning.py`）。
+   M-A 振動基準 1.9 mm/s、M-B 2.6 mm/s —— 同型號但安裝條件不同。
+   同樣讀到 3.6 mm/s，對 M-A 是明顯劣化，對 M-B 還在正常散布內。
+   套用通用門檻會同時造成漏檢與誤報，這是真實預測性維護的核心問題。
+
+2. **比對手冊徵兆區間與鑑別診斷規則**（`knowledge/symptom_spec.py`）。
+   手冊寫的是**區間**不是點值，區間中心刻意偏離模擬器參數 19~25%
+   （設備商用他們的試驗機寫的，跟你廠裡這台不會一樣），且三種故障的區間**大幅重疊**
+   —— 現實中它們都會溫升。因此排名權重最高的是**鑑別診斷規則（0.44）**：
+   用 ΔVib/ΔTemp、ΔRPM/ΔCurrent 這類**比值**分辨徵兆重疊的故障，
+   這才是工程師真正的判準。其餘為手冊區間符合度 0.38、歷史先驗 0.10、RAG 文件支持 0.08。
+
+3. **信心度被訊號強度壓抑**：訊號還微弱時不該給 90% 信心。
+   Orchestrator 因此會在信心不足時**先繼續觀察**（`confirm_diagnosis`），不急著動設備。
+
+耦合已切斷的證明寫成測試（`test_manual_symptom_ranges_are_decoupled_from_simulator_deltas`、
+`test_diagnosis_never_imports_simulator_fault_parameters`），改壞會被擋下來。
+典型信心度因此落在 51~81% 而非逼近 100% —— 那個較低的數字才是誠實的。
 
 ---
 
@@ -131,7 +157,7 @@ factory-guardian demo bearing-degradation
 | 1 | 注入 Bearing Degradation | Simulator 逐步提高 Vibration / Temperature |
 | 2 | **Detect** T+3 min | Monitoring Agent 觸發 WARNING（threshold + trend + health） |
 | 3 | **Confirm** 續觀察 2 min | 信心度未達 0.65，先累積證據不動設備 |
-| 4 | **Diagnose** 軸承劣化 69% | 指紋比對 + 歷史先驗 + 手冊/SOP/案例 Evidence |
+| 4 | **Diagnose** 軸承劣化 80% | 交機基準 → 手冊區間 + 鑑別規則 + 歷史先驗，附可引用 Evidence |
 | 5 | **Impact** ORD-A001 交期風險 | Knowledge Graph 追出受影響訂單 |
 | 6 | **Plan** 4 個方案 | 每個方案在信念模型上乾跑 30 分鐘 |
 | 7 | **Safety** PLAN-A BLOCK | 預測振動將達 14.18 mm/s → 硬限制否決 |
@@ -206,8 +232,10 @@ factory-guardian serve      # http://127.0.0.1:8000
   疊在人身上的 CV 偵測框標的是 `confidence`。VLM 後端換成真模型時這裡一行都不用改
 - 三台機台的感測器遙測，含階梯式 sparkline、LED 節段健康度條
 - **六格步驟卡可展開推理**：每一步點開後看得到「看到什麼 → 怎麼算 → 為什麼不是別的 → 結論」。
-  診斷那格會把 88% 拆成算式（指紋餘弦 × 0.75 ＋ 歷史先驗 × 0.15 ＋ 文件支持 × 0.10），
-  並列出落選候選各自的餘弦值；方案那格拆出六個準則的加權貢獻與落後幅度；
+  診斷那格會顯示判讀所依據的交機驗收記錄、逐項列出每個訊號與手冊區間的比對結果
+  （「溫度 +31.5，手冊區間 +9~+33 ✓」）、每條鑑別規則的比值，
+  再把信心度拆成算式（鑑別規則 × 0.44 ＋ 手冊區間 × 0.38 ＋ 歷史先驗 × 0.10 ＋ 文件支持 × 0.08），
+  並列出落選候選輸在哪一項；方案那格拆出六個準則的加權貢獻與落後幅度；
   工安那格逐條列出 `SR-xx` 規則與擋下的理由。全部取自後端算過的數字，前端不補敘述
 - Agent 閉環八階段軌跡即時點亮（進行中反白、被擋下轉紅）
 - 根因候選信心度條、LLM 敘述、可引用的 Evidence 清單
@@ -249,18 +277,27 @@ health、temperature、vibration、current 或 rpm。資料來源仍是 Agent �
 Runtime 採 adapter 設計：
 
 - `auto`：TabFM 可用時走官方 `TabFMRegressor`，否則明確降級為 Ridge 時序基線。
-- `tabfm`：官方 [google-research/tabfm](https://github.com/google-research/tabfm)；目前需 Python 3.11+，依官方方式從原始碼安裝 backend。
+- `tabfm`：官方 [google-research/tabfm](https://github.com/google-research/tabfm)；需 Python 3.11+，故專案的 `requires-python` 也定為 `>=3.11`。
 - `ridge`：無額外 ML dependency 的確定性基線，供本機 Demo、CI 與模型服務故障時使用。
 
 ```bash
-# 另建 Python 3.11+ 的模型環境；CPU 可選 JAX 或 PyTorch backend
-git clone https://github.com/google-research/tabfm.git
-cd tabfm
-pip install -e '.[pytorch]'
+# TabFM 是 optional extra，直接從官方 repo 安裝，不需另外 clone
+uv sync --extra dev --extra tabfm
 
-# Factory Guardian 會 lazy-load，不安裝也不影響監控與 Agent 閉環
-export FACTORY_GUARDIAN_TABFM_BACKEND=pytorch
+uv run factory-guardian serve      # 預測分頁即可選 TabFM runtime
 ```
+
+安裝後 `GET /api/prediction/models` 的 `tabfm.available` 會變成 `true`；
+仍顯示降級訊息就代表跑的不是這個環境。
+
+實作細節：
+
+- `torch` 固定走 CPU-only index（`[tool.uv.sources]`），避免拉進約 2.5GB 的 CUDA wheel。
+  這個 forecast 每次只有數十列，CPU 已足夠；要用 GPU 就移除該設定再 `uv sync`。
+- extra 必須包含 `jax`／`jaxlib`：TabFM 的型別註解用到 `jaxtyping.Array`，
+  而該符號只在 JAX 存在時才被 re-export，純 PyTorch 安裝會在 import 期就失敗。
+- 首次推論需下載並載入權重（約 8 秒），之後同一個 process 內不再重複支付。
+- `FACTORY_GUARDIAN_TABFM_BACKEND` 預設 `pytorch`，可切換為 `jax`。
 
 > TabFM 程式碼是 Apache-2.0，但官方 v1.0.0 預訓練權重為
 > `tabfm-non-commercial-v1.0`，只允許非商業、非 production 使用。正式商用部署需替換為
