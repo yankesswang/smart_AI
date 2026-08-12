@@ -22,6 +22,7 @@ from .. import DATA_DISCLAIMER, __version__
 from ..audit import load_audit, summarize_audit
 from ..benchmark import MODE_LABELS, REPORT_COLUMNS, run_benchmark
 from ..config import get_settings
+from ..knowledge.commissioning import COMMISSIONING
 from ..knowledge.corpus import MAINTENANCE_HISTORY, MANUALS
 from ..knowledge.retriever import default_kb
 from ..policy.engine import PolicyEngine
@@ -140,8 +141,40 @@ def create_app() -> FastAPI:
         return {
             "stats": kb.stats(),
             "manuals": [
-                {"ref": d.ref, "title": d.title, "type": d.doc_type, "fault_ids": list(d.fault_ids), "synthetic": d.synthetic}
+                {
+                    "ref": d.ref,
+                    "title": d.title,
+                    "type": d.doc_type,
+                    "machine_ids": list(d.machine_ids),
+                    "fault_ids": list(d.fault_ids),
+                    "body": d.body,
+                    "synthetic": d.synthetic,
+                }
                 for d in MANUALS
+            ],
+            # 交機驗收記錄：判讀基準的來源，前端要能逐台對照
+            "commissioning": [
+                {
+                    "doc_id": r.doc_id,
+                    "machine_id": r.machine_id,
+                    "model": r.model,
+                    "serial_no": r.serial_no,
+                    "installed_on": r.installed_on,
+                    "commissioned_by": r.commissioned_by,
+                    "baselines": [
+                        {
+                            "signal": b.signal,
+                            "unit": b.unit,
+                            "baseline": b.baseline,
+                            "tolerance": b.tolerance,
+                            "condition": b.condition,
+                        }
+                        for b in r.baselines
+                    ],
+                    "note": r.note,
+                    "synthetic": r.synthetic,
+                }
+                for r in COMMISSIONING
             ],
             "history_sample": [c.as_text() for c in MAINTENANCE_HISTORY[:5]],
             "disclaimer": DATA_DISCLAIMER,

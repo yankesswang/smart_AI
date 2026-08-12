@@ -17,6 +17,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
 
+from .commissioning import COMMISSIONING, CommissioningRecord
 from .corpus import MAINTENANCE_HISTORY, MANUALS, MaintenanceCase, ManualDoc
 
 _LATIN = re.compile(r"[A-Za-z][A-Za-z0-9\-_.]*|\d+(?:\.\d+)?")
@@ -66,9 +67,11 @@ class KnowledgeBase:
         self,
         manuals: Iterable[ManualDoc] = MANUALS,
         history: Iterable[MaintenanceCase] = MAINTENANCE_HISTORY,
+        commissioning: Iterable[CommissioningRecord] = COMMISSIONING,
     ) -> None:
         self.manuals = tuple(manuals)
         self.history = tuple(history)
+        self.commissioning = tuple(commissioning)
         self.chunks: list[Chunk] = []
         self._build_chunks()
         self._tf: list[Counter[str]] = [Counter(tokenize(c.title + "。" + c.text)) for c in self.chunks]
@@ -92,6 +95,20 @@ class KnowledgeBase:
                         fault_ids=doc.fault_ids,
                     )
                 )
+        # 交機驗收記錄：判讀基準的來源，也必須可被檢索與引用。
+        # fault_ids 留空 —— 驗收記錄不指向任何特定故障，它描述的是「這台機器的正常」。
+        for rec in self.commissioning:
+            self.chunks.append(
+                Chunk(
+                    chunk_id=rec.doc_id,
+                    source="commissioning",
+                    ref=rec.doc_id,
+                    title=f"設備安裝驗收記錄 {rec.machine_id}（{rec.model}）",
+                    text=rec.as_text(),
+                    machine_ids=(rec.machine_id,),
+                    fault_ids=(),
+                )
+            )
         for case in self.history:
             self.chunks.append(
                 Chunk(
@@ -203,6 +220,7 @@ class KnowledgeBase:
     def stats(self) -> dict[str, int]:
         return {
             "manuals": len(self.manuals),
+            "commissioning_records": len(self.commissioning),
             "history_cases": len(self.history),
             "chunks": len(self.chunks),
             "vocabulary": len(self._idf),

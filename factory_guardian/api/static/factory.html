@@ -21,29 +21,45 @@ html{scroll-behavior:smooth}body{background:var(--bg);color:var(--fg)}body::befo
 .route{display:grid;grid-template-columns:minmax(360px,1.32fr) 92px minmax(220px,.68fr);gap:1px;background:var(--line)}.stage{background:var(--panel);padding:13px}.stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:var(--t-micro);letter-spacing:.07em;color:var(--dimmer)}.stage-head b{color:var(--fg)}.cnc-pair{display:grid;grid-template-columns:1.1fr .9fr;gap:8px}.machine{min-height:176px;padding:15px;background:var(--panel-2);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;gap:15px}.machine.primary{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}.machine-code{font-size:var(--t-micro);letter-spacing:.1em;color:var(--accent);font-weight:800}.machine.primary .machine-code{color:var(--ink-on);opacity:.7}.machine h3{font-family:var(--cjk);font-size:1.12rem;margin-top:5px}.machine p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.58;color:var(--dim)}.machine.primary p{color:var(--ink-on);opacity:.82}.machine-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}.machine-stats span{padding:7px;background:var(--panel);font-size:var(--t-micro);color:var(--dim)}.machine.primary .machine-stats{background:rgba(248,250,249,.2)}.machine.primary .machine-stats span{background:var(--fg);color:var(--ink-on)}.transfer{background:var(--panel-3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:8px}.transfer strong{font-size:1.6rem;color:var(--accent)}.transfer b{font-size:var(--t-micro);letter-spacing:.07em}.transfer span{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.5;color:var(--dim)}.map-caption{padding:11px 13px;background:var(--panel-3);border-left:3px solid var(--accent);font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--fg-2)}
 .section{background:var(--panel);padding:clamp(50px,7vw,94px) clamp(18px,5vw,70px)}.section.alt{background:var(--panel-2)}.inner{max-width:var(--page-max);margin:0 auto}.section h2{font-family:var(--cjk);font-size:clamp(1.9rem,3.7vw,4rem);line-height:1.08;letter-spacing:-.045em;max-width:13ch}.section-intro{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.72;color:var(--fg-2);max-width:47ch;margin-top:15px}
 .machine-layout{display:grid;grid-template-columns:1.12fr .88fr;gap:1px;background:var(--line);margin-top:38px}.machine-feature{background:var(--fg);color:var(--ink-on);display:grid;grid-template-rows:minmax(280px,1fr) auto auto;min-height:650px}.machine-feature>img{display:block;width:100%;height:100%;min-height:280px;object-fit:cover}.machine-feature-copy{padding:clamp(22px,3vw,38px)}.machine-feature .machine-code{color:var(--ink-on);opacity:.7}.machine-feature h3{font-family:var(--cjk);font-size:clamp(1.7rem,3vw,3.2rem);line-height:1.1;margin-top:8px}.machine-feature p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.7;color:var(--ink-on);opacity:.8;max-width:38ch;margin-top:14px}.fact-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:rgba(248,250,249,.2)}.fact{background:var(--fg);padding:13px}.fact small{display:block;font-size:var(--t-micro);color:var(--ink-on);opacity:.62}.fact strong{display:block;font-size:1.15rem;margin-top:4px}.machine-support{display:grid;grid-template-rows:1fr 1fr;gap:1px;background:var(--line)}.support-item{background:var(--panel);display:grid;grid-template-columns:minmax(180px,.85fr) minmax(190px,1fr) auto;align-items:stretch;gap:0;min-height:324px}.support-item>img{display:block;width:100%;height:100%;min-height:220px;object-fit:cover}.support-copy{padding:clamp(18px,2.4vw,28px)}.support-item h3{font-family:var(--cjk);font-size:1.25rem;margin-top:5px}.support-item p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);max-width:38ch;margin-top:10px}.support-rate{font-size:1rem;font-weight:800;color:var(--accent);white-space:nowrap;padding:20px 16px;border-left:1px solid var(--line);writing-mode:vertical-rl;text-orientation:mixed}
+/* ---- 設備文件（手冊 / SOP / 交機驗收記錄）---- */
+/* 標題與說明並排，避免把文件內容推到螢幕外 */
+.docs-head{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(280px,1fr);gap:clamp(16px,3vw,44px);align-items:end}.docs-head h2{max-width:none}.docs-head .section-intro{margin-top:0;max-width:56ch}
+.doc-tabs{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);margin-top:22px;border:1px solid var(--line)}.doc-tab{background:var(--panel-2);border:0;padding:11px 17px;font-family:inherit;font-size:var(--t-meta);letter-spacing:.06em;font-weight:800;text-transform:uppercase;color:var(--dim);cursor:pointer;transition:background .16s ease,color .16s ease}.doc-tab:hover,.doc-tab:hover:not(:disabled){background:var(--panel-3);color:var(--fg);border-color:var(--line)}.doc-tab[aria-selected="true"]:hover{background:var(--fg);color:var(--ink-on)}.doc-tab[aria-selected="true"]{background:var(--fg);color:var(--ink-on)}.doc-tab b{color:var(--accent);margin-left:7px;font-size:var(--t-micro)}.doc-tab[aria-selected="true"] b{color:var(--ink-on);opacity:.65}
+.doc-layout{display:grid;grid-template-columns:minmax(240px,.42fr) minmax(320px,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-top:0}
+.doc-list{background:var(--panel-2);max-height:620px;overflow-y:auto;display:grid;grid-auto-rows:max-content;gap:1px}.doc-item{background:var(--panel);border:0;border-left:3px solid transparent;padding:13px 15px;text-align:left;font-family:inherit;cursor:pointer;display:grid;gap:4px;transition:background .16s ease}/* hmi.css 有全域 button:hover 深底樣式，這裡必須明確覆蓋，否則整列會變黑底黑字 */
+.doc-item:hover,.doc-item:hover:not(:disabled){background:var(--panel-3);color:var(--fg);border-left-color:var(--line-hi)}
+.doc-item:hover .doc-name{color:var(--fg)}.doc-item:hover .doc-ref{color:var(--accent)}
+.doc-item[aria-current="true"]:hover{border-left-color:var(--accent)}.doc-item[aria-current="true"]{background:var(--panel-3);border-left-color:var(--accent)}.doc-ref{font-size:var(--t-micro);letter-spacing:.09em;color:var(--accent);font-weight:800}.doc-name{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.5;color:var(--fg)}.doc-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}.doc-tag{font-size:var(--t-micro);letter-spacing:.05em;padding:2px 6px;background:var(--panel-3);color:var(--dim);border:1px solid var(--line)}.doc-item[aria-current="true"] .doc-tag{background:var(--panel-2)}
+.doc-view{background:var(--panel);padding:clamp(20px,3vw,34px);min-height:420px}.doc-view-head{border-bottom:1px solid var(--line);padding-bottom:15px}.doc-view-head h3{font-family:var(--cjk);font-size:clamp(1.2rem,2vw,1.75rem);line-height:1.25;margin-top:7px}.doc-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:11px;font-size:var(--t-micro);color:var(--dimmer)}.doc-meta span b{color:var(--fg-2);font-weight:700}
+.doc-body{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.85;color:var(--fg-2);margin-top:17px;white-space:pre-wrap;word-break:break-word}.doc-body strong{color:var(--fg);font-weight:800}
+.base-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;background:var(--line);margin-top:17px}.base-cell{background:var(--panel-2);padding:13px}.base-sig{font-size:var(--t-micro);letter-spacing:.08em;color:var(--accent);font-weight:800;text-transform:uppercase}.base-val{font-size:1.32rem;font-weight:800;margin-top:5px;color:var(--fg)}.base-tol{font-size:var(--t-micro);color:var(--dim);margin-left:4px;font-weight:600}.base-cond{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.5;color:var(--dimmer);margin-top:6px}
+.doc-note{margin-top:17px;padding:12px 14px;background:var(--panel-3);border-left:3px solid var(--accent);font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--fg-2)}
+.doc-empty{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);padding:22px 0}
 .product-routes{display:grid;gap:10px;margin-top:38px}.product-route{display:grid;grid-template-columns:160px minmax(180px,1fr) 54px minmax(180px,.72fr) 150px;align-items:stretch;background:var(--line);gap:1px}.product-name,.route-node,.route-output{background:var(--panel);padding:17px}.product-name b,.route-node b{display:block;font-family:var(--cjk);font-size:var(--t-body)}.product-name span,.route-node span,.route-output span{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);line-height:1.55;margin-top:5px}.product-route .arrow{background:var(--panel-3);display:grid;place-items:center;color:var(--accent);font-size:1.3rem}.route-output{background:var(--accent);color:var(--ink-on);display:flex;flex-direction:column;justify-content:center}.route-output span{color:var(--ink-on);opacity:.8}
 .decision-map{margin-top:38px;display:grid;grid-template-columns:minmax(220px,.78fr) 52px minmax(260px,1fr) 52px minmax(220px,.8fr);align-items:stretch}.decision-node{background:var(--panel-2);border:1px solid var(--line-hi);padding:20px}.decision-node.hot{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}.decision-node b{font-family:var(--cjk);font-size:var(--t-body)}.decision-node p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);margin-top:8px}.decision-node.hot p{color:var(--ink-on);opacity:.78}.decision-arrow{display:grid;place-items:center;color:var(--accent);font-size:1.35rem}.decision-list{margin-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}.decision-list div{background:var(--panel);padding:15px}.decision-list b{display:block;font-family:var(--cjk);font-size:var(--t-meta)}.decision-list span{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);line-height:1.55;margin-top:5px}
 .closing{background:var(--accent);color:var(--ink-on);padding:clamp(44px,7vw,84px) clamp(18px,5vw,70px)}.closing-inner{max-width:var(--page-max);margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:36px;align-items:end}.closing h2{font-family:var(--cjk);font-size:clamp(2rem,4vw,4.2rem);line-height:1.06;letter-spacing:-.045em;max-width:13ch}.closing p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.7;max-width:40ch;margin-top:14px}.closing a{background:var(--ink-on);border-color:var(--ink-on);color:var(--fg)}
-@media(max-width:1100px){.hero{grid-template-columns:1fr;max-height:none}.hero-copy{min-height:450px}.hero-map{padding:14px}.factory-photo img{min-height:52vw}.route{grid-template-columns:minmax(360px,1.3fr) 82px minmax(210px,.7fr)}.machine-layout{grid-template-columns:1fr}.machine-feature{min-height:auto}.machine-support{grid-template-columns:1fr 1fr;grid-template-rows:auto}.support-item{grid-template-columns:1fr;grid-template-rows:minmax(230px,1fr) auto auto}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:140px minmax(170px,1fr) 46px minmax(170px,.8fr) 130px}}
-@media(max-width:720px){html{scroll-behavior:auto}.top{position:static}.top .brand{width:100%;border-bottom:1px solid var(--line)}.top .fill{display:none}.hero{min-height:auto}.hero-copy{min-height:430px;padding:38px 19px}.hero h2{font-size:clamp(2.4rem,13vw,3.8rem)}.hero-map{padding:8px}.factory-photo img{min-height:62vw}.photo-key{grid-template-columns:1fr}.topology-wrap{padding:9px;margin-top:30px}.map-meta{align-items:flex-start;flex-direction:column}.route{grid-template-columns:1fr}.cnc-pair{grid-template-columns:1fr}.transfer{min-height:72px}.transfer strong{transform:rotate(90deg)}.section{padding:46px 15px}.machine-feature{min-height:auto}.machine-feature>img{min-height:62vw}.machine-support{grid-template-columns:1fr}.support-item{grid-template-columns:1fr;grid-template-rows:auto}.support-item>img{min-height:62vw}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:1fr}.product-route .arrow{min-height:46px}.product-route .arrow span{transform:rotate(90deg)}.decision-map{grid-template-columns:1fr}.decision-arrow{min-height:46px;transform:rotate(90deg)}.decision-list{grid-template-columns:1fr}.closing-inner{grid-template-columns:1fr}.closing a{width:100%}}
+@media(max-width:1100px){.hero{grid-template-columns:1fr;max-height:none}.hero-copy{min-height:450px}.hero-map{padding:14px}.factory-photo img{min-height:52vw}.route{grid-template-columns:minmax(360px,1.3fr) 82px minmax(210px,.7fr)}.machine-layout{grid-template-columns:1fr}.machine-feature{min-height:auto}.machine-support{grid-template-columns:1fr 1fr;grid-template-rows:auto}.support-item{grid-template-columns:1fr;grid-template-rows:minmax(230px,1fr) auto auto}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:140px minmax(170px,1fr) 46px minmax(170px,.8fr) 130px}.doc-layout{grid-template-columns:minmax(210px,.46fr) 1fr}}
+@media(max-width:720px){html{scroll-behavior:auto}.top{position:static}.top .brand{width:100%;border-bottom:1px solid var(--line)}.top .fill{display:none}.hero{min-height:auto}.hero-copy{min-height:430px;padding:38px 19px}.hero h2{font-size:clamp(2.4rem,13vw,3.8rem)}.hero-map{padding:8px}.factory-photo img{min-height:62vw}.photo-key{grid-template-columns:1fr}.topology-wrap{padding:9px;margin-top:30px}.map-meta{align-items:flex-start;flex-direction:column}.route{grid-template-columns:1fr}.cnc-pair{grid-template-columns:1fr}.transfer{min-height:72px}.transfer strong{transform:rotate(90deg)}.section{padding:46px 15px}.machine-feature{min-height:auto}.machine-feature>img{min-height:62vw}.machine-support{grid-template-columns:1fr}.support-item{grid-template-columns:1fr;grid-template-rows:auto}.support-item>img{min-height:62vw}.support-rate{writing-mode:horizontal-tb;border-left:0;border-top:1px solid var(--line);padding:12px 18px}.product-route{grid-template-columns:1fr}.product-route .arrow{min-height:46px}.product-route .arrow span{transform:rotate(90deg)}.decision-map{grid-template-columns:1fr}.decision-arrow{min-height:46px;transform:rotate(90deg)}.decision-list{grid-template-columns:1fr}.closing-inner{grid-template-columns:1fr}.closing a{width:100%}.doc-layout{grid-template-columns:1fr}.doc-list{max-height:290px}.doc-view{min-height:auto}.base-grid{grid-template-columns:1fr 1fr}.docs-head{grid-template-columns:1fr;align-items:start}.docs-head .section-intro{margin-top:13px}}
 </style>
 </head>
 <body>
 <main class="factory-page">
   <header class="top">
     <div class="brand"><h1 class="wordmark">FACTORY&nbsp;GUARDIAN<span class="reg">®</span></h1></div>
-    <div class="slot"><span class="k">Page</span><span class="v">FACTORY CONFIG</span></div>
+    <nav class="nav" aria-label="主導覽">
+      <a href="/">即時戰情</a>
+      <span aria-current="page">產線配置</span>
+      <a href="/system">Agent 運作機制</a>
+      <a href="/benchmark">效益驗證報告</a>
+    </nav>
     <div class="fill"></div>
-    <div class="slot"><span class="k">Live</span><span class="v"><a href="/">WAR ROOM <span class="gl" aria-hidden="true">▸</span></a></span></div>
-    <div class="slot"><span class="k">System</span><span class="v"><a href="/system">AGENT MECHANISM <span class="gl" aria-hidden="true">▸</span></a></span></div>
-    <div class="slot"><span class="k">Report</span><span class="v"><a href="/benchmark">BENCHMARK <span class="gl" aria-hidden="true">▸</span></a></span></div>
-    <div class="synth"><b>SYNTHETIC FACTORY</b></div>
+    <div class="synth"><b><span class="gl" aria-hidden="true">◆</span> SYNTHETIC DEMO DATA</b></div>
   </header>
 
   <section class="hero" aria-labelledby="factoryTitle">
     <div class="hero-copy">
       <div><div class="hero-label">Factory configuration</div><h2 id="factoryTitle">搞懂產線配置</h2><p class="hero-lead">三台機器、兩個製程。先理解設備角色與產品流向，再進入 Agent Demo。</p></div>
-      <div class="hero-actions"><a class="primary" href="/#demoLab">進入 Demo →</a><a href="#machines">查看設備用途</a></div>
+      <div class="hero-actions"><a class="primary" href="/#demoLab">進入 Demo →</a><a href="#machines">查看設備用途</a><a href="#docs">設備文件</a></div>
     </div>
     <div class="hero-map">
       <figure class="factory-photo">
@@ -76,7 +92,23 @@ html{scroll-behavior:smooth}body{background:var(--bg);color:var(--fg)}body::befo
     </div>
   </div></section>
 
-  <section class="section alt" aria-labelledby="productsTitle"><div class="inner">
+  <section class="section alt" id="docs" aria-labelledby="docsTitle"><div class="inner">
+    <div class="docs-head">
+      <h2 id="docsTitle">Agent 讀的是哪些文件？</h2>
+      <p class="section-intro">Diagnosis Agent 的判讀依據不是通用門檻，而是這些設備手冊、SOP 與每台機器自己的交機驗收記錄。以下是它實際檢索的全文，可直接點選查核。</p>
+    </div>
+    <div class="doc-tabs" role="tablist" aria-label="文件分類">
+      <button type="button" class="doc-tab" role="tab" id="docTabManual" data-doc-kind="manual" aria-selected="true" aria-controls="docLayout">設備手冊<b></b></button>
+      <button type="button" class="doc-tab" role="tab" id="docTabSop" data-doc-kind="sop" aria-selected="false" aria-controls="docLayout">作業程序 SOP<b></b></button>
+      <button type="button" class="doc-tab" role="tab" id="docTabComm" data-doc-kind="commissioning" aria-selected="false" aria-controls="docLayout">交機驗收記錄<b></b></button>
+    </div>
+    <div class="doc-layout" id="docLayout">
+      <div class="doc-list" id="docList" role="tabpanel" aria-labelledby="docTabManual" tabindex="0"></div>
+      <article class="doc-view" id="docView" aria-live="polite"></article>
+    </div>
+  </div></section>
+
+  <section class="section" aria-labelledby="productsTitle"><div class="inner">
     <h2 id="productsTitle">產品怎麼走？</h2><p class="section-intro">兩種產品共用包裝站，但加工路徑不同，因此轉單不能只看哪台機器有空。</p>
     <div class="product-routes">
       <div class="product-route"><div class="product-name"><b>P-100</b><span>精密軸承座</span></div><div class="route-node"><b>M-A 或 M-B</b><span>主要機或替代機完成 CNC 加工</span></div><div class="arrow"><span aria-hidden="true">→</span></div><div class="route-node"><b>M-C</b><span>後段包裝</span></div><div class="route-output"><b>完成品</b><span>加工與包裝皆完成</span></div></div>
@@ -84,7 +116,7 @@ html{scroll-behavior:smooth}body{background:var(--bg);color:var(--fg)}body::befo
     </div>
   </div></section>
 
-  <section class="section" aria-labelledby="decisionTitle"><div class="inner">
+  <section class="section alt" aria-labelledby="decisionTitle"><div class="inner">
     <h2 id="decisionTitle">這些配置如何影響 Agent？</h2><p class="section-intro">同一個 M-A 異常，處置方案會沿著產線關係影響訂單、下游與安全決策。</p>
     <div class="decision-map"><div class="decision-node hot"><b>M-A 發生異常</b><p>振動、溫度或工安事件超出可接受範圍。</p></div><div class="decision-arrow" aria-hidden="true">→</div><div class="decision-node"><b>比較處置方案</b><p>繼續降速、停機維修，或把 P-100 訂單轉到 M-B。</p></div><div class="decision-arrow" aria-hidden="true">→</div><div class="decision-node"><b>驗證整線結果</b><p>確認 M-A 安全、M-B 排程可行，且 M-C 沒有缺料。</p></div></div>
     <div class="decision-list"><div><b>Diagnosis Agent</b><span>用 M-A 感測器與設備手冊判斷根因。</span></div><div><b>Impact Agent</b><span>沿產品路徑計算訂單與 M-C 的下游影響。</span></div><div><b>Planning Agent</b><span>把 M-B 換線與既有 P-200 排程放進模擬。</span></div></div>
@@ -92,5 +124,94 @@ html{scroll-behavior:smooth}body{background:var(--bg);color:var(--fg)}body::befo
 
   <section class="closing"><div class="closing-inner"><div><h2>現在開始看 Agent 處理事故</h2><p>回到 War Room 選擇案例，畫面會依序聚焦每個 Agent 的判斷與執行結果。</p></div><a href="/#demoLab">前往 Demo →</a></div></section>
 </main>
+
+<script>
+// 設備文件瀏覽器：手冊 / SOP 來自 corpus.py，交機記錄來自 commissioning.py，
+// 兩者都是 Diagnosis Agent 真正檢索的來源，這裡直接呈現全文供查核。
+(function(){
+  const SIG={vibration:"振動 Vibration",temperature:"溫度 Temperature",current:"電流 Current",rpm_pct:"轉速達成率 RPM"};
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const tabs=[...document.querySelectorAll(".doc-tab")];
+  const listEl=document.getElementById("docList"), viewEl=document.getElementById("docView");
+  let kind="manual", docs={manual:[],sop:[],commissioning:[]}, picked={};
+
+  // 手冊全文用 **粗體** 標重點，轉成 <strong>；其餘一律逸出。
+  const body=t=>esc(t).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+
+  function renderList(){
+    const items=docs[kind]||[];
+    if(!items.length){ listEl.innerHTML='<div class="doc-empty">此分類沒有文件。</div>'; return; }
+    const cur=picked[kind];
+    listEl.innerHTML=items.map(d=>{
+      const id=d.doc_id||d.ref;
+      const tags=(d.machine_ids||[d.machine_id]).filter(Boolean).map(m=>`<span class="doc-tag">${esc(m)}</span>`).join("");
+      return `<button type="button" class="doc-item" data-doc-id="${esc(id)}" aria-current="${id===cur}">
+        <span class="doc-ref">${esc(id)}</span>
+        <span class="doc-name">${esc(d.title||d.model||"")}</span>
+        <span class="doc-tags">${tags}</span></button>`;
+    }).join("");
+  }
+
+  function renderView(){
+    const items=docs[kind]||[];
+    const d=items.find(x=>(x.doc_id||x.ref)===picked[kind]);
+    if(!d){ viewEl.innerHTML='<div class="doc-empty">選擇左側文件以檢視全文。</div>'; return; }
+
+    if(kind==="commissioning"){
+      const cells=(d.baselines||[]).map(b=>`<div class="base-cell">
+        <div class="base-sig">${esc(SIG[b.signal]||b.signal)}</div>
+        <div class="base-val">${esc(b.baseline)}${esc(b.unit)}<span class="base-tol">±${esc(b.tolerance)}</span></div>
+        <div class="base-cond">${esc(b.condition||"")}</div></div>`).join("");
+      viewEl.innerHTML=`<div class="doc-view-head">
+          <span class="doc-ref">${esc(d.doc_id)}</span>
+          <h3>${esc(d.machine_id)}　${esc(d.model)}</h3>
+          <div class="doc-meta"><span>序號 <b>${esc(d.serial_no)}</b></span>
+            <span>驗收日 <b>${esc(d.installed_on)}</b></span>
+            <span>驗收人 <b>${esc(d.commissioned_by)}</b></span></div></div>
+        <div class="base-grid">${cells}</div>
+        ${d.note?`<div class="doc-note">${esc(d.note)}</div>`:""}`;
+      return;
+    }
+
+    const faults=(d.fault_ids||[]).length?`<span>對應故障 <b>${esc(d.fault_ids.join("、"))}</b></span>`:"";
+    viewEl.innerHTML=`<div class="doc-view-head">
+        <span class="doc-ref">${esc(d.ref)}</span>
+        <h3>${esc(d.title)}</h3>
+        <div class="doc-meta"><span>類型 <b>${d.type==="sop"?"作業程序":"設備手冊"}</b></span>
+          <span>適用機台 <b>${esc((d.machine_ids||[]).join("、"))}</b></span>${faults}</div></div>
+      <div class="doc-body">${body(d.body)}</div>`;
+  }
+
+  function render(){ renderList(); renderView(); }
+
+  tabs.forEach(t=>t.onclick=()=>{
+    kind=t.dataset.docKind;
+    tabs.forEach(x=>x.setAttribute("aria-selected",String(x===t)));
+    listEl.setAttribute("aria-labelledby",t.id);
+    render();
+  });
+
+  listEl.onclick=e=>{
+    const btn=e.target.closest(".doc-item"); if(!btn) return;
+    picked[kind]=btn.dataset.docId; render();
+  };
+
+  fetch("/api/knowledge").then(r=>r.json()).then(d=>{
+    (d.manuals||[]).forEach(m=>{ (m.type==="sop"?docs.sop:docs.manual).push(m); });
+    docs.commissioning=d.commissioning||[];
+    tabs.forEach(t=>{
+      const n=(docs[t.dataset.docKind]||[]).length;
+      t.querySelector("b").textContent=n?n:"";
+    });
+    ["manual","sop","commissioning"].forEach(k=>{
+      const f=(docs[k]||[])[0]; if(f) picked[k]=f.doc_id||f.ref;
+    });
+    render();
+  }).catch(()=>{
+    listEl.innerHTML='<div class="doc-empty">文件載入失敗。</div>';
+    viewEl.innerHTML='<div class="doc-empty">請確認 API 服務正常後重新整理。</div>';
+  });
+})();
+</script>
 </body>
 </html>

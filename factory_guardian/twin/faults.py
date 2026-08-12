@@ -3,21 +3,27 @@
 規格 §6.2：Fault Injection 只控制 Simulator 的狀態與 Sensor 生成規則，
 **不把故障標籤傳給 Agent**；如此才能對 Diagnosis Accuracy 做真實評估。
 
-因此本檔案有兩份東西，且刻意分開：
+⚠ **``FaultModel.deltas`` 是 Simulator 的內部參數，Diagnosis Agent 不得讀取。**
 
-* ``FaultModel.deltas`` —— Simulator 內部用的「物理效果」，Agent 看不到。
-* ``fault_signatures()`` —— Diagnosis Agent 可以看到的「感測器指紋知識」，
-  來源是 Demo Equipment Manual（等同工程師手上的手冊），而不是模擬器內部狀態。
+早期版本有一個 ``fault_signatures()``，把 ``deltas`` 除以 scale 當成給 Agent 的
+「感測器指紋」。當時的理由是「手冊本來就描述故障徵兆，兩者一致很合理」——
+但那在數學上站不住腳：模擬器產生訊號用的是 ``deltas × progress``，
+指紋是 ``deltas ÷ scale``，兩者共線。餘弦相似度對純量免疫，
+所以正確答案的餘弦**恆等於 1.0**，診斷退化成查表。
 
-兩者在 Demo 中一致是合理的（手冊本來就描述故障徵兆），但它是「知識」不是「答案」：
-Agent 仍須從實際訊號比對出最像的那一個，並且會因為雜訊、早期訊號微弱而出錯。
+現在 Agent 的徵兆知識改由 ``knowledge/symptom_spec.py`` 提供：
+手冊寫的是**區間**、中心刻意偏離這裡的 deltas、且各故障區間彼此重疊，
+分辨要靠鑑別診斷規則的**比值**。判讀基準則來自
+``knowledge/commissioning.py`` 的各機台交機驗收值。
+Agent 因此會因為雜訊、早期訊號微弱、徵兆重疊而真的出錯 —— 那才是可信的評估。
+
+``FaultModel`` 的其餘欄位（維修工時、零件、風險係數）不是診斷答案，
+是維修規劃用的共通知識，Agent 在**確定根因之後**才會用到。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from ..domain import FaultSignature
 
 
 @dataclass(frozen=True)
@@ -93,26 +99,4 @@ FAULTS: dict[str, FaultModel] = {
 HAZARD_EVENT_ID = "hazard_zone_intrusion"
 
 
-def fault_signatures(scales: dict[str, float]) -> list[FaultSignature]:
-    """把故障模型轉成 Diagnosis Agent 使用的「正規化指紋」。
-
-    以每個訊號的 scale 正規化，讓不同單位（°C / mm/s / A / %）可以放在同一個向量空間比較。
-    """
-    sigs: list[FaultSignature] = []
-    for model in FAULTS.values():
-        profile = {sig: delta / scales.get(sig, 1.0) for sig, delta in model.deltas.items()}
-        sigs.append(
-            FaultSignature(
-                fault_id=model.fault_id,
-                label=model.label,
-                profile=profile,
-                manual_refs=model.manual_refs,
-                typical_parts=model.typical_parts,
-                required_skill=model.required_skill,
-                repair_min=model.repair_min,
-            )
-        )
-    return sigs
-
-
-__all__ = ["FaultModel", "FAULTS", "HAZARD_EVENT_ID", "fault_signatures"]
+__all__ = ["FaultModel", "FAULTS", "HAZARD_EVENT_ID"]

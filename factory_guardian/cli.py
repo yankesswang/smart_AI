@@ -149,14 +149,16 @@ def cmd_scenarios(_: argparse.Namespace) -> int:
         )
     console.print(table)
 
-    fault_table = Table(title="故障模型（感測器指紋）", header_style="bold")
-    fault_table.add_column("fault_id"); fault_table.add_column("名稱"); fault_table.add_column("指紋", width=46)
+    fault_table = Table(title="故障模型（Simulator 內部，Agent 看不到）", header_style="bold")
+    fault_table.add_column("fault_id"); fault_table.add_column("名稱"); fault_table.add_column("徵兆描述", width=46)
     fault_table.add_column("手冊"); fault_table.add_column("工時", justify="right")
     for model in FAULTS.values():
         fault_table.add_row(model.fault_id, model.label, model.signature_note,
                             "、".join(model.manual_refs), f"{model.repair_min:g}m")
     console.print(fault_table)
-    console.print("[dim]Ground Truth 只用於 Benchmark 評分，不會進入任何 Agent 的輸入。[/dim]")
+    console.print("[dim]Ground Truth 與上表的故障參數只用於 Benchmark 評分，不會進入任何 Agent 的輸入。[/dim]")
+    console.print("[dim]Diagnosis Agent 的徵兆知識來自 knowledge/symptom_spec.py（手冊區間，中心偏離上表 19~25%）"
+                  "與 knowledge/commissioning.py（各機台交機基準）。[/dim]")
     return 0
 
 

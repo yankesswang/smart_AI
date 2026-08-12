@@ -345,10 +345,14 @@ class RootCauseCandidate:
     confidence: float
     evidence: list[Evidence]
     recommended_actions: list[str] = field(default_factory=list)
-    # 排名的三個原始訊號與加權後的合分（cosine / prior / docs / combined）。
+    # 排名的四個原始訊號與加權後的合分（manual / differential / prior / docs / combined）。
     # 信心度本身是 softmax 後的結果，看不出它是怎麼來的；沒有這份明細，
-    # 畫面上就只剩一個「88%」，講不出「88% 是 0.92 的指紋相似度換來的」。
+    # 畫面上就只剩一個「88%」，講不出「88% 是手冊區間符合度換來的」。
     scores: dict[str, float] = field(default_factory=dict)
+    # 逐項明細：哪個訊號落在手冊區間內、哪條鑑別規則成立。
+    # 這是「可稽核」的實質內容 —— 評審能逐條核對每個數字對應手冊的哪一行。
+    range_hits: list[dict[str, Any]] = field(default_factory=list)
+    diff_hits: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -358,6 +362,8 @@ class RootCauseCandidate:
             "evidence": [e.to_dict() for e in self.evidence],
             "recommended_actions": self.recommended_actions,
             "scores": {k: round(v, 3) for k, v in self.scores.items()},
+            "range_hits": self.range_hits,
+            "diff_hits": self.diff_hits,
         }
 
 
@@ -370,9 +376,10 @@ class Diagnosis:
     llm_mode: str = "offline"
     # --- 推理過程（讓前端能重現排名是怎麼算出來的）---------------------------------
     signal_strength: float = 0.0                                   # 觀測偏離向量的長度
-    weights: dict[str, float] = field(default_factory=dict)        # 三個訊號的權重
+    weights: dict[str, float] = field(default_factory=dict)        # 四個排名訊號的權重
     thresholds: dict[str, float] = field(default_factory=dict)     # 訊號強度的兩個門檻
     observations: list[dict[str, Any]] = field(default_factory=list)  # 每個訊號的觀測值與偏離量
+    baseline_ref: str = ""                                         # 判讀所依據的交機驗收記錄
 
     @property
     def top(self) -> RootCauseCandidate | None:
@@ -391,6 +398,7 @@ class Diagnosis:
             "weights": self.weights,
             "thresholds": self.thresholds,
             "observations": self.observations,
+            "baseline_ref": self.baseline_ref,
         }
 
 
@@ -674,22 +682,6 @@ class VerificationReport:
 # --------------------------------------------------------------------------------------
 # 情境定義
 # --------------------------------------------------------------------------------------
-@dataclass(frozen=True)
-class FaultSignature:
-    """故障的「感測器指紋」——Diagnosis Agent 用這個比對，而不是看標籤。
-
-    每個訊號給一個期望的偏移方向與相對幅度（正 = 上升、負 = 下降）。
-    """
-
-    fault_id: str
-    label: str
-    profile: dict[str, float]
-    manual_refs: tuple[str, ...] = ()
-    typical_parts: tuple[str, ...] = ()
-    required_skill: str = "mechanical-tech"
-    repair_min: float = 40.0
-
-
 @dataclass(frozen=True)
 class FaultInjection:
     """把故障注入 Simulator：只改變狀態與 Sensor 生成規則，不把標籤傳給 Agent。"""

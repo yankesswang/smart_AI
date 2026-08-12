@@ -133,9 +133,30 @@ body{
   display:flex;flex-direction:column;justify-content:center;gap:2px;
   padding:8px 14px;border-right:1px solid var(--line);white-space:nowrap;
 }
-.top .slot .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);color:var(--dim);text-transform:uppercase}
+/* 頂列標籤改中文後：CJK 字距只留 .02em，沿用 .12em 會鬆到像字字分離 */
+.top .slot .k{
+  font-family:var(--cjk);font-size:var(--t-micro);letter-spacing:.02em;
+  color:var(--dim);text-transform:none;
+}
 .top .slot .v{font-size:var(--t-meta);color:var(--fg);font-variant-numeric:tabular-nums;letter-spacing:var(--tr-data)}
 .top .fill{flex:1 1 auto;border-right:1px solid var(--line)}
+
+/* 四頁共用的固定導覽：四個項目、順序永遠一樣，切頁時位置不會跑。
+   目前頁不是拿掉而是標記——拿掉的話每頁少一格，項目就會左右位移。 */
+.top .nav{display:flex;align-items:stretch}
+.top .nav a,.top .nav span[aria-current]{
+  display:flex;align-items:center;
+  font-family:var(--cjk);font-size:var(--t-meta);letter-spacing:.02em;
+  padding:8px 14px;border-right:1px solid var(--line);
+  white-space:nowrap;color:var(--dim);
+  transition:background .16s ease,color .16s ease;
+}
+.top .nav a:hover{background:var(--panel-3);color:var(--fg)}
+.top .nav [aria-current="page"]{
+  color:var(--fg);font-weight:700;
+  box-shadow:inset 0 -2px 0 var(--red);
+  background:var(--panel);
+}
 .top .synth{display:flex;align-items:center;gap:9px;padding:8px 16px;background:var(--red);color:#000}
 .top .synth b{font-size:var(--t-micro);letter-spacing:var(--tr-label);font-weight:800}
 
