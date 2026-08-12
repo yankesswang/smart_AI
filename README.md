@@ -75,6 +75,7 @@ uv run pytest -q                                   # 122 個測試，離線 5 �
 ## 幾個關鍵設計決定
 
 這些是實作過程中真正影響結果的地方，也是最經得起追問的部分。
+逐條公式、常數與推導見 **[docs/algorithms.md](docs/algorithms.md)**。
 
 ### 1. 規劃跑在「診斷信念模型」上，不是跑在答案上
 
@@ -369,9 +370,11 @@ factory_guardian/
 ├── twin/               # Digital Twin：topology / faults / engine / scenarios
 ├── knowledge/          # Manual / SOP / History + TF-IDF 檢索
 ├── agents/             # monitoring / diagnosis / production / safety / maintenance / verification / vision
+├── prediction/         # TabFM 時序預測（含 Ridge 基線）
 ├── policy/             # Policy Engine + Safety 規則
 └── api/                # FastAPI + Dashboard
-tests/                  # 102 個測試
+docs/algorithms.md      # 演算法規格：公式、常數與設計理由
+tests/                  # 124 個測試
 ```
 
 ---
