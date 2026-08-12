@@ -71,6 +71,7 @@ class TabFMRegressorAdapter:
 
     def __init__(self) -> None:
         self._estimator: Any | None = None
+        self._fitted: int | None = None
 
     def fit_predict(self, x_train: list[list[float]], y_train: list[float], x_test: list[list[float]]) -> list[float]:
         import numpy as np  # type: ignore[import-not-found]
@@ -84,8 +85,23 @@ class TabFMRegressorAdapter:
         train = pd.DataFrame(x_train, columns=FEATURE_NAMES)
         test = pd.DataFrame(x_test, columns=FEATURE_NAMES)
         if self._estimator is None:
-            self._estimator = TabFMRegressor(model=release.load(), max_num_rows=100, n_estimators=4)
+            # load() defaults to the classification checkpoint; regression
+            # weights are required or predict() returns 10 values per row.
+            # Cached on the adapter: the ~8s weight load is paid once per process.
+            model = release.load(model_type="regression")
+            # batch_size=None forwards all ensemble members in one pass instead
+            # of looping one at a time — ~1.7x faster for identical output.
+            self._estimator = TabFMRegressor(
+                model=model, max_num_rows=100, n_estimators=4, batch_size=None
+            )
+        # The training table is identical on every recursive step, so refit only
+        # when it actually changes. The adapter is shared across requests, so the
+        # fingerprint must cover the data itself, not just its shape — otherwise
+        # a later machine/target would reuse the previous fit.
+        fingerprint = hash((tuple(map(tuple, x_train)), tuple(y_train)))
+        if fingerprint != self._fitted:
             self._estimator.fit(train, np.asarray(y_train, dtype=float))
+            self._fitted = fingerprint
         return [float(value) for value in self._estimator.predict(test)]
 
 
@@ -125,6 +141,11 @@ def _features(points: list[dict[str, Any]], values: list[float], index: int) -> 
 
 class ForecastService:
     """Build a supervised temporal table and forecast one observable signal."""
+
+    def __init__(self) -> None:
+        # One adapter for the whole service: TabFM weights cost ~8s to load, so
+        # a per-request adapter would pay that on every forecast.
+        self._tabfm: TabFMRegressorAdapter | None = None
 
     def models(self) -> dict[str, Any]:
         try:
@@ -203,6 +224,13 @@ class ForecastService:
             "machine_id": request.machine_id, "target": request.target, "unit": "%" if request.target == "health" else "",
             "horizon": request.horizon, "context_rows": len(points), "feature_count": len(FEATURE_NAMES),
             "features": list(FEATURE_NAMES), "requested_model": requested, "runtime": model.runtime,
+            # The exact context the model consumed, so the UI can plot the
+            # history the forecast was actually derived from rather than a
+            # separately-buffered approximation of it.
+            "context": [
+                {"tick": int(point["tick"]), "value": round(value, 3)}
+                for point, value in zip(points, values)
+            ],
             "fallback": fallback_reason is not None, "fallback_reason": fallback_reason,
             "latency_ms": round((time.perf_counter() - started) * 1000, 2), "threshold": threshold,
             "threshold_crossing_tick": crossing, "current": round(values[-1], 3), "forecast": series,
@@ -216,7 +244,9 @@ class ForecastService:
             return RidgeRegressor(), requested, None
         try:
             import tabfm  # type: ignore[import-not-found]  # noqa: F401
-            return TabFMRegressorAdapter(), requested, None
+            if self._tabfm is None:
+                self._tabfm = TabFMRegressorAdapter()
+            return self._tabfm, requested, None
         except ImportError:
             if requested == "tabfm":
                 raise ValueError("TabFM runtime 未安裝；請安裝官方套件與 backend，或改用 auto/ridge。")
