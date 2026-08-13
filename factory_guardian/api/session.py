@@ -19,6 +19,7 @@ from ..config import Settings, get_settings
 from ..domain import ApprovalDecision, RecoveryPlan, Severity
 from ..orchestrator import LoopResult, Orchestrator
 from ..policy.engine import PolicyDecision, PolicyEngine
+from ..prediction import ForecastService
 from ..twin.engine import FactoryTwin
 from ..twin.scenarios import get_scenario
 
@@ -53,6 +54,9 @@ class DemoSession:
         self.history: list[dict[str, Any]] = []      # 給前端畫趨勢圖用的時間序列
         self.machine_logs: list[dict[str, Any]] = []  # 給 Demo / 外部 adapter 的機台遙測批次
         self.started_at = datetime.now(timezone.utc)
+        # 整個 session 共用一個 ForecastService：TabFM 權重載入約 8 秒，
+        # 每次 reset() 重建會讓換案例都付一次這個成本。
+        self.prediction = ForecastService()
         self.reset()
 
     # ------------------------------------------------------------------ 生命週期
@@ -66,7 +70,8 @@ class DemoSession:
             )
             self.twin = FactoryTwin(seed=self.settings.seed, tick_minutes=self.settings.tick_seconds / 60.0)
             self.orch = Orchestrator(
-                twin=self.twin, ctx=self.ctx, approval=self._request_approval, on_stage=self._on_stage
+                twin=self.twin, ctx=self.ctx, approval=self._request_approval, on_stage=self._on_stage,
+                forecaster=self.prediction,
             )
             self.events = []
             self.seq = 0

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#E9EEF1">
-<meta name="description" content="以流程圖說明 Factory Guardian AI 的問題定義、Agent 閉環、權責邊界與安全治理。">
+<meta name="description" content="以流程圖說明 Factory Guardian AI 的問題定義、Agent 閉環、時序預測層、權責邊界與安全治理。">
 <title>AGENT SYSTEM / FACTORY GUARDIAN AI</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/static/agent-system-light.webp" as="image" type="image/webp">
@@ -99,6 +99,18 @@ body::after{opacity:.012}
 .snapshot b{font-size:var(--t-body);letter-spacing:.06em}
 .snapshot span{font-family:var(--cjk);font-size:var(--t-meta)}
 .snapshot code{font-family:var(--mono);font-size:var(--t-micro)}
+/* 預測不是閉環的一站，而是掛在 Monitor 上的證據來源：虛線縮排表示它不在
+   控制主路徑，但 forecast-feed 標出它確實把 trigger 餵回 Monitor。 */
+.forecast-feed{margin-left:6%;padding:6px 0 0 22px;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim)}
+.forecast-feed span{border-left:1px dashed var(--line-hi);padding-left:10px}
+.forecast-branch{margin-left:6%;border-left:1px dashed var(--line-hi);padding:14px 0 0 22px;position:relative}
+.forecast-branch::before{content:"";position:absolute;left:0;top:0;width:22px;border-top:1px dashed var(--line-hi)}
+.forecast-layer{background:var(--panel-2);border:1px dashed var(--line-hi);padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center}
+.forecast-layer b{font-size:var(--t-meta);letter-spacing:.06em}
+.forecast-layer span{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);line-height:1.6}
+.forecast-layer span i{font-style:normal;color:var(--fg);font-weight:700}
+.forecast-layer code{font-family:var(--mono);font-size:var(--t-micro);color:var(--dim);white-space:nowrap}
+.forecast-note{margin-top:1px;background:var(--bg);border-left:3px solid var(--line-hi);padding:10px 18px;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);line-height:1.65}
 .agent-loop{display:grid;grid-template-columns:repeat(11,minmax(18px,auto));align-items:stretch;margin-top:1px}
 .agent-loop .flow-node{padding:14px 11px}
 .agent-loop .flow-node b{font-size:var(--t-meta)}
@@ -178,6 +190,7 @@ body::after{opacity:.012}
   .diagram-title{align-items:flex-start;flex-direction:column}.diagram-title span{max-width:35ch}
   .sources{grid-template-columns:1fr 1fr}.sources .source:last-child{grid-column:1/-1}
   .snapshot{grid-template-columns:1fr;gap:5px}.snapshot code{display:none}
+  .forecast-layer{grid-template-columns:1fr;gap:5px}
   .orchestrator-bar{grid-template-columns:1fr}.orchestrator-bar span{text-align:left}
   .control-map{grid-template-columns:100px 150px 24px 170px 24px 170px 24px 150px}
   .ownership{grid-template-columns:1fr}.ownership .not-equal{min-height:42px}
@@ -249,8 +262,8 @@ body::after{opacity:.012}
   <section class="section alt" id="mechanism" aria-labelledby="mechanismTitle">
     <div class="section-inner">
       <h2 id="mechanismTitle">六個 Agent，共用一個工廠世界</h2>
-      <p class="section-intro">所有角色讀取同一份 Snapshot。每一步輸出結構化結果，再交給下一個角色。</p>
-      <div class="diagram" role="img" aria-label="資料來源、Factory Snapshot、六個 Agent 與 Orchestrator 的完整閉環架構">
+      <p class="section-intro">所有角色讀取同一份 Snapshot。每一步輸出結構化結果，再交給下一個角色。Monitor 另外掛一層時序預測，讓異常在真的跌破門檻前就能被看見。</p>
+      <div class="diagram" role="img" aria-label="資料來源、Factory Snapshot、回饋 trigger 給 Monitor 的 TabFM 預測層，以及六個 Agent 閉環與 Orchestrator">
         <div class="diagram-title"><b>Agent control loop</b><span>資料進來，決策出去，量測再回來</span></div>
         <div class="sources">
           <div class="source"><b>SENSORS</b><small>設備訊號</small></div>
@@ -261,9 +274,18 @@ body::after{opacity:.012}
         </div>
         <div class="down-arrow">↓</div>
         <div class="snapshot"><b>FACTORY SNAPSHOT</b><span>Agent 唯一看得到的共同世界，不含故障 Ground Truth</span><code>TICK / STATE / EVIDENCE</code></div>
+        <div class="forecast-branch">
+          <div class="forecast-layer">
+            <b>FORECAST</b>
+            <span><i>回答「照這樣下去會怎樣」。</i>把 Monitor 自己算出的健康度序列轉成 lag / rolling 特徵表，外推未來 12 個 tick。預測到會跌破告警線，就在還沒真的跌破前補一條 trigger 給 Monitor。</span>
+            <code>RIDGE · 4ms</code>
+          </div>
+          <div class="forecast-note">只加證據，不改裁決：預測產生的是 Monitor 的一條 trigger，後續診斷、排名與政策裁決完全不變。健康度尚未下滑時不外推，避免把雜訊放大成假警報。閉環用確定性的 Ridge 而非 TabFM——後者遞迴外推時會回歸序列均值，在剛開始劣化的訊號上會預測機台自行好轉。TabFM 保留給工作台的人工查詢。</div>
+        </div>
+        <div class="forecast-feed" aria-hidden="true"><span>trigger 回饋給 MONITOR</span></div>
         <div class="down-arrow">↓</div>
         <div class="agent-loop">
-          <div class="flow-node"><b>MONITOR</b><small>發現異常</small></div><div class="flow-arrow">→</div>
+          <div class="flow-node"><b>MONITOR</b><small>門檻 / 趨勢 / 預測</small></div><div class="flow-arrow">→</div>
           <div class="flow-node"><b>DIAGNOSE</b><small>根因信心度</small></div><div class="flow-arrow">→</div>
           <div class="flow-node"><b>IMPACT</b><small>產量與交期</small></div><div class="flow-arrow">→</div>
           <div class="flow-node"><b>PLAN</b><small>乾跑與排名</small></div><div class="flow-arrow">→</div>

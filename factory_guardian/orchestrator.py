@@ -161,6 +161,7 @@ class Orchestrator:
         on_stage: StageCallback | None = None,
         min_confidence: float = 0.65,
         max_confirm_ticks: int = 10,
+        forecaster: Any | None = None,
     ) -> None:
         self.twin = twin
         self.ctx = ctx or AgentContext()
@@ -172,7 +173,8 @@ class Orchestrator:
         self.min_confidence = min_confidence
         self.max_confirm_ticks = max_confirm_ticks
 
-        self.monitoring = MonitoringAgent(self.ctx, mode=monitoring_mode)
+        # forecaster 為 None 時 Monitoring 不做預測式告警，Baseline 行為不變。
+        self.monitoring = MonitoringAgent(self.ctx, mode=monitoring_mode, forecaster=forecaster)
         self.diagnosis = DiagnosisAgent(self.ctx)
         self.production = ProductionAgent(self.ctx)
         self.safety = SafetyAgent(self.ctx)

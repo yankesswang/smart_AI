@@ -29,6 +29,20 @@ HEALTH_WARN = 88.0
 HEALTH_ALARM = 75.0
 HEALTH_TREND_GATE = 97.0      # 趨勢告警的健康度前提
 
+# --- 預測式告警 -------------------------------------------------------------
+# 趨勢告警看的是「現在正在變壞」，預測告警看的是「照這個走勢，未來會壞到哪」。
+# 兩者都只在健康度已經開始下滑時才採信（HEALTH_TREND_GATE），避免健康機台的
+# 量測雜訊被外推成假警報 —— 這是 False Positive KPI 的主要防線。
+FORECAST_MIN_POINTS = 8       # 特徵表要有 lag_3 / rolling_6，少於 8 點外推不可靠
+FORECAST_HORIZON = 12         # 往前看幾個 tick
+FORECAST_ALARM = HEALTH_ALARM  # 預測健康度低於此值就提前示警
+# 閉環用 Ridge 而非 TabFM：TabFM 單步準確，但遞迴 12 步時會回歸 context 均值，
+# 在「剛開始劣化」的序列上預測機台自己好轉——而那正是預測告警唯一有價值的時間窗。
+# Ridge 的「趨勢會持續」假設反而符合劣化的物理行為。見 docs/forecast-model-evaluation.md。
+FORECAST_MODEL = "ridge"
+# Ridge 一次 12 步約 4 ms，每 tick 重算不影響閉環（TabFM 則需 0.5~7.7 秒而必須降頻）。
+FORECAST_EVERY = 1
+
 
 @dataclass
 class SignalWindow:
@@ -69,13 +83,18 @@ class MonitoringAgent(Agent):
     name = "monitoring-agent"
     role = "監測 / 異常觸發"
 
-    def __init__(self, ctx=None, mode: str = "full") -> None:
+    def __init__(self, ctx=None, mode: str = "full", forecaster=None) -> None:
         super().__init__(ctx)
         self.mode = mode
         self.windows: dict[str, dict[str, SignalWindow]] = {}
         self.event_seq = 0
         self.fired: set[str] = set()
         self.events: list[AnomalyEvent] = []   # 全部觸發過的事件，供 False Positive KPI 統計
+        # 預測式告警的輸入：Agent 自己算出來的健康度序列，不是模擬器的真實健康度。
+        # 沒有注入 forecaster 就完全不做預測（Baseline 與既有測試維持原行為）。
+        self.forecaster = forecaster
+        self.health_history: dict[str, list[float]] = {}
+        self.last_forecast: dict[str, dict] = {}
 
     # ------------------------------------------------------------------ 觀測
     def observe(self, snapshot: FactorySnapshot) -> None:
@@ -109,6 +128,52 @@ class MonitoringAgent(Agent):
         trend = self.worst_trend(machine, specs)
         base = max(0.0, (100.0 - health) / 100.0)
         return max(0.0, min(1.0, base + max(0.0, trend) * 1.6))
+
+    # ------------------------------------------------------------------ 預測
+    def forecast_health(self, machine_id: str) -> dict | None:
+        """外推自算健康度，回傳未來視野內的最低點。
+
+        預測是輔助證據，不是控制路徑：任何失敗都只是讓這次沒有預測可用，
+        絕不能讓偵測本身中斷，所以這裡把例外整個吞掉並記錄原因。
+
+        每 ``FORECAST_EVERY`` tick 才真的重算一次，其餘 tick 沿用快取。
+        Ridge 夠快所以目前設為 1；換成推論昂貴的模型時調大此值即可降頻。
+        """
+        if self.forecaster is None:
+            return None
+        series = self.health_history.get(machine_id, [])
+        if len(series) < FORECAST_MIN_POINTS:
+            return None
+        cached = self.last_forecast.get(machine_id)
+        if cached and len(series) - cached.get("at_point", -99) < FORECAST_EVERY:
+            # 沿用上次結果；error 快取同樣要沿用，否則失敗會每 tick 重試。
+            return None if "error" in cached else cached
+        try:
+            # 閉環固定用 Ridge，不走 auto：TabFM 在「剛開始劣化」的序列上會均值回歸、
+            # 預測機台自己好轉，正好是預測告警唯一有價值的時間窗。
+            # 完整實驗數據見 docs/forecast-model-evaluation.md。
+            result = self.forecaster.forecast_series(
+                series, horizon=FORECAST_HORIZON, model=FORECAST_MODEL
+            )
+        except Exception as exc:  # noqa: BLE001 - 預測失敗不得影響偵測
+            self.last_forecast[machine_id] = {
+                "error": f"{type(exc).__name__}: {exc}", "at_point": len(series),
+            }
+            return None
+        predicted = result.get("predicted") or []
+        if not predicted:
+            self.last_forecast[machine_id] = {"error": "empty forecast", "at_point": len(series)}
+            return None
+        info = {
+            "predicted_min": min(predicted),
+            "predicted_end": predicted[-1],
+            "horizon": FORECAST_HORIZON,
+            "runtime": result.get("runtime", "unknown"),
+            "fallback": result.get("fallback", False),
+            "at_point": len(series),
+        }
+        self.last_forecast[machine_id] = info
+        return info
 
     def worst_trend(self, machine: MachineSnapshot, specs) -> float:
         """所有訊號中最強的『往壞的方向走』的正規化斜率。"""
@@ -144,6 +209,7 @@ class MonitoringAgent(Agent):
                     triggers.append(f"threshold:{name}=CRITICAL")
 
                 health = self.health_estimate(machine, specs)
+                self.health_history.setdefault(mid, []).append(health)
                 if self.mode == "full":
                     trend = self.worst_trend(machine, specs)
                     for name in warning:
@@ -156,6 +222,18 @@ class MonitoringAgent(Agent):
                         triggers.append(f"health:{health:.0f}<{HEALTH_ALARM:.0f}")
                     elif health < HEALTH_WARN:
                         triggers.append(f"health:{health:.0f}<{HEALTH_WARN:.0f}")
+                    # 預測式告警：目前還沒破門檻，但外推顯示未來會破。
+                    # 沿用趨勢告警的健康度前提，避免把雜訊外推成假警報。
+                    if health < HEALTH_TREND_GATE:
+                        forecast = self.forecast_health(mid)
+                        if forecast and forecast["predicted_min"] < FORECAST_ALARM:
+                            # service 的 runtime 名稱是給工作台看的（Ridge 在那裡確實是
+                            # 降級選項）；閉環是刻意選用，標成 fallback 會誤導稽核。
+                            runtime = forecast["runtime"].replace("ridge-fallback", "ridge")
+                            triggers.append(
+                                f"forecast:health→{forecast['predicted_min']:.0f}"
+                                f"@T+{forecast['horizon']}[{runtime}]"
+                            )
 
                 if not triggers:
                     continue

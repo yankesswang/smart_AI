@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,11 @@ from ..twin.scenarios import SCENARIOS
 from .session import DemoSession
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# 部分系統的 mimetypes 資料庫沒有登記 webp/avif，StaticFiles 會退回
+# application/octet-stream，瀏覽器就不當圖片處理。這裡明確補上。
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/avif", ".avif")
 
 
 # --------------------------------------------------------------------------------------
@@ -81,7 +87,8 @@ def create_app() -> FastAPI:
         description="Agentic AI 智慧工廠自主營運與風險管理平台（競賽 MVP）",
     )
     session = DemoSession(settings=settings)
-    prediction = ForecastService()
+    # 與閉環內 Monitoring 用的是同一個實例，工作台與預測式告警不會各自載入權重。
+    prediction = session.prediction
     app.state.session = session
 
     # ---------------------------------------------------------------- 基本資訊

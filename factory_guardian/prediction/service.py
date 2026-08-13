@@ -17,6 +17,10 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 
+# TabFM 的執行裝置。專案預設釘 CPU-only torch（見 pyproject），所以這裡預設 cpu；
+# 有自行安裝 CUDA build 的機器可用 FACTORY_GUARDIAN_TABFM_DEVICE=cuda 開啟 GPU。
+TABFM_DEVICE = os.getenv("FACTORY_GUARDIAN_TABFM_DEVICE", "cpu")
+
 SUPPORTED_TARGETS = ("health", "temperature", "vibration", "current", "rpm_pct")
 FEATURE_NAMES = (
     "tick", "value", "lag_1", "lag_3", "rolling_mean_3", "rolling_mean_6",
@@ -88,7 +92,12 @@ class TabFMRegressorAdapter:
             # load() defaults to the classification checkpoint; regression
             # weights are required or predict() returns 10 values per row.
             # Cached on the adapter: the ~8s weight load is paid once per process.
-            model = release.load(model_type="regression")
+            #
+            # Device is env-driven, not a project dependency: pyproject pins a
+            # CPU-only torch, so "cuda" only works where the operator installed
+            # a CUDA build themselves. Measured on an RTX 4090, one 12-step
+            # recursive forecast drops from 7.7s (CPU) to 0.50s.
+            model = release.load(model_type="regression", device=TABFM_DEVICE)
             # batch_size=None forwards all ensemble members in one pass instead
             # of looping one at a time — ~1.7x faster for identical output.
             self._estimator = TabFMRegressor(
@@ -235,6 +244,51 @@ class ForecastService:
             "latency_ms": round((time.perf_counter() - started) * 1000, 2), "threshold": threshold,
             "threshold_crossing_tick": crossing, "current": round(values[-1], 3), "forecast": series,
             "disclaimer": "預測只使用 Agent 可見的遙測歷史，不含模擬器 Ground Truth；區間為殘差估計，非安全保證。",
+        }
+
+    def forecast_series(self, series: list[float], horizon: int = 12, model: str = "auto") -> dict[str, Any]:
+        """Forecast a bare value series (no machine/target plumbing).
+
+        The in-loop Monitoring Agent already keeps its own health history, so it
+        needs the estimator and the recursive-forecast logic without the
+        snapshot-history schema that :meth:`forecast` expects.  Fallback
+        behaviour is shared: an unavailable TabFM runtime silently degrades to
+        Ridge and is always reported as such via ``runtime``/``fallback``.
+        """
+        if len(series) < 8:
+            raise ValueError("至少需要 8 個時間點")
+        points = [{"tick": i, "value": v} for i, v in enumerate(series)]
+        x_train = [_features(points, series, i) for i in range(len(series) - 1)]
+        y_train = series[1:]
+        estimator, _requested, fallback_reason = self._model(model)
+
+        future_points = [dict(p) for p in points]
+        future_values = series[:]
+        predicted: list[float] = []
+        for _ in range(horizon):
+            last = dict(future_points[-1])
+            last["tick"] = int(last["tick"]) + 1
+            row = _features(future_points, future_values, len(future_values) - 1)
+            try:
+                value = estimator.fit_predict(x_train, y_train, [row])[0]
+            except Exception as exc:  # noqa: BLE001
+                if estimator.runtime == "ridge-fallback":
+                    raise ValueError(f"ridge inference 失敗：{type(exc).__name__}") from exc
+                fallback_reason = f"TabFM inference 失敗（{type(exc).__name__}），已降級為 Ridge。"
+                estimator = RidgeRegressor()
+                value = estimator.fit_predict(x_train, y_train, [row])[0]
+            value = self._clamp("health", value)
+            predicted.append(value)
+            last["value"] = value
+            future_points.append(last)
+            future_values.append(value)
+
+        return {
+            "predicted": predicted,
+            "horizon": horizon,
+            "runtime": estimator.runtime,
+            "fallback": fallback_reason is not None,
+            "fallback_reason": fallback_reason,
         }
 
     def _model(self, requested: str) -> tuple[Regressor, str, str | None]:

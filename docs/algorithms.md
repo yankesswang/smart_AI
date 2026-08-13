@@ -484,7 +484,21 @@ Ridge 基線為手刻實作（標準化 → Gram 矩陣 → 高斯消去，矩�
 > `release.load()` 預設載入 **classification** checkpoint，
 > regression 必須明確指定 `model_type="regression"`，否則每列回傳 10 個值而失敗。
 
-### 9.7 授權
+### 9.7 閉環用 Ridge，工作台用 TabFM
+
+Monitoring 的預測式告警**固定使用 Ridge**（`monitoring.py: FORECAST_MODEL`），
+不走 `auto`。原因不是效能，而是 TabFM 遞迴外推時會回歸 context 均值：
+單步預測準確（誤差 +1.2），但走滿 12 步後會預測劣化中的機台自行好轉，
+而那正是預測告警唯一有價值的時間窗。
+
+`FACTORY_GUARDIAN_TABFM_DEVICE=cuda` 可讓工作台的 TabFM 走 GPU
+（實測 7.7 s → 0.50 s），預設 `cpu`；`pyproject.toml` 仍釘 CPU-only torch，
+GPU 為操作者自行安裝後以環境變數啟用，不列為專案依賴。
+
+> 完整實驗數據、四個假說的驗證與推翻過程，見
+> [`forecast-model-evaluation.md`](forecast-model-evaluation.md)。
+
+### 9.8 授權
 
 TabFM 程式碼為 Apache-2.0，但 v1.0.0 預訓練權重為 `tabfm-non-commercial-v1.0`，
 **僅限非商業、非 production 使用**。正式商用需替換為具適當授權的自有 checkpoint。
