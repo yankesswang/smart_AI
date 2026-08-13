@@ -3,85 +3,258 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#E9EEF1">
 <title>BENCHMARK REPORT / FACTORY GUARDIAN AI</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/hmi.css">
 <style>
 /* 頁首列（.top / .brand / .slot / .synth）與載入／錯誤狀態都在 hmi.css，
    這裡只留 Benchmark 報告自己的版面。 */
-.shell{display:grid;grid-template-rows:auto auto 1fr;min-height:100vh;background:var(--line);gap:1px}
 
-/* 標題區：大字排版 + 大量負空間 */
-.hero{background:var(--panel);padding:52px 30px 40px}
-/* CJK 沒有西文那種上伸下伸部，但字身框是滿的：
-   行高壓到 .84 會讓兩行中文標題直接疊在一起。1.02 是不擠又不散的下限。 */
-.hero h2{font-size:clamp(38px,7.2vw,96px);line-height:1.02;letter-spacing:-.04em;max-width:16ch}
-.hero h2 em{font-style:normal;color:var(--red)}
-.hero .sub{max-width:66ch;margin-top:22px;font-family:var(--cjk);font-size:var(--t-prose);line-height:1.95;color:var(--fg-2)}
-.hero .sub b{color:var(--fg);font-weight:700}
-
-.arms{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:34px;border:1px solid var(--line)}
-.arm{background:var(--panel-2);padding:15px 16px}
-.arm .t{font-size:var(--t-body);letter-spacing:.08em;font-weight:700;text-transform:uppercase;display:flex;align-items:baseline;gap:9px}
-.arm .t .k{
-  font-family:var(--sans);font-weight:900;font-size:1.5rem;line-height:1;
-  color:var(--dim);letter-spacing:-.04em;
+/* 全站淺色工業盤，與 index / factory / system 逐字對齊。
+   這一頁先前是唯一還跑 hmi.css 暗色預設值的頁面，切過來像換了一套系統。
+   差別只有 --red：另外兩個子頁把 --red 直接映射成 accent，因為它們沒有告警語意；
+   這一頁的對照表要標「最差值」，紅色是有意義的資料編碼，所以保留 index.html
+   那一組（accent 走敘事、red 走異常），不併成同一色。 */
+:root{
+  color-scheme:light;
+  --page-max:1440px;
+  --bg:#E9EEF1;
+  --panel:#F8FAF9;
+  --panel-2:#EEF3F4;
+  --panel-3:#E2EAEC;
+  --line:#C8D4D8;
+  --line-hi:#9FB1B8;
+  --line-lo:#D9E2E5;
+  --fg:#163044;
+  --fg-2:#314C5D;
+  --dim:#435D6B;
+  --dimmer:#516B78;
+  --accent:#0B756E;
+  --red:#C43D35;
+  --red-deep:#9B2D28;
+  --red-ghost:rgba(196,61,53,.12);
+  --green:var(--accent);
+  --accent-ink:#F8FAF9;
 }
-.arm .d{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);line-height:1.75;margin-top:8px}
-.arm.win{background:var(--red);color:#000}
-.arm.win .t .k{color:rgba(0,0,0,.55)}
-.arm.win .d{color:#000;opacity:.82}
+body{background:var(--bg);color:var(--fg)}
+body::before{background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(22,48,68,.045) 2px 3px)}
+body::after{opacity:.012}
+::selection{background:var(--accent);color:var(--accent-ink)}
+.top .synth,.lv-critical,.tag.solid,button.primary{color:var(--accent-ink)}
+button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled){background:var(--fg);border-color:var(--fg);color:var(--accent-ink)}
+
+.shell{display:grid;grid-template-rows:auto auto 1fr;min-height:100vh;background:var(--line);gap:1px}
+.top{position:sticky;top:0;z-index:4;max-width:100vw}
+.top .brand{flex:0 0 auto}.top .fill{min-width:12px}
+
+/* 標題區：大字排版 + 大量負空間。
+   padding 與字級改用 factory / system 那組 clamp()，三頁的 hero 才是同一個節奏。 */
+.hero{background:var(--panel);padding:clamp(40px,6vw,86px) clamp(18px,5vw,72px) clamp(34px,4.5vw,60px)}
+.hero-inner{max-width:var(--page-max);margin:0 auto}
+.hero .hero-kicker{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--accent);font-weight:800}
+/* CJK 沒有西文那種上伸下伸部，但字身框是滿的：
+   行高壓到 .84 會讓兩行中文標題直接疊在一起。1.02 是不擠又不散的下限。
+   字族改 --cjk：另外三頁的大標都是中文黑體，這頁用 --sans（Arial Black）
+   會讓同一句中文標題在切頁時明顯換臉。 */
+.hero h2{font-family:var(--cjk);font-size:clamp(2.35rem,4.5vw,5rem);line-height:1.06;letter-spacing:-.05em;max-width:12ch;margin-top:15px}
+.hero h2 em{font-style:normal;color:var(--accent)}
+.hero .sub{max-width:52ch;margin-top:22px;font-family:var(--cjk);font-size:var(--t-prose);line-height:1.78;color:var(--fg-2)}
+.hero .sub b{color:var(--fg);font-weight:700}
 
 .body{display:grid;gap:1px;background:var(--line);align-content:start}
 
-/* 頭條數字 */
-.headline{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line)}
-.hl{background:var(--panel);padding:19px 17px 17px}
-.hl .l{font-size:var(--t-micro);letter-spacing:var(--tr-label);color:var(--dim);text-transform:uppercase;font-weight:600}
-.hl .v{font-size:clamp(32px,4.2vw,52px);margin:9px 0 5px}
-.hl .v em{font-style:normal;font-size:.42em;color:var(--dim);letter-spacing:0}
-.hl .d{font-size:var(--t-micro);color:var(--dim);letter-spacing:.04em;font-family:var(--cjk);line-height:1.7}
-.hl .arrow{color:var(--red);font-family:var(--mono)}
+/* 共用的段落節奏，對齊 factory / system 的 .section */
+.micro-label{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--accent);font-weight:800}
+.sec-title{font-family:var(--cjk);font-size:clamp(1.5rem,2.9vw,2.6rem);line-height:1.15;letter-spacing:-.04em;margin-top:12px;color:var(--fg)}
+.sec-intro{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.8;color:var(--fg-2);max-width:50ch;margin-top:14px}
+
+/* ---- 0. 結論帶：整頁最重要的一句話，用 accent 實心塊講錢 ---- */
+.verdict{background:var(--accent);color:var(--accent-ink);padding:clamp(32px,4.5vw,64px) clamp(18px,5vw,72px)}
+.verdict-inner{max-width:var(--page-max);margin:0 auto}
+.verdict .micro-label{color:var(--accent-ink);opacity:.78}
+.verdict-grid{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:clamp(14px,2.5vw,32px);align-items:center;margin-top:22px}
+.vd{display:flex;flex-direction:column;gap:7px;min-width:0}
+.vd-l{font-family:var(--cjk);font-size:var(--t-meta);opacity:.82}
+.vd-v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;
+  font-size:clamp(1.7rem,3.6vw,3rem);line-height:1;letter-spacing:-.04em;overflow-wrap:anywhere}
+.vd-d{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.6;opacity:.72}
+.vd-op{font-size:1.8rem;opacity:.6;font-weight:700}
+/* 反白塊內不能用 --red：底色已經是 accent，紅字會糊掉。改用透明度分階。 */
+.vd-v.bad{opacity:.7}
+.vd-save{border-left:1px solid rgba(248,250,249,.34);padding-left:clamp(14px,2.5vw,32px)}
+.verdict-note{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.8;margin-top:24px;max-width:62ch;opacity:.88}
+
+/* ---- 1. 三種做法 ---- */
+.arms-sec{background:var(--panel);padding:clamp(38px,5.5vw,80px) clamp(18px,5vw,72px)}
+.arms-inner{max-width:var(--page-max);margin:0 auto}
+.arms{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:clamp(24px,3.5vw,40px);border:1px solid var(--line)}
+.arm{background:var(--panel-2);padding:19px 20px;display:flex;flex-direction:column}
+.arm .t{font-family:var(--cjk);font-size:1rem;letter-spacing:.01em;font-weight:700;display:flex;align-items:baseline;gap:10px}
+.arm .t .k{
+  font-family:var(--sans);font-weight:900;font-size:1.6rem;line-height:1;
+  color:var(--dimmer);letter-spacing:-.04em;
+}
+.arm .d{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);line-height:1.75;margin-top:10px}
+.arm .d b{color:var(--fg);font-weight:700}
+.arm-kpi{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);margin-top:16px}
+.arm-kpi > div{background:var(--panel);padding:9px 11px}
+.arm-kpi dt{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim)}
+.arm-kpi dd{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--t-body);
+  font-weight:700;color:var(--fg);margin-top:3px}
+/* 這是「我們的組別」，不是警報，所以吃 accent 而不是 red。 */
+.arm.win{background:var(--accent);color:var(--accent-ink)}
+.arm.win .t .k{color:rgba(248,250,249,.66)}
+.arm.win .d,.arm.win .d b{color:var(--accent-ink)}
+.arm.win .d{opacity:.88}
+.arm.win .arm-kpi{background:rgba(248,250,249,.26)}
+.arm.win .arm-kpi > div{background:var(--accent)}
+.arm.win .arm-kpi dt{color:rgba(248,250,249,.76)}
+.arm.win .arm-kpi dd{color:var(--accent-ink)}
+
+/* ---- 2. 情境卡片 ---- */
+.cases{background:var(--panel-2);padding:clamp(38px,5.5vw,80px) clamp(18px,5vw,72px)}
+.cases-inner{max-width:var(--page-max);margin:0 auto}
+/* auto-fit 會讓最後一列的單張卡片後面留一塊空的 grid track，
+   而 .case-grid 的 --line 底色就從那裡透出來，看起來像壞掉的灰塊。
+   固定成一列最多 3 欄、並讓 grid 自己補滿，就不會有裸露的軌道。 */
+.case-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:var(--line);margin-top:clamp(24px,3.5vw,40px);border:1px solid var(--line)}
+.case{background:var(--panel);padding:19px 20px 17px;display:flex;flex-direction:column}
+.case.safety{background:var(--panel-3)}
+/* 5 張卡片配 3 欄 = 最後一列只有 2 張，會剩一格空軌道。
+   讓最後一列的兩張各自撐開，行就填滿了；情境數改變時這條規則依然成立
+   （:nth-last-child 只在「剛好剩兩張」時才生效）。 */
+.case-grid > .case:nth-child(3n+1):nth-last-child(2){grid-column:span 2}
+.case-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.case-h h4{font-family:var(--cjk);font-size:1.05rem;font-weight:700;color:var(--fg)}
+.case-tag{font-size:var(--t-micro);letter-spacing:.06em;color:var(--accent);font-weight:800;white-space:nowrap}
+.case-focus-l{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);margin-top:14px}
+.case-nums{display:flex;align-items:flex-end;gap:11px;margin-top:7px;flex-wrap:wrap}
+.cn{display:flex;flex-direction:column;gap:3px}
+.cn span{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dimmer)}
+.cn b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:1.35rem;
+  font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.cn b.bad{color:var(--red)}
+.cn b.good{color:var(--accent)}
+.cn-op{color:var(--dimmer);font-size:1.1rem;padding-bottom:2px}
+.case-verdict{font-family:var(--cjk);font-size:var(--t-meta);font-weight:700;margin-top:12px;
+  padding:6px 9px;align-self:flex-start}
+.case-verdict.good{background:var(--accent);color:var(--accent-ink)}
+.case-verdict.trade{background:var(--panel-2);color:var(--fg);border:1px solid var(--line-hi)}
+.case-verdict.flat{background:var(--panel-2);color:var(--dim);border:1px solid var(--line)}
+.case-more{margin-top:auto;padding-top:14px;display:grid;gap:5px}
+.case-more > div{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.case-more dt{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim)}
+.case-more dd{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:var(--t-micro);color:var(--fg-2)}
+.case-legend{font-size:var(--t-micro);color:var(--dimmer);margin-top:8px;
+  border-top:1px solid var(--line);padding-top:7px}
 
 /* 對照表 */
 .cmp{width:100%;border-collapse:collapse}
 .cmp th.mode{text-align:right;width:15%}
-.cmp th.mode.win{color:var(--red)}
+.cmp th.mode.win{color:var(--accent)}
 .cmp td.kpi-l{font-family:var(--cjk);font-size:var(--t-body);color:var(--dim);width:26%}
 .cmp td.kpi-l small{display:block;font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.08em;color:var(--dimmer);text-transform:uppercase}
 .cmp td.val{text-align:right;font-variant-numeric:tabular-nums;font-size:var(--t-body)}
 .cmp td.val.best{color:var(--fg);font-weight:700;background:var(--panel-3)}
-.cmp td.val.best .mk{color:var(--red);font-size:.7em;vertical-align:middle;margin-left:3px}
+.cmp td.val.best .mk{color:var(--accent);font-size:.7em;vertical-align:middle;margin-left:3px}
+/* 最差值維持真正的紅：這是這一頁唯一需要「異常」語意的地方，
+   所以 :root 才沒有像 factory / system 那樣把 --red 併進 --accent。 */
 .cmp td.val.worst{color:var(--red)}
-.cat{font-size:var(--t-micro);letter-spacing:var(--tr-label);color:var(--dim);text-transform:uppercase;padding:14px 8px 4px;font-weight:600}
+.cat{font-size:var(--t-micro);letter-spacing:var(--tr-label);color:var(--accent);text-transform:uppercase;padding:15px 8px 4px;font-weight:800}
 
 /* 條形比較 */
 .barcmp{display:grid;grid-template-columns:112px 1fr 62px;gap:9px;align-items:center;padding:5px 0}
 .barcmp .nm{font-size:var(--t-micro);letter-spacing:.09em;color:var(--dim);text-transform:uppercase}
-.barcmp .tr{height:13px;background:var(--panel-3);border:1px solid var(--line);position:relative}
-.barcmp .tr i{display:block;height:100%;
-  -webkit-mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px);
-  mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px)}
-.barcmp .tr i.a,.barcmp .tr i.b{background:#9A9A9A}
-.barcmp .tr i.g{background:var(--red)}
+.barcmp .tr{height:13px;background:var(--panel-3);border:1px solid var(--line-hi);position:relative}
+/* LED 節段遮罩會把長條挖掉三分之一的面積，在淺底上等於直接消失——
+   最長的那根（100% 寬）看起來反而像空軌道。這裡不套遮罩，改用實心填色，
+   長度差才讀得出來。 */
+.barcmp .tr i{display:block;height:100%}
+/* 舊值寫死 #9A9A9A，是為暗底挑的；在淺底上幾乎糊掉。
+   基準組用 --fg（深藍）而不是 --dimmer，才跟淺色軌道拉開對比。 */
+.barcmp .tr i.a,.barcmp .tr i.b{background:var(--fg);opacity:.42}
+.barcmp .tr i.g{background:var(--accent)}
 .barcmp .vl{text-align:right;font-variant-numeric:tabular-nums;font-size:var(--t-body);font-weight:700}
 
-/* 論點區塊 */
-.claim{background:var(--panel);padding:30px 28px 28px;border-left:3px solid var(--red)}
-.claim .q{font-family:var(--cjk);font-size:clamp(17px,2.1vw,25px);line-height:1.6;letter-spacing:-.01em;max-width:34ch}
+/* ---- 4. 完整數據（預設收合） ---- */
+.detail-sec{background:var(--panel);padding:clamp(38px,5.5vw,80px) clamp(18px,5vw,72px)}
+.detail-inner{max-width:var(--page-max);margin:0 auto}
+.detail-inner .sec.drop{margin-top:1px;border:1px solid var(--line)}
+.detail-inner .sec.drop:first-of-type{margin-top:clamp(22px,3vw,34px)}
+/* summary 要看起來可點：加游標、hover 反應、以及一個會轉的三角。 */
+.sec.drop > summary{cursor:pointer;list-style:none;user-select:none;
+  transition:background .16s ease}
+.sec.drop > summary::-webkit-details-marker{display:none}
+.sec.drop > summary::after{content:"▸";font-family:var(--mono);color:var(--accent);
+  font-weight:700;margin-left:auto;padding-left:10px;transition:transform .18s ease;display:inline-block}
+.sec.drop[open] > summary::after{transform:rotate(90deg)}
+.sec.drop > summary:hover{background:var(--panel-3)}
+.sec.drop > summary:focus-visible{outline:2px solid var(--fg);outline-offset:-2px}
+.tbl-note{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.7;color:var(--dim);
+  padding:11px 13px;background:var(--panel-3);border-top:1px solid var(--line)}
+
+/* ---- 5. 跨情境彙總 ---- */
+.agg-sec{background:var(--panel-2);padding:clamp(38px,5.5vw,80px) clamp(18px,5vw,72px)}
+.agg-inner{max-width:var(--page-max);margin:0 auto}
+.agg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1px;background:var(--line);margin-top:clamp(24px,3.5vw,40px);border:1px solid var(--line)}
+.agg-item{background:var(--panel);padding:17px 18px}
+.agg-hint{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dimmer);
+  margin-top:5px;margin-bottom:9px;letter-spacing:.01em}
+/* 數值欄要放得下 NT$26,536，62px 會被截掉。 */
+.agg-item .barcmp{grid-template-columns:104px 1fr 92px}
+
+/* 論點區塊。改吃 .section.alt 的節奏（大 padding + 置中 inner），
+   跟 factory / system 的敘事段落同一個尺度。 */
+.claim{background:var(--panel);padding:clamp(34px,5vw,72px) clamp(18px,5vw,72px)}
+.claim-inner{max-width:var(--page-max);margin:0 auto;border-left:3px solid var(--accent);padding-left:clamp(16px,2vw,26px)}
+.claim .micro-label{margin-bottom:12px}
+.claim .q{font-family:var(--cjk);font-size:clamp(1.15rem,2.1vw,1.65rem);line-height:1.55;letter-spacing:-.025em;max-width:38ch;color:var(--fg)}
 .claim .q b{color:var(--red)}
-.claim .a{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.95;color:var(--fg-2);margin-top:16px;max-width:52ch}
+.claim .a{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.8;color:var(--fg-2);margin-top:22px;max-width:56ch}
 .claim .a b{color:var(--fg);font-weight:700}
 
-.foot{background:var(--panel-2);padding:18px 20px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+/* 取捨對照：左邊放棄、右邊換到。兩欄同一個字級，讓「值不值得」自己浮出來。 */
+.trade{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);margin-top:clamp(20px,3vw,32px);max-width:760px}
+.trade-col{background:var(--panel-2);padding:18px 20px}
+.trade-col.get{background:var(--accent);color:var(--accent-ink)}
+.trade-h{font-family:var(--cjk);font-size:var(--t-micro);letter-spacing:.06em;font-weight:800;
+  color:var(--dim);text-transform:none}
+.trade-col.get .trade-h{color:rgba(248,250,249,.82)}
+.trade-big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;
+  font-size:clamp(2rem,4vw,3.1rem);line-height:1;letter-spacing:-.045em;margin-top:10px;color:var(--fg)}
+.trade-col.get .trade-big{color:var(--accent-ink)}
+.trade-big em{font-style:normal;font-size:.36em;letter-spacing:0;margin-left:2px;color:var(--dim)}
+.trade-col.get .trade-big em{color:rgba(248,250,249,.82)}
+.trade-sub{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);margin-top:9px}
+.trade-col.get .trade-sub{color:rgba(248,250,249,.88)}
+
+.foot{background:var(--panel-2);padding:clamp(20px,3vw,36px) clamp(18px,5vw,72px);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end}
 .foot .n{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);line-height:1.8;max-width:78ch}
 .foot .n code{font-family:var(--mono);color:var(--fg)}
+/* 收尾連結對齊 factory / system 的 .hero-actions 按鈕，不要只是一條底線文字。 */
+.foot .back{display:inline-flex;align-items:center;gap:7px;min-height:42px;padding:9px 16px;
+  border:1px solid var(--line-hi);font-size:var(--t-meta);letter-spacing:.08em;text-transform:uppercase;
+  font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,border-color .18s ease}
+.foot .back:hover{background:var(--fg);border-color:var(--fg);color:var(--accent-ink)}
 
-@media(max-width:1000px){
-  .headline{grid-template-columns:repeat(2,1fr)}
+@media(max-width:1040px){
+  /* 結論帶的五欄（值 → 值 | 省下）在窄螢幕排不下，改成上下堆疊，
+     箭頭轉向；分隔線從左邊移到上面。 */
+  .verdict-grid{grid-template-columns:1fr;gap:18px}
+  .vd-op{transform:rotate(90deg);justify-self:start}
+  .vd-save{border-left:0;padding-left:0;border-top:1px solid rgba(248,250,249,.34);padding-top:18px}
   .arms{grid-template-columns:1fr}
-  .hero{padding:36px 20px 28px}
+}
+@media(max-width:720px){
+  .top{position:static}
+  .foot{flex-direction:column;align-items:stretch}
+  .foot .back{justify-content:center}
+  .case-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -99,25 +272,25 @@
       <span aria-current="page">效益驗證報告</span>
     </nav>
     <div class="fill"></div>
+    <a class="console-link" href="/console" title="進入多站點中央管理平台（需登入）">
+      <i class="cl-mark" aria-hidden="true"></i>
+      <span>中央管理平台</span>
+      <span class="cl-sub">Console</span>
+    </a>
     <div class="slot"><span class="k">比較方法</span><span class="v">相同亂數種子 · 相同模擬長度</span></div>
     <div class="slot"><span class="k">產出時間</span><span class="v" id="tGen">--</span></div>
     <div class="synth"><b><span class="gl" aria-hidden="true">◆</span> SYNTHETIC DEMO DATA</b></div>
   </header>
 
   <section class="hero">
-    <h2 class="wordmark">三組對照組<br><em>同一座工廠</em></h2>
+    <div class="hero-inner">
+    <p class="hero-kicker">效益驗證報告</p>
+    <h2>同樣一次故障<br><em>差多少錢</em></h2>
     <p class="sub">
-      三組跑在<b>相同亂數種子、相同故障情境、相同總模擬時長</b>的數位孿生工廠上，
-      差別只有「AI 做到哪一步」。所有數字都是模擬器實際執行產生的結果，不是預錄，也不是估算。
-      每次重跑都會得到同一組數字，這正是可重現性的意義。
+      同一座工廠、<b>同一組亂數種子、同一批故障情境、同一段模擬時長</b>，
+      只換掉「AI 做到哪一步」，跑三遍。下面每個數字都是模擬器當場跑出來的，
+      不是預錄也不是估算——這一頁在您打開的當下才開始運算。
     </p>
-    <div class="arms">
-      <div class="arm"><div class="t"><span class="k">A</span> 固定門檻告警</div>
-        <div class="d">感測器踩到門檻就發告警。不做跨資料診斷，不採取任何行動。這是多數工廠的現況。</div></div>
-      <div class="arm"><div class="t"><span class="k">B</span> 偵測即停機</div>
-        <div class="d">偵測到異常立刻停機維修。設備保住了，但沒有生產影響分析，也沒有替代排程。</div></div>
-      <div class="arm win"><div class="t"><span class="k">C</span> Factory Guardian</div>
-        <div class="d">跨 Machine / Production / Safety 的完整閉環，執行後回到孿生體驗證。</div></div>
     </div>
   </section>
 
@@ -151,6 +324,18 @@ const CATEGORY = {
 };
 const CAT_LABEL = {detection:"Diagnosis",maintenance:"Maintenance & Equipment",
                    production:"Production",safety:"Safety",agent:"Agent / Governance"};
+
+/* 有人員安全取捨的情境：這些情境裡「產能最高」不等於「表現最好」，
+   所以產能類欄位不套最佳／最差標記。細節見表格渲染處的註解。 */
+const SAFETY_TRADEOFF = new Set(["hazard-zone","bearing-with-intrusion"]);
+const TRADEOFF_KEYS = new Set(["production_attainment_pct","production_loss_units","production_loss_ntd"]);
+
+/* 每張情境卡片要凸顯的那一個數字。設備故障看錢，工安情境看曝露時間。 */
+const CASE_FOCUS = {
+  "hazard-zone":       {key:"hazard_exposure_min", label:"人員待在危險區", unit:" 分鐘", dec:0, lower:true},
+  "bearing-with-intrusion":{key:"hazard_exposure_min", label:"人員待在危險區", unit:" 分鐘", dec:0, lower:true},
+};
+const CASE_DEFAULT = {key:"production_loss_ntd", label:"單次故障損失", unit:"", dec:0, lower:true, money:true};
 
 const NODATA = "--";
 const fmt=(v,d=1)=> (v===null||v===undefined||Number.isNaN(v))?NODATA:Number(v).toFixed(d);
@@ -205,47 +390,141 @@ function render(rep){
     eqAvg[m].acc = corr.length ? 100*corr.filter(Boolean).length/corr.length : null;
   });
 
-  const A = eqAvg["baseline-a"], G = eqAvg["guardian"];
+  const A = eqAvg["baseline-a"], B = eqAvg["baseline-b"], G = eqAvg["guardian"];
   const pct = v => (v===null||v===undefined||Number.isNaN(v)) ? null : v*100;
+  const money = v => (v===null||v===undefined||Number.isNaN(v)) ? NODATA
+                   : "NT$" + Math.round(v).toLocaleString();
 
   let html = "";
 
-  /* ---------- 頭條 ---------- */
-  html += `<section class="headline">
-    ${headline("PRODUCTION ATTAINMENT","產能達成率",A.production_attainment_pct,G.production_attainment_pct,"%",1,"設備故障三情境平均")}
-    ${headline("ROOT CAUSE ACCURACY","根因診斷正確率",null,G.acc,"%",0,"對照 Ground Truth，Agent 看不到答案")}
-    ${headline("MAX ORDER DELAY","最大交期延遲",A.max_order_delay_min,G.max_order_delay_min,"m",0,"已排程訂單")}
-    ${headline("SECONDARY DAMAGE","設備二次損壞",pct(A.secondary_damage),pct(G.secondary_damage),"%",0,"未處置會演變成軸承咬死或馬達燒毀")}
+  /* ---------- 0. 結論帶 ----------
+     業主第一眼要看到的是錢，不是 KPI 名稱。設備故障三情境平均的每次損失，
+     A（現況）對到 C（Guardian），中間放省下的金額。 */
+  const lossA = A.production_loss_ntd, lossB = B.production_loss_ntd, lossG = G.production_loss_ntd;
+  const saved = (lossA!==null && lossG!==null) ? lossA - lossG : null;
+  const savedPct = (saved!==null && lossA) ? 100*saved/lossA : null;
+  html += `<section class="verdict">
+    <div class="verdict-inner">
+      <p class="micro-label">結論 · 每發生一次設備故障</p>
+      <div class="verdict-grid">
+        <div class="vd">
+          <span class="vd-l">現況做法（A）損失</span>
+          <b class="vd-v bad">${money(lossA)}</b>
+          <span class="vd-d">告警響了，但沒有人處理到底</span>
+        </div>
+        <div class="vd-op" aria-hidden="true">→</div>
+        <div class="vd">
+          <span class="vd-l">導入 Factory Guardian 後</span>
+          <b class="vd-v good">${money(lossG)}</b>
+          <span class="vd-d">診斷、改排程、驗證全部自動完成</span>
+        </div>
+        <div class="vd vd-save">
+          <span class="vd-l">每次故障省下</span>
+          <b class="vd-v">${money(saved)}</b>
+          <span class="vd-d">相當於減少 ${fmt(savedPct,0)}% 的損失</span>
+        </div>
+      </div>
+      <p class="verdict-note">
+        以 ${EQUIP.filter(s=>byScen[s]).length} 種設備故障情境的平均值計算。
+        您的產線一年發生幾次這類故障，就把上面的金額乘以幾次——這是這套系統能不能回本最直接的算法。
+      </p>
+    </div>
   </section>`;
 
-  /* ---------- 工安論點 ----------
+  /* ---------- 1. 三種做法在講什麼 ----------
+     原本這段在 hero 靜態寫死，但它其實需要搭配數字才有意義，
+     所以移進來跟「各自的結果」放在同一個視野裡。 */
+  const armCard = (k,name,desc,m,tone) => {
+    const d = eqAvg[m];
+    return `<div class="arm ${tone}">
+      <div class="t"><span class="k">${k}</span> ${esc(name)}</div>
+      <div class="d">${desc}</div>
+      <dl class="arm-kpi">
+        <div><dt>產能達成</dt><dd>${fmt(d.production_attainment_pct,1)}%</dd></div>
+        <div><dt>單次損失</dt><dd>${money(d.production_loss_ntd)}</dd></div>
+        <div><dt>設備健康</dt><dd>${fmt(d.machine_health_final,0)}</dd></div>
+        <div><dt>需人工介入</dt><dd>${d.human_interventions>0?"是":"否"}</dd></div>
+      </dl>
+    </div>`;
+  };
+  html += `<section class="arms-sec">
+    <div class="arms-inner">
+      <p class="micro-label">三種做法 · 同一批故障</p>
+      <h3 class="sec-title">差別不在偵測，在後面那幾步</h3>
+      <div class="arms">
+        ${armCard("A","固定門檻告警","感測器踩到門檻就響。沒有人做跨資料判讀，也沒有人決定接下來怎麼辦。<b>這是多數工廠的現況。</b>","baseline-a","")}
+        ${armCard("B","偵測即停機","一發現異常立刻停機檢修。設備保住了，但訂單沒有重排，<b>而且每次都要叫一個人來處理</b>。","baseline-b","")}
+        ${armCard("C","Factory Guardian","診斷根因、重排訂單、檢查工安，執行完再回到孿生體驗證結果。<b>全程不需要人工介入。</b>","guardian","win")}
+      </div>
+    </div>
+  </section>`;
+
+  /* ---------- 2. 逐一情境：每種故障省了多少 ----------
+     取代原本五張 19 列的大表。每張卡片只留業主看得懂的四個數字，
+     完整 KPI 收進下面的 details。 */
+  html += `<section class="cases">
+    <div class="cases-inner">
+      <p class="micro-label">逐一情境</p>
+      <h3 class="sec-title">五種故障，各自的結果</h3>
+      <p class="sec-intro">前三種是設備故障，比的是「錢和產能」；後兩種牽涉到人員安全，
+        比的是「人在危險區待了多久」。請特別看最後兩張——那裡的取捨是刻意的。</p>
+      <div class="case-grid">
+        ${scenarios.map(sid=>caseCard(sid,byScen[sid])).join("")}
+      </div>
+    </div>
+  </section>`;
+
+  /* ---------- 3. 工安論點 ----------
      這一段的數字全部綁資料。先前 baseline A 的產能寫死成 99.0%，
      只要種子或情境一改，正文就會跟下面的表格對不起來。 */
   const hz = byScen["hazard-zone"];
   if(hz){
+    const aExp = hz["baseline-a"].hazard_exposure_min, gExp = hz["guardian"].hazard_exposure_min;
+    const aAtt = hz["baseline-a"].production_attainment_pct, gAtt = hz["guardian"].production_attainment_pct;
+    /* 兩張長條圖要求讀者自己反轉其中一張的方向（曝露越低越好、產能越高越好），
+       而且滿版的長條在淺底上看起來像空的。改成一句話講清楚這筆交易換了什麼。 */
     html += `<section class="claim">
-      <div class="q">Baseline A 的產能數字最漂亮，<b>${fmt(hz["baseline-a"].production_attainment_pct,1)}%</b>。
-        代價是讓一個人在運轉中的機台旁邊站了 <b>${fmt(hz["baseline-a"].hazard_exposure_min,0)} 分鐘</b>。</div>
-      <div class="a">Factory Guardian 把危險區曝露壓到 <b>${fmt(hz["guardian"].hazard_exposure_min,0)} 分鐘</b>，
-        產能因此降到 ${fmt(hz["guardian"].production_attainment_pct,1)}%。這不是系統表現變差，而是它<b>被設計成會這樣選</b>：
-        Safety Agent 的 BLOCK 是硬限制，不是加權項目。任何「維持機台運轉」的方案都直接從候選清單裡出局，
-        不管它的產能分數多高。<br>
-        規格書 §4.4 的原句是「高風險條件下阻止為了產量繼續運轉」。這一列就是它被實作出來的樣子。</div>
-      <div class="mt14" style="max-width:640px">
-        ${barRow("危險區曝露",hz,"hazard_exposure_min")}
-        ${barRow("產能達成率",hz,"production_attainment_pct")}
+      <div class="claim-inner">
+        <p class="micro-label">為什麼有一格數字「比較差」</p>
+        <h3 class="sec-title">這一格是故意的：<br>用 ${fmt(aAtt-gAtt,1)}% 產能，換一個人不站在危險區</h3>
+
+        <div class="trade">
+          <div class="trade-col give">
+            <p class="trade-h">放棄了什麼</p>
+            <p class="trade-big">${fmt(aAtt-gAtt,1)}<em>% 產能</em></p>
+            <p class="trade-sub">產能達成率從 ${fmt(aAtt,1)}% 降到 ${fmt(gAtt,1)}%</p>
+          </div>
+          <div class="trade-col get">
+            <p class="trade-h">換到了什麼</p>
+            <p class="trade-big">${fmt(aExp-gExp,0)}<em> 分鐘</em></p>
+            <p class="trade-sub">人員待在運轉機台旁的時間，從 ${fmt(aExp,0)} 分鐘降到 ${fmt(gExp,0)} 分鐘</p>
+          </div>
+        </div>
+
+        <div class="a">這不是系統表現變差，而是它<b>被設計成會這樣選</b>：Safety Agent 的 BLOCK 是硬限制，
+          不是加權項目。任何「維持機台運轉」的方案都直接從候選清單裡出局，不管它的產能分數多高。
+          規格書 §4.4 的原句是「高風險條件下阻止為了產量繼續運轉」——這一格就是它被實作出來的樣子。
+          <b>如果貴廠的稽核標準要求人員零曝露，這一格就是您要的行為。</b></div>
       </div>
     </section>`;
   }
 
-  /* ---------- 各情境完整對照表 ---------- */
+  /* ---------- 4. 各情境完整對照表 ----------
+     19 個 KPI × 5 情境 = 一面數字牆，對業主來說是雜訊，對工程師來說是必要證據。
+     所以不刪，改成預設收合：想追細節的人自己打開。 */
   const span = MODES.length + 1;
+  html += `<section class="detail-sec">
+    <div class="detail-inner">
+      <p class="micro-label">完整數據</p>
+      <h3 class="sec-title">每個 KPI 的原始值</h3>
+      <p class="sec-intro">上面的卡片是摘要。以下是模擬器輸出的全部 ${cols.length} 個 KPI，
+        未經挑選，供技術審查使用。點開任一情境展開。</p>`;
   scenarios.forEach(sid=>{
     const data=byScen[sid];
     const gt=(rows.find(r=>r.scenario_id===sid)||{}).ground_truth||{};
-    html += `<section class="sec">
-      <div class="sec-h"><b>${esc(sid)}</b>
-        <span class="meta">${esc(SCEN_TITLE[sid]||"")} / GROUND TRUTH: ${esc(Object.entries(gt).map(([k,v])=>k+"="+v).join(" "))||NODATA}</span></div>
+    html += `<details class="sec drop">
+      <summary class="sec-h"><b>${esc(SCEN_TITLE[sid]||sid)}</b>
+        <span class="meta">${esc(sid)} / GROUND TRUTH: ${esc(Object.entries(gt).map(([k,v])=>k+"="+v).join(" "))||NODATA}</span></summary>
       <div class="sec-b flush tbl">
         <table class="cmp"><caption class="vh">${esc(sid)} 三組對照</caption><thead><tr>
           <th scope="col">KPI</th>${MODES.map(m=>`<th scope="col" class="mode ${m==='guardian'?'win':''}">${MODE_SHORT[m]}</th>`).join("")}
@@ -260,10 +539,14 @@ function render(rep){
               const nums = vals.filter(numeric).map(asNum);
               const best = nums.length ? (c.higher_is_better?Math.max(...nums):Math.min(...nums)) : null;
               const worst= nums.length ? (c.higher_is_better?Math.min(...nums):Math.max(...nums)) : null;
+              /* 有工安取捨的情境裡，產能「最高」其實是拿人員曝露換來的。
+                 照 higher_is_better 蓋一個綠色「最佳」在 Baseline A 上，等於在
+                 業主面前推薦一個我們自己在上一段才剛否定的行為。這種格子只印數字。 */
+              const tradeoff = SAFETY_TRADEOFF.has(sid) && TRADEOFF_KEYS.has(key);
               return `<tr><th scope="row" class="kpi-l">${esc(c.label)}<small>${esc(key)}</small></th>` +
                 vals.map(v=>{
                   let cls="val", mark="";
-                  if(numeric(v) && best!==null && nums.length>1 && best!==worst){
+                  if(!tradeoff && numeric(v) && best!==null && nums.length>1 && best!==worst){
                     if(asNum(v)===best){ cls+=" best"; mark=` <span class="mk" aria-hidden="true">◀</span><span class="vh">（最佳）</span>`; }
                     else if(asNum(v)===worst){ cls+=" worst"; mark=`<span class="vh">（最差）</span>`; }
                   }
@@ -271,60 +554,100 @@ function render(rep){
                 }).join("") + `</tr>`;
             }).join("");
         }).join("") +
-      `</tbody></table></div></section>`;
+      `</tbody></table>${SAFETY_TRADEOFF.has(sid)?`<p class="tbl-note">這個情境牽涉人員安全，產能欄位刻意不標「最佳」——
+         最高的產能是用人員曝露換來的。判讀請以「危險區曝露」為準。</p>`:""}</div></details>`;
   });
+  html += `</div></section>`;
 
-  /* ---------- 彙總 ---------- */
+  /* ---------- 5. 跨情境彙總 ---------- */
   const agg=rep.aggregate;
-  html += `<section class="sec">
-    <div class="sec-h"><b>Cross-Scenario Aggregate</b><span class="meta">${scenarios.length} SCENARIOS × ${MODES.length} MODES</span></div>
-    <div class="sec-b">
-      ${["production_attainment_pct","max_order_delay_min","hazard_exposure_min","machine_health_final"].map(key=>{
+  html += `<section class="agg-sec">
+    <div class="agg-inner">
+      <p class="micro-label">跨情境彙總</p>
+      <h3 class="sec-title">${scenarios.length} 種情境平均下來</h3>
+      <div class="agg-grid">
+      ${["production_attainment_pct","production_loss_ntd","max_order_delay_min","hazard_exposure_min"].map(key=>{
         const c=colMeta[key];
         const vals=MODES.map(x=>agg[x][key]).filter(v=>v!==null&&v!==undefined);
         const max=Math.max(...vals,1);
-        return `<div class="mt10"><span class="micro">${esc(c.label)}</span>
+        /* 「越低越好」的指標如果照原值畫長度，最差的那組會畫出最長的一根，
+           看起來像贏家。改成畫「相對於最差值還剩多少」——四張圖一律
+           長 = 好，業主不必每張都先讀一次方向說明。 */
+        const worst = Math.max(...vals.map(v=>Math.abs(v||0)),0);
+        const barPct = v => {
+          const n = Math.abs(v||0);
+          if(c.higher_is_better) return Math.max(2,100*n/max);
+          if(!worst) return 100;              // 三組都是 0：全部都好
+          return Math.max(2,100*(1-n/worst)); // 離最差越遠，長條越長
+        };
+        return `<div class="agg-item"><span class="micro">${esc(c.label)}</span>
+          <span class="agg-hint">長條越長越好${c.higher_is_better?"":"（此項數值越低越好）"}</span>
           ${MODES.map(m=>`<div class="barcmp"><span class="nm">${MODE_SHORT[m]}</span>
               <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':'a'}"
-                style="width:${Math.max(1,100*(agg[m][key]||0)/max)}%"></i></span>
-              <span class="vl">${fmt(agg[m][key],1)}</span></div>`).join("")}</div>`;
+                style="width:${barPct(agg[m][key])}%"></i></span>
+              <span class="vl">${key==="production_loss_ntd"?money(agg[m][key]):fmt(agg[m][key],1)}</span></div>`).join("")}</div>`;
       }).join("")}
+      </div>
     </div></section>`;
 
   html += `<footer class="foot">
     <div class="n">${esc(rep.disclaimer)}<br>
       本頁每次載入都會在瀏覽器要求下重新執行完整 Benchmark（${scenarios.length} 情境 × ${MODES.length} 模式），
       數字非快取、非預錄。CLI 等效指令：<code>factory-guardian benchmark</code></div>
-    <div class="row gap8"><a href="/"><span class="gl" aria-hidden="true">◂</span> WAR ROOM</a></div>
+    <a class="back" href="/"><span class="gl" aria-hidden="true">◂</span> WAR ROOM</a>
   </footer>`;
 
   $("body").innerHTML = html;
 }
 
-/* 箭頭方向照實際變化走。舊版一律印 ▲，連「最大交期延遲從 62 分鐘降到 8 分鐘」
-   這種下降才是好事的指標也印 ▲，等於在評審面前把方向講反。 */
-function headline(en,zh,fromVal,toVal,unit,decimals,note){
-  const has = v => v!==null && v!==undefined && !Number.isNaN(v);
-  let delta = "";
-  if(has(fromVal) && has(toVal)){
-    const dir = toVal > fromVal ? "▲" : toVal < fromVal ? "▼" : "=";
-    delta = `<span class="arrow" aria-hidden="true">${dir}</span> from ${fmt(fromVal,decimals)}${unit} · `;
-  }
-  return `<div class="hl">
-    <div class="l">${en}</div>
-    <div class="macro v">${fmt(toVal,decimals)}<em>${unit}</em></div>
-    <div class="d">${zh} ${delta}${note}</div>
-  </div>`;
-}
+/* 情境卡片：一張卡只回答一個問題——「這種故障，用了跟沒用差多少」。
+   主數字是該情境最能代表結果的那一個（設備故障看錢，工安看曝露時間），
+   下面補三組的並列值，讓人自己驗證我們沒有挑數字。 */
+function caseCard(sid,data){
+  const f = CASE_FOCUS[sid] || CASE_DEFAULT;
+  const a = data["baseline-a"] ? data["baseline-a"][f.key] : null;
+  const g = data["guardian"]   ? data["guardian"][f.key]   : null;
+  const show = v => (v===null||v===undefined||Number.isNaN(v)) ? NODATA
+                  : (f.money ? "NT$"+Math.round(v).toLocaleString() : fmt(v,f.dec)+f.unit);
 
-function barRow(label,data,key){
-  const vals=MODES.map(m=>data[m]?data[m][key]:0);
-  const max=Math.max(...vals.map(v=>Math.abs(v||0)),1);
-  return `<div class="mt6"><span class="micro">${esc(label)}</span>` +
-    MODES.map((m,i)=>`<div class="barcmp"><span class="nm">${MODE_SHORT[m]}</span>
-      <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':'a'}"
-        style="width:${Math.max(1,100*Math.abs(vals[i]||0)/max)}%"></i></span>
-      <span class="vl">${fmt(vals[i],1)}</span></div>`).join("") + `</div>`;
+  const has = v => v!==null && v!==undefined && !Number.isNaN(v);
+  let verdict = "", vcls = "";
+  if(has(a) && has(g)){
+    const better = f.lower ? g < a : g > a;
+    const same = a === g;
+    if(same){ verdict = "與現況相同"; vcls = "flat"; }
+    else if(better){
+      const diff = f.lower ? a - g : g - a;
+      const rel  = a ? Math.abs(100*diff/a) : null;
+      verdict = f.money ? `省下 ${"NT$"+Math.round(diff).toLocaleString()}`
+                        : `減少 ${fmt(Math.abs(diff),f.dec)}${f.unit}`;
+      if(rel!==null && Number.isFinite(rel)) verdict += `（${fmt(rel,0)}%）`;
+      vcls = "good";
+    } else {
+      /* 產能被工安限制壓下來時會走到這裡。不粉飾，但要講清楚換到了什麼。 */
+      verdict = "為了工安刻意讓步"; vcls = "trade";
+    }
+  }
+
+  const isSafety = SAFETY_TRADEOFF.has(sid);
+  return `<article class="case ${isSafety?"safety":""}">
+    <header class="case-h">
+      <h4>${esc(SCEN_TITLE[sid]||sid)}</h4>
+      ${isSafety?`<span class="case-tag">牽涉人員安全</span>`:""}
+    </header>
+    <p class="case-focus-l">${esc(f.label)}</p>
+    <div class="case-nums">
+      <div class="cn"><span>現況 A</span><b class="bad">${show(a)}</b></div>
+      <span class="cn-op" aria-hidden="true">→</span>
+      <div class="cn"><span>Guardian</span><b class="good">${show(g)}</b></div>
+    </div>
+    ${verdict?`<p class="case-verdict ${vcls}">${esc(verdict)}</p>`:""}
+    <dl class="case-more">
+      <div><dt>產能達成</dt><dd>${MODES.map(m=>fmt(data[m]?data[m].production_attainment_pct:null,0)).join(" / ")}</dd></div>
+      <div><dt>設備健康</dt><dd>${MODES.map(m=>fmt(data[m]?data[m].machine_health_final:null,0)).join(" / ")}</dd></div>
+    </dl>
+    <p class="case-legend">依序為 A / B / C</p>
+  </article>`;
 }
 
 boot();
