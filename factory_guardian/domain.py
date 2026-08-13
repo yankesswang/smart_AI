@@ -380,6 +380,9 @@ class Diagnosis:
     thresholds: dict[str, float] = field(default_factory=dict)     # 訊號強度的兩個門檻
     observations: list[dict[str, Any]] = field(default_factory=list)  # 每個訊號的觀測值與偏離量
     baseline_ref: str = ""                                         # 判讀所依據的交機驗收記錄
+    # 敘述的結構化版本：前端直接排成條列，不必再去切 narrative 這段長文。
+    # 每筆為 {"label": 中文短標題, "value": 主要數值/結論, "detail": 補充說明}。
+    summary_points: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def top(self) -> RootCauseCandidate | None:
@@ -399,6 +402,7 @@ class Diagnosis:
             "thresholds": self.thresholds,
             "observations": self.observations,
             "baseline_ref": self.baseline_ref,
+            "summary_points": self.summary_points,
         }
 
 
@@ -435,6 +439,8 @@ class ImpactAssessment:
     production_loss_pct: float
     total_delay_min: float
     narrative: str = ""
+    # 同 Diagnosis.summary_points：影響摘要的結構化版本，供前端條列。
+    summary_points: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -445,6 +451,7 @@ class ImpactAssessment:
             "production_loss_pct": round(self.production_loss_pct, 1),
             "total_delay_min": round(self.total_delay_min, 1),
             "narrative": self.narrative,
+            "summary_points": self.summary_points,
         }
 
 

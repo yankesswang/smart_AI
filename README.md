@@ -21,9 +21,16 @@ uv sync --extra dev                                # 建立環境（不含 TabFM
 
 uv run factory-guardian demo bearing-degradation   # 舞台 Demo：完整閉環 + 互動核准
 uv run factory-guardian benchmark                  # 三組對照組 KPI 比較
-uv run factory-guardian serve                      # Web Dashboard → http://127.0.0.1:8000
-uv run pytest -q                                   # 122 個測試，離線 5 秒跑完
+uv run factory-guardian serve                      # 啟動服務 → http://127.0.0.1:8000
+uv run pytest -q                                   # 165 個測試，離線約 11 秒跑完
 ```
+
+`serve` 會同時提供兩個介面：
+
+| 網址 | 介面 | 給誰看 |
+|---|---|---|
+| `/` | Demo Dashboard | 評審與訪客：把 Agent 的推理過程演出來 |
+| `/console` | **中央管理平台** | 值班人員：多站點、需登入、資料持久化 |
 
 `uv run` 一律走專案環境。若改用系統 `python3`／`pip`，會因直譯器不符而
 讓 TabFM 靜默降級成 Ridge 基線——這是最容易誤判成「模型壞掉」的狀況。
@@ -327,6 +334,27 @@ uv run factory-guardian serve      # 預測分頁即可選 TabFM runtime
 `/api/session/*` 就是規格中的 **Simulator API**。真實導入時由 OPC-UA / MQTT / MES Adapter 取代，
 Agent 層完全不動 —— 這是「Hardware-agnostic Agentic Factory Operations Architecture」的具體介面。
 
+### 中央管理平台 API（`/api/v1/*`）
+
+與上面的 Demo API 並存但互不干擾。**每個端點都需要登入**，寫入端點還會檢查角色權限
+並以真實操作者身分寫入稽核。認證用 `Authorization: Bearer <token>` 或 `fg_token` cookie。
+
+| 端點 | 需要權限 | 用途 |
+|---|---|---|
+| `POST /api/v1/auth/login` `logout` `GET me` | — | 登入 / 登出 / 目前身分 |
+| `GET /api/v1/fleet/overview` | `fleet:read` | 所有站點彙總 |
+| `GET /api/v1/sites/{id}` | `site:read` | 站點完整狀態 |
+| `GET /api/v1/sites/{id}/stream` | `site:read` | 該站點的 SSE 事件流 |
+| `POST /api/v1/sites/{id}/control` `start` `stop` `inject` | `site:control` | 站點運行控制 |
+| `POST /api/v1/sites/{id}/approval` | `approval:decide` | 核准 / 退回 Agent 方案 |
+| `GET /api/v1/alarms` | `alarm:read` | 告警清單（可依站點／狀態／嚴重度篩選） |
+| `POST /api/v1/alarms/{id}/acknowledge` `resolve` | `alarm:ack` `alarm:resolve` | 告警生命週期 |
+| `GET POST /api/v1/work-orders` `PATCH {id}` | `workorder:*` | 工單 CRUD |
+| `GET POST /api/v1/handovers` | `handover:write` | 班別交接 |
+| `GET /api/v1/analytics/summary` `kpi-trend` | `analytics:read` | MTTA／MTTR 與趨勢 |
+| `GET /api/v1/audit` | `audit:read` | 操作稽核查詢 |
+| `/api/v1/admin/users` `sites` | `user:manage` `site:manage` | 使用者與站點管理 |
+
 ---
 
 ## 環境變數
@@ -342,6 +370,9 @@ Agent 層完全不動 —— 這是「Hardware-agnostic Agentic Factory Operatio
 | `FG_TICK_SECONDS` | `60` | 一個 tick 代表幾秒模擬時間 |
 | `FG_NO_DOTENV` | — | 設 `1` 不讀 `.env`（測試用） |
 | `FACTORY_GUARDIAN_TABFM_BACKEND` | `pytorch` | 官方 TabFM adapter 使用 `pytorch` 或 `jax` backend |
+| `FG_PLATFORM_DB` | `runs/platform.db` | 中央管理平台的 SQLite 路徑 |
+| `FG_ADMIN_USER` | `admin` | 首次啟動建立的管理員帳號 |
+| `FG_ADMIN_PASSWORD` | `admin12345` | 首次啟動的管理員密碼（**正式部署務必覆寫**） |
 
 ---
 
@@ -372,10 +403,85 @@ factory_guardian/
 ├── agents/             # monitoring / diagnosis / production / safety / maintenance / verification / vision
 ├── prediction/         # TabFM 時序預測（含 Ridge 基線）
 ├── policy/             # Policy Engine + Safety 規則
-└── api/                # FastAPI + Dashboard
+├── platform/           # 中央管理平台層（見下節）
+│   ├── store.py        #   SQLite 持久化與 migration
+│   ├── auth.py         #   帳號、角色與權限（PBKDF2 + server-side session）
+│   ├── adapters.py     #   資料來源介面；模擬器只是其中一種實作
+│   ├── fleet.py        #   多站點註冊表與背景執行緒
+│   ├── services.py     #   告警生命週期、工單、交接、稽核、分析
+│   └── bootstrap.py    #   啟動流程（建庫、預設帳號、站點註冊）
+└── api/                # FastAPI + Demo Dashboard + 主控台
 docs/algorithms.md      # 演算法規格：公式、常數與設計理由
-tests/                  # 124 個測試
+tests/                  # 165 個測試（含 40 個平台測試）
 ```
+
+---
+
+## 中央管理平台（正式產品形態）
+
+前面的 Dashboard 是**展示**用的：它把 Agent 的推理過程演給人看。
+中央管理平台則是**值班**用的：多站點、要登入、資料留得住、每個操作記得住是誰做的。
+
+```bash
+uv run factory-guardian serve      # → http://127.0.0.1:8000/console
+```
+
+預設帳號（四個角色，權限差異是真的會擋）：
+
+| 帳號 | 密碼 | 角色 | 能做什麼 |
+|---|---|---|---|
+| `admin` | `admin12345` | 系統管理員 | 全部，含使用者與站點管理 |
+| `engineer` | `engineer123` | 設備工程師 | 核准 Agent 方案、控制站點 |
+| `operator` | `operator123` | 現場操作員 | 確認告警、認領工單、寫交接 |
+| `viewer` | `viewer12345` | 檢視者 | 唯讀 |
+
+> 首次啟動才會建立這些帳號。正式部署請用 `FG_ADMIN_USER` / `FG_ADMIN_PASSWORD`
+> 指定管理員，並在登入後立刻改掉預設密碼。
+
+### 與 Demo 的七個實質差別
+
+| | Demo Dashboard | 中央管理平台 |
+|---|---|---|
+| 站點數 | 1（單一 `DemoSession`） | N（`FleetManager` 註冊表，各自獨立執行緒） |
+| 資料 | 記憶體，重啟即失 | SQLite，重啟後告警／工單／稽核都還在 |
+| 身分 | 無 | 帳號 + 四級角色 + server-side session |
+| 告警 | 事件流訊息 | 完整生命週期：open → acknowledged → resolved → closed，含去重與 STALE 標記 |
+| 工單 | 畫面上的一段文字 | 可指派、可認領、算得出 MTTR 的資料列 |
+| 稽核 | 單次 run 的 JSONL | 「誰在哪個站點對什麼做了什麼」的可查詢表 |
+| 資料源 | 直接寫死 `FactoryTwin` | `DataSourceAdapter` 介面，模擬器只是其中一種實作 |
+
+### 主控台頁面
+
+| 路徑 | 頁面 | 用途 |
+|---|---|---|
+| `#/fleet` | 廠區總覽 | 所有站點的健康度、告警與待核准，一頁掃完 |
+| `#/sites/{id}` | 站點主控台 | 機台狀態、Agent 活動流、KPI 走勢、人工核准 |
+| `#/alarms` | 告警管理 | 跨站點告警清單、確認與結案 |
+| `#/work-orders` | 工單管理 | 建立、認領、完成 |
+| `#/handovers` | 班別交接 | 交班記錄，自動帶入未結案事項 |
+| `#/analytics` | 維運指標 | MTTA／MTTR、告警分布、工單負載 |
+| `#/audit` | 操作稽核 | 誰做了什麼，可依操作者與動作篩選 |
+| `#/admin` | 系統管理 | 使用者與站點註冊 |
+
+### Adapter 層：模擬器只是其中一種資料源
+
+```python
+class DataSourceAdapter:
+    def start() / stop()
+    def poll() -> FactorySnapshot      # 上行：現場狀態
+    def apply(action) -> ActionEffect  # 下行：控制動作
+    def descriptor() -> dict           # 能力與連線資訊
+```
+
+`SimulatedAdapter` 包住既有的 `FactoryTwin`；`OpcUaAdapter` 與 `MqttAdapter`
+的介面已經固定，但**刻意保留為未實作骨架** —— 真正的實作需要現場的 endpoint、
+點位表與憑證，那是導入時才拿得到的資訊。平台會誠實標示：模擬站點掛 `SIM` 標記，
+未實作的 adapter 在註冊介面上顯示「尚未實作」且無法選取。
+
+補上實作之後，`fleet` / `services` / API / 前端都不需要改動。
+唯一的例外是 `SiteRuntime._build_orchestrator()`：Agent 閉環目前綁在 `FactoryTwin`
+的投影能力上（規劃階段要能「模擬如果這樣做會怎樣」），真實站點接閉環時
+需要提供等價的投影介面，否則只能跑監控與告警、不能跑自動處置。
 
 ---
 
@@ -388,9 +494,17 @@ tests/                  # 124 個測試
 | Pilot Line | MES / SCADA / CMMS + 權限與 Safety Review | 保留架構，強化治理 |
 | Production | 多產線、多設備商、HA / SOC / SLA | 擴充，不改核心閉環 |
 
-替換點都已經是明確的介面：`FactoryTwin`（→ OPC-UA/MQTT Adapter）、
+替換點都已經是明確的介面：`DataSourceAdapter`（→ OPC-UA/MQTT Adapter）、
 `VisionBackend`（→ YOLO / 真實 VLM）、`KnowledgeBase`（→ 向量資料庫）、
 `PolicyEngine`（→ 工廠實際 SOP 與權限系統）。
+
+正式部署前仍需補齊的項目（目前刻意未做，因為需要現場資訊或部署決策）：
+
+- **HTTPS 與反向代理** —— session cookie 目前未設 `secure` flag，正式環境需在
+  TLS 終結點後方運行並開啟該旗標。
+- **真實 adapter 實作** —— 需要點位表與憑證。
+- **PostgreSQL** —— SQLite 適合單機部署；多節點 HA 需要換掉 `Store` 的連線層。
+- **SSO / LDAP** —— 目前是本地帳號；接企業目錄需替換 `AuthService.login()`。
 
 ---
 

@@ -179,6 +179,7 @@ class DiagnosisAgent(Agent):
             thresholds={"strength_full": STRENGTH_FULL, "no_fault": NO_FAULT_STRENGTH},
             observations=self._observations(machine, readings, observed, deltas, commissioning),
             baseline_ref=commissioning.doc_id if commissioning else "",
+            summary_points=self._summary_points(event, candidates, readings, strength),
         )
         self.log(
             "diagnose",
@@ -530,6 +531,55 @@ class DiagnosisAgent(Agent):
         )
 
     # ------------------------------------------------------------------ 敘述
+    @staticmethod
+    def _summary_points(
+        event, candidates: list[RootCauseCandidate], readings: dict[str, float], strength: float
+    ) -> list[dict[str, object]]:
+        """敘述的結構化版本 —— 和 ``_narrate`` 的 fallback 講同一組事實。
+
+        差別在於這裡不組句子，而是回傳 label/value/detail 三欄，
+        讓前端排成條列。數字一律在這裡格式化好，前端不重算。
+        """
+        if not candidates:
+            return [{"label": "根因研判", "value": "無法推論", "detail": "現有證據不足以指向任何候選根因。"}]
+
+        top = candidates[0]
+        points: list[dict[str, object]] = [
+            {
+                "label": "觸發事件",
+                "value": f"{event.machine_id} / TICK {event.tick}",
+                "detail": (
+                    f"模擬第 {event.sim_minutes:.0f} 分鐘觸發 {event.severity.value.upper()} 異常，"
+                    f"觸發條件：{'、'.join(event.triggers)}。"
+                ),
+            },
+            {
+                "label": "健康度",
+                "value": f"{event.health:.0f}",
+                "detail": f"訊號強度 {strength:.2f}（偏離向量長度）。",
+                "tone": "alarm" if event.health < 50 else "",
+            },
+            {
+                "label": "根因研判",
+                "value": f"{top.label} {top.confidence:.0%}",
+                "detail": (
+                    top.evidence[0].statement if top.evidence else "依手冊徵兆區間與鑑別診斷規則比對得出。"
+                ),
+                "tone": "key",
+            },
+        ]
+
+        others = candidates[1:3]
+        if others:
+            points.append(
+                {
+                    "label": "次要候選",
+                    "value": "、".join(f"{c.label} {c.confidence:.0%}" for c in others),
+                    "detail": "信心度明顯低於主判定，僅供交叉確認。",
+                }
+            )
+        return points
+
     def _narrate(self, event, candidates: list[RootCauseCandidate], readings: dict[str, float], strength: float) -> str:
         def fallback() -> str:
             if not candidates:

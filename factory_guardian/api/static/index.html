@@ -41,14 +41,6 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
    這裡只留戰情中心自己的版面。 */
 .shell{display:grid;grid-template-rows:auto;min-height:100vh;background:var(--line);gap:1px}
 
-.factory-entry{background:var(--fg);color:var(--accent-ink);display:grid;grid-template-columns:minmax(260px,.66fr) minmax(0,1.34fr) auto;align-items:center;gap:18px;padding:16px 20px;border-left:4px solid var(--accent)}
-.factory-entry .entry-label{font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);opacity:.68}
-.factory-entry h2{font-family:var(--cjk);font-size:1.05rem;margin-top:3px}
-.factory-entry p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--accent-ink);opacity:.8;max-width:72ch}
-.factory-entry a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 14px;background:var(--accent);border:1px solid var(--accent);color:var(--accent-ink);font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,transform .12s ease}
-.factory-entry a:hover{background:var(--panel);border-color:var(--panel);color:var(--fg)}
-.factory-entry a:active{transform:translateY(1px)}
-
 /* ---- Guided Demo -------------------------------------------------------
    主畫面只保留一條敘事：選案例 -> 看 Agent 思考 -> 看修復結果。
    技術控制與完整稽核仍在，但退到 details 裡，避免第一次看的人失去焦點。 */
@@ -554,6 +546,29 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .ev .txt{color:var(--fg-2);font-family:var(--cjk)}
 .ev .ref{color:var(--fg);font-family:var(--mono);font-size:var(--t-micro)}
 
+/* 結構化摘要條列：取代原本整段 narrative 長文 */
+.pts{display:grid;gap:0}
+.pt{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;padding:7px 0;border-bottom:1px dotted var(--line)}
+.pt:last-child{border-bottom:0}
+.pt .pl{font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
+        font-family:var(--cjk);padding-top:2px}
+.pt .pv{font-size:var(--t-body);font-weight:700;font-family:var(--cjk);color:var(--fg);
+        font-variant-numeric:tabular-nums}
+.pt .pd{grid-column:2;font-size:var(--t-meta);font-family:var(--cjk);line-height:1.7;color:var(--fg-2)}
+.pt.key{border-left:2px solid var(--red);padding-left:9px;margin-left:-11px}
+.pt.key .pv{color:var(--red)}
+.pt.alarm .pv{color:var(--red)}
+
+/* 觀測值：四個訊號排成一列小卡，取代敘述裡的「目前觀測值：…」 */
+.obs{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:1px;background:var(--line);
+     border:1px solid var(--line)}
+.obs .o{background:var(--panel-2);padding:6px 7px;display:flex;flex-direction:column;gap:2px}
+.obs .on{font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.obs .ov{font-size:var(--t-body);font-weight:700;font-variant-numeric:tabular-nums}
+.obs .od{font-size:var(--t-micro);font-variant-numeric:tabular-nums;color:var(--dim)}
+.obs .o.warning .ov{color:var(--red-deep)}
+.obs .o.critical .ov{color:var(--red)}
+
 /* 候選根因 */
 .cand{display:flex;align-items:center;gap:9px;padding:5px 0}
 .cand .bar{flex:1 1 auto;height:10px;background:var(--panel-3);border:1px solid var(--line)}
@@ -611,8 +626,6 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 }
 @media(max-width:900px){
   .kpis{grid-template-columns:repeat(2,1fr)}
-  .factory-entry{grid-template-columns:1fr auto}
-  .factory-entry p{grid-column:1/-1}
   .demo-lab{grid-template-columns:1fr}
   .demo-live{grid-template-columns:1fr}
   .demo-intro{border-right:0;border-bottom:1px solid var(--line);padding:18px}
@@ -633,9 +646,6 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
   .as-state,.as-copy{border-right:0;border-bottom:1px solid var(--line)}
   .as-evidence{grid-column:auto;border-top:0}
   .demo-cases{grid-template-columns:1fr}
-  .factory-entry{grid-template-columns:1fr;padding:15px}
-  .factory-entry p{grid-column:auto}
-  .factory-entry a{width:100%}
   .demo-case{min-height:118px}
   .demo-steps{grid-template-columns:1fr}
   .demo-step{min-height:94px;grid-template-areas:"agent open" "title title" "copy copy" "value value";grid-template-columns:1fr auto;gap:4px 8px}
@@ -665,15 +675,13 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       <a href="/benchmark">效益驗證報告</a>
     </nav>
     <div class="fill"></div>
+    <a class="console-link" href="/console" title="進入多站點中央管理平台（需登入）">
+      <i class="cl-mark" aria-hidden="true"></i>
+      <span>中央管理平台</span>
+      <span class="cl-sub">Console</span>
+    </a>
     <div class="synth"><b><span class="gl" aria-hidden="true">◆</span> SYNTHETIC DEMO DATA</b></div>
   </header>
-
-  <!-- ================= 工廠配置入口 ================= -->
-  <section class="factory-entry" aria-labelledby="factoryEntryTitle">
-    <div><div class="entry-label">Before the demo</div><h2 id="factoryEntryTitle">第一次來？先搞懂產線配置</h2></div>
-    <p>先認識 M-A、M-B、M-C 的用途與產品流向，才看得懂 Agent 為什麼停機、轉單，以及評估下游影響。</p>
-    <a href="/factory">查看產線配置 →</a>
-  </section>
 
   <!-- ================= 一鍵 Demo ================= -->
   <section class="demo-lab" id="demoLab" aria-labelledby="demoTitle">
@@ -2282,6 +2290,32 @@ function renderLoop(loop){
   if(att.length) renderVerify(att[att.length-1], loop);
 }
 
+/* 摘要條列。後端沒送 summary_points（舊 session、或 LLM 只回了敘述）時，
+   退回原本那段 narrative，畫面不會變空。 */
+function renderPoints(points, narrative, cls=""){
+  const list=(points||[]).filter(p=>p&&p.label);
+  if(!list.length) return narrative?`<div class="narr ${cls}">${esc(narrative)}</div>`:"";
+  return `<div class="pts ${cls}">` + list.map(p=>`
+    <div class="pt ${p.tone==="key"?"key":p.tone==="alarm"?"alarm":""}">
+      <span class="pl">${esc(p.label)}</span>
+      <span class="pv">${esc(p.value??"")}</span>
+      ${p.detail?`<span class="pd">${esc(p.detail)}</span>`:""}
+    </div>`).join("") + `</div>`;
+}
+
+/* 觀測值小卡：偏離最大的四個訊號。band 決定顏色，和左欄的判讀一致。 */
+function renderObservations(observations){
+  const obs=(observations||[]).slice(0,4);
+  if(!obs.length) return "";
+  return `<hr class="rule"><span class="micro">OBSERVED SIGNALS</span>
+    <div class="obs mt6">` + obs.map(o=>`
+      <div class="o ${esc(o.band||"")}">
+        <span class="on">${esc(o.name)}</span>
+        <span class="ov">${fmt(o.value,2)}</span>
+        <span class="od">Δ${Number(o.delta)>0?"+":""}${fmt(o.delta,2)}${esc(o.unit||"")}</span>
+      </div>`).join("") + `</div>`;
+}
+
 function renderDiagnosis(loop){
   const e=loop.event, d=loop.diagnosis;
   $("dxMeta").textContent = `${e.event_id} / TICK ${e.tick} / ${e.kind.toUpperCase()}`;
@@ -2297,7 +2331,8 @@ function renderDiagnosis(loop){
           <span class="lb trunc">${esc(c.label)}</span>
           <span class="bar"><i style="width:${Math.round(c.confidence*100)}%"></i></span>
           <span class="pc">${Math.round(c.confidence*100)}%</span></div>`).join("") + `</div>`;
-    html += `<div class="narr mt10">${esc(d.narrative)}</div>`;
+    html += renderPoints(d.summary_points, d.narrative, "mt10");
+    html += renderObservations(d.observations);
     const ev=(d.candidates[0].evidence||[]).slice(0,5);
     if(ev.length){
       html += `<hr class="rule"><span class="micro">EVIDENCE</span><div class="mt6">` +
@@ -2309,8 +2344,8 @@ function renderDiagnosis(loop){
 }
 
 function renderImpact(im){
-  $("impact").innerHTML = `<div class="narr">${esc(im.narrative)}</div>
-    <div class="row wrap gap4 mt10">
+  $("impact").innerHTML = renderPoints(im.summary_points, im.narrative) +
+    `<div class="row wrap gap4 mt10">
       <span class="tag">DOWNSTREAM ${esc(im.downstream_machines.join(" "))||"NONE"}</span>
       <span class="tag">ORDERS ${im.affected_orders.length}</span>
       <span class="tag ${im.production_loss_units>40?'alarm':''}">LOSS ${fmt(im.production_loss_units,0)} U</span></div>

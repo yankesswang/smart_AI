@@ -26,7 +26,9 @@ from ..config import get_settings
 from ..knowledge.commissioning import COMMISSIONING
 from ..knowledge.corpus import MAINTENANCE_HISTORY, MANUALS
 from ..knowledge.retriever import default_kb
+from ..platform.bootstrap import build_platform
 from ..policy.engine import PolicyEngine
+from .platform_routes import build_platform_router
 from ..prediction import ForecastRequest as ForecastSpec
 from ..prediction import ForecastService
 from ..twin.faults import FAULTS
@@ -81,7 +83,12 @@ class PredictionRequest(BaseModel):
     model: str = "auto"
 
 
-def create_app() -> FastAPI:
+def create_app(enable_platform: bool = True, platform_autostart: bool = True) -> FastAPI:
+    """建立 FastAPI app。
+
+    ``enable_platform=False`` 只保留 Demo API 與頁面；測試用它避免每個
+    測試都啟動背景站點執行緒與 SQLite。
+    """
     settings = get_settings()
     app = FastAPI(
         title="Factory Guardian AI",
@@ -349,6 +356,27 @@ def create_app() -> FastAPI:
     def factory_page() -> HTMLResponse:
         """工廠產線配置、設備用途與產品路徑說明頁。"""
         return _page("factory.html")
+
+    # ---------------------------------------------------------------- 中央管理平台
+    # Demo 頁面（上方）與正式維運平台（下方）並存：前者展示 Agent 機制，
+    # 後者是多站點、需登入、有持久化的正式產品介面。
+    if enable_platform:
+        platform = build_platform(autostart=platform_autostart)
+        app.state.platform = platform
+        app.include_router(build_platform_router(platform))
+        # 關站時把站點執行緒收乾淨。用 router 的 shutdown 事件而非
+        # 已棄用的 @app.on_event —— app 已經建好了，改不了 lifespan。
+        app.router.add_event_handler("shutdown", platform.shutdown)
+
+        @app.get("/console", response_class=HTMLResponse)
+        def console_page() -> HTMLResponse:
+            """中央管理平台主控台（正式維運介面）。"""
+            return _page("console.html")
+
+        @app.get("/console/{path:path}", response_class=HTMLResponse)
+        def console_spa(path: str) -> HTMLResponse:
+            """主控台採 hash 以外的路徑時，一律回主控台外殼由前端路由接手。"""
+            return _page("console.html")
 
     return app
 

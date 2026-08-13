@@ -25,6 +25,11 @@ runs/
 benchmark.json
 .tmp/
 
+# 平台資料庫（含使用者密碼雜湊與稽核軌跡）—— 不進版控
+*.db
+*.db-wal
+*.db-shm
+
 # 編輯器 / 作業系統
 .DS_Store
 .idea/

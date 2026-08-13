@@ -160,6 +160,37 @@ body{
 .top .synth{display:flex;align-items:center;gap:9px;padding:8px 16px;background:var(--red);color:#000}
 .top .synth b{font-size:var(--t-micro);letter-spacing:var(--tr-label);font-weight:800}
 
+/* 中央管理平台入口。
+   這裡刻意不套 .nav 的樣式：它不是「Demo 的第四個分頁」，
+   而是通往另一套系統（要登入、多站點、資料持久化）的出口。
+   用 accent 實心塊把「離開展示、進入正式系統」講清楚。
+   注意各頁的 :root 可能是淺色盤（index.html 就是），所以顏色一律走
+   --accent / --accent-ink 這組語意 token，不要寫死明暗。 */
+.top .console-link{
+  display:flex;align-items:center;gap:7px;
+  padding:8px 16px;border-right:1px solid var(--line);
+  font-family:var(--cjk);font-size:var(--t-meta);letter-spacing:.02em;
+  white-space:nowrap;text-decoration:none;
+  /* 各頁的 :root 不一致：benchmark.html 沒有 --accent，
+     factory/system 有 --accent 但沒有 --accent-ink。這裡給兩層保險，
+     確保底色與字色永遠是「深底淺字」的組合，不會退化成低對比。 */
+  background:var(--accent,#0B756E);color:var(--accent-ink,#F8FAF9);
+  font-weight:700;
+  transition:filter .16s ease;
+}
+.top .console-link:hover{filter:brightness(1.18)}
+.top .console-link .cl-mark{
+  width:7px;height:7px;background:currentColor;flex:none;border-radius:50%;
+}
+.top .console-link .cl-sub{
+  font-size:var(--t-micro);opacity:.72;letter-spacing:var(--tr-label);
+  text-transform:uppercase;font-family:var(--sans);
+}
+
+@media (prefers-contrast: more){
+  .top .console-link{background:#000;color:#fff}
+}
+
 /* ==========================================================================
    結構：grid gap 1px 打出髮絲分隔線
    ========================================================================== */

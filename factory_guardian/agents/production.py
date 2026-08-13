@@ -91,6 +91,7 @@ class ProductionAgent(Agent):
             production_loss_pct=loss_pct,
             total_delay_min=total_delay,
         )
+        assessment.summary_points = self._impact_points(assessment, snapshot)
         assessment.narrative = self._narrate_impact(assessment, snapshot)
         self.log(
             "impact",
@@ -266,6 +267,52 @@ class ProductionAgent(Agent):
         )
 
     # ------------------------------------------------------------------ 敘述
+    @staticmethod
+    def _impact_points(assessment: ImpactAssessment, snapshot: FactorySnapshot) -> list[dict[str, object]]:
+        """影響敘述的結構化版本，欄位定義同 ``Diagnosis.summary_points``。
+
+        受影響訂單本身已經有表格可看，這裡只放「主管要先看到的四件事」：
+        傳播範圍、訂單風險、最嚴重的那一張、以及維持現況的代價。
+        """
+        at_risk = [i for i in assessment.affected_orders if i.at_risk]
+        points: list[dict[str, object]] = [
+            {
+                "label": "傳播範圍",
+                "value": "、".join(assessment.downstream_machines) or "無下游",
+                "detail": f"目前產線達成率 {snapshot.production_pct:.0f}%。",
+            },
+            {
+                "label": "訂單風險",
+                "value": f"{len(at_risk)} / {len(assessment.affected_orders)} 張",
+                "detail": "依 Knowledge Graph 追蹤依賴此機台的訂單，其中有交期風險者。",
+                "tone": "alarm" if at_risk else "",
+            },
+        ]
+
+        if at_risk:
+            worst = at_risk[0]
+            points.append(
+                {
+                    "label": "最嚴重訂單",
+                    "value": f"{worst.order_id} 延遲 {worst.delay_min:.0f} 分",
+                    "detail": (
+                        f"{worst.product_id}，剩餘 {worst.remaining:.0f} 件；"
+                        f"預估完成需 {worst.projected_finish_min:.0f} 分鐘，交期剩 {worst.due_in_min:.0f} 分鐘。"
+                    ),
+                    "tone": "key",
+                }
+            )
+
+        points.append(
+            {
+                "label": f"維持現況 {PLAN_HORIZON_TICKS} 分鐘",
+                "value": f"損失 {assessment.production_loss_units:.0f} 件",
+                "detail": f"達成率缺口 {assessment.production_loss_pct:.0f}%。",
+                "tone": "alarm" if assessment.production_loss_units > 40 else "",
+            }
+        )
+        return points
+
     def _narrate_impact(self, assessment: ImpactAssessment, snapshot: FactorySnapshot) -> str:
         def fallback() -> str:
             at_risk = [i for i in assessment.affected_orders if i.at_risk]

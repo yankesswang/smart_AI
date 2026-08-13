@@ -274,12 +274,7 @@ def test_default_demo_opens_hardware_and_agent_waterfall(client):
     assert "--red:#C43D35" in page.text.replace(" ", "")
 
 
-def test_factory_briefing_is_a_standalone_page_linked_before_demo(client):
-    page = client.get("/")
-    assert page.status_code == 200
-    assert page.text.index('class="factory-entry"') < page.text.index('id="demoLab"')
-    assert '<a href="/factory">查看產線配置' in page.text
-
+def test_factory_briefing_is_a_standalone_page(client):
     factory = client.get("/factory")
     assert factory.status_code == 200
     assert "搞懂產線配置" in factory.text
