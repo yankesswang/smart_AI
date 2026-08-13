@@ -185,6 +185,10 @@ def test_hazard_exposure_accumulates_then_clears_on_stop():
     twin = FactoryTwin(seed=3)
     twin.schedule(get_scenario("hazard-zone").injections)
     twin.run(8)
+    camera = twin.snapshot().cameras[0]
+    assert camera.person_in_hazard_zone
+    assert camera.ppe_compliant is False
+    assert "護具不全" in get_scenario("hazard-zone").description
     assert twin.hazard_exposure_min > 0
     exposure = twin.hazard_exposure_min
 

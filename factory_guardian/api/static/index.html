@@ -461,11 +461,14 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
             image-rendering:crisp-edges}
 
 /* ---- CAM-01 監視畫面 ---------------------------------------------------
-   跟 ARCADE 同一套處理：canvas 自己是彩色的，外框留在 HMI 的黑底裡。
-   這是 Vision Agent 判讀欄位的視覺化，不是裝飾圖。 */
-.cam{background:#D8E1E4;line-height:0;border-bottom:1px solid var(--line)}
+   公開授權影片只是明確標示的 demo 底片；HUD 與事件仍由即時欄位驅動。
+   影片無法播放時 camview.js 會退回資料驅動的像素場景。 */
+.cam{position:relative;background:#D8E1E4;line-height:0;border-bottom:1px solid var(--line);min-height:180px}
 .cam canvas{display:block;width:100%;height:auto;image-rendering:pixelated;
             image-rendering:crisp-edges}
+.cam-poster{display:block;width:100%;height:auto;aspect-ratio:168/106;object-fit:cover;filter:saturate(.72) contrast(1.06) brightness(.82)}
+.cam-fallback-note{position:absolute;left:8px;top:8px;padding:5px 7px;background:var(--fg);color:var(--ink-on);
+                   font-size:var(--t-micro);line-height:1;letter-spacing:.08em;text-transform:uppercase}
 .cam:empty{display:none}
 
 /* 視圖切換。做成一組互斥的分段按鈕，不用下拉選單：現場是用滑鼠點的。 */
@@ -885,6 +888,17 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
     <!-- ---------- 右欄 ---------- -->
     <div class="colR">
 
+      <section class="sec panel-side" data-console-panel="overview" id="cameraPanel">
+        <div class="sec-h"><b>Safety Vision / Work Order</b><span class="meta" id="camMeta">CAM-01 · DEMO FOOTAGE</span></div>
+        <!-- 監視畫面放在 #safety 外面：renderSafety() 每次 render 都會整塊換掉
+             innerHTML，canvas 若放在裡面會被丟掉再重建。 -->
+        <div class="cam" id="camview">
+          <img class="cam-poster" src="/static/factory-cctv-poster.webp?v=20260813-2" alt="工廠輸送線 Demo 監視器畫面">
+          <span class="cam-fallback-note">CAM-01 · DEMO FOOTAGE / NOT LIVE</span>
+        </div>
+        <div class="sec-b" id="safety"><span class="empty">NO CAMERA FEED</span></div>
+      </section>
+
       <section class="sec panel-side" data-console-panel="overview">
         <div class="sec-h"><b>Anomaly / Root Cause</b><span class="meta" id="dxMeta">NO EVENT</span></div>
         <div class="sec-b" id="diagnosis"><span class="empty">NOMINAL / NO ANOMALY DETECTED</span></div>
@@ -893,14 +907,6 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       <section class="sec panel-side" data-console-panel="overview">
         <div class="sec-h"><b>Production Impact</b><span class="meta">VIA KNOWLEDGE GRAPH</span></div>
         <div class="sec-b" id="impact"><span class="empty">NOT ASSESSED</span></div>
-      </section>
-
-      <section class="sec panel-side" data-console-panel="overview">
-        <div class="sec-h"><b>Safety Vision / Work Order</b><span class="meta" id="camMeta">CAM-01</span></div>
-        <!-- 監視畫面放在 #safety 外面：renderSafety() 每次 render 都會整塊換掉
-             innerHTML，canvas 若放在裡面會被丟掉再重建。 -->
-        <div class="cam" id="camview"></div>
-        <div class="sec-b" id="safety"><span class="empty">NO CAMERA FEED</span></div>
       </section>
 
       <section class="sec panel-side" data-console-panel="equipment" hidden>
@@ -922,7 +928,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 <!-- pixel.js 要排在最前面：另外兩支在 IIFE 裡就取用 Pixel.C，載入順序不能換。 -->
 <script src="/static/pixel.js"></script>
 <script src="/static/arcade.js"></script>
-<script src="/static/camview.js"></script>
+<script src="/static/camview.js?v=20260813-6"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -2224,7 +2230,7 @@ function renderOrders(s){
 function renderSafety(s){
   const cam=(s.cameras||[])[0];
   if(!cam){ $("safety").innerHTML='<span class="empty">NO CAMERA FEED</span>'; return; }
-  $("camMeta").textContent = `${cam.camera_id} / ZONE ${cam.zone_id} / CONF ${fmt(cam.confidence,2)}`;
+  $("camMeta").textContent = `${cam.camera_id} / ZONE ${cam.zone_id} / CONF ${fmt(cam.confidence,2)} · DEMO FOOTAGE`;
   const flags=[
     ["PERSON "+cam.person_count, cam.person_count>0, false],
     ["HAZARD ZONE", cam.person_in_hazard_zone, true],

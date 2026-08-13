@@ -4,6 +4,10 @@
    Safety Agent 的裁決寫著「Camera CAM-01 偵測到人員進入 M-A 運轉中危險區」，
    但畫面上一直沒有影像可看，只有一句 caption。這支檔案把那句話畫出來。
 
+   Demo 預設用專案內封裝的公開授權工廠影片作為監視器底片，並在 HUD 常駐標示
+   DEMO FOOTAGE / SYNTHETIC EVENTS，避免被誤認成真實廠區或模型輸入。影片無法
+   解碼時，才退回下方由 CameraObservation 驅動的像素場景，現場不會黑屏。
+
    刻意不放實景照片。照片是死的：人員離開危險區、煙霧停止，照片還是同一張，
    它會變成整個戰情中心裡唯一一個和資料對不上的東西 —— 而這套系統的立論
    正是「數字不是編的」。所以這裡每一格像素都綁在 CameraObservation 的欄位上：
@@ -49,7 +53,8 @@ const pad = (n, w) => String(Math.max(0, Math.round(n))).padStart(w, "0");
 const V = {
   host:null, cv:null, ctx:null, P:null, px:3,
   state:null, t:0, last:0, raf:0, active:false, ready:false,
-  ro:null, reduce:false,
+  ro:null, reduce:false, video:null, videoReady:false,
+  videos:{}, videoReadyKinds:new Set(), videoKind:"normal",
 };
 
 let rect, box, text, textR, textW;
@@ -222,7 +227,7 @@ function detBox(x, y, w, h, col, label, below) {
   const ly = below ? y + h + 2 : y - 7;
   const lx = Math.max(1, Math.min(x, L.vw - w0 - 1));
   rect(lx, ly, w0, 6, col);
-  text(label, lx + 1, ly + 1, C.ink, 1);
+  text(label, lx + 1, ly + 1, col === C.boxBad ? C.white : C.ink, 1);
 }
 
 /* ------------------------------------------------------------------ HUD */
@@ -248,7 +253,7 @@ function drawFooter(cam) {
   const tags = [
     ["PERSON " + pad(cam.person_count || 0, 1), (cam.person_count || 0) > 0, false],
     ["HAZARD ZONE", !!cam.person_in_hazard_zone, true],
-    ["NO PPE", cam.ppe_compliant === false, true],
+    ["PPE INCOMPLETE", cam.ppe_compliant === false, true],
     ["SMOKE", !!cam.smoke_detected, true],
     ["FALL", !!cam.fall_detected, true],
   ];
@@ -282,6 +287,82 @@ function noSignal() {
     blink ? C.hudDim : C.steelLo, 1);
 }
 
+function desiredVideoKind(cam) {
+  return cam && (cam.person_in_hazard_zone || cam.ppe_compliant === false) ? "hazard" : "normal";
+}
+
+function pauseVideos() { Object.values(V.videos).forEach(v => v.pause()); }
+
+/* 兩段片都在本機預載。事件切換時只換 canvas 的來源，不會重新下載；若事件片
+   尚未解碼完成則短暫沿用正常片，避免 Demo 現場閃黑。 */
+function selectVideo(cam) {
+  const wanted = desiredVideoKind(cam);
+  const kind = V.videoReadyKinds.has(wanted) ? wanted
+    : V.videoReadyKinds.has("normal") ? "normal" : wanted;
+  const next = V.videos[kind];
+  if (!next) { V.videoReady = false; return; }
+  if (V.video !== next) {
+    if (V.video) V.video.pause();
+    V.video = next;
+    V.videoKind = kind;
+  }
+  V.videoReady = V.videoReadyKinds.has(kind);
+  if (V.videoReady && V.active && !V.reduce && V.video.paused)
+    V.video.play().catch(() => {});
+}
+
+function drawHazardVideoOverlay(cam) {
+  const p = V.px, blink = Math.floor(V.t * 3) % 2 === 0;
+  const pts = [[72,42],[116,42],[132,88],[60,88]];
+  V.ctx.save();
+  V.ctx.beginPath();
+  pts.forEach(([x,y],i) => i ? V.ctx.lineTo(x*p,y*p) : V.ctx.moveTo(x*p,y*p));
+  V.ctx.closePath();
+  V.ctx.fillStyle = blink ? "rgba(11,117,110,.26)" : "rgba(22,48,68,.23)";
+  V.ctx.strokeStyle = C.white;
+  V.ctx.lineWidth = Math.max(1, p);
+  V.ctx.setLineDash([4*p,3*p]);
+  V.ctx.fill(); V.ctx.stroke();
+  V.ctx.restore();
+
+  const conf = cam.confidence != null ? cam.confidence.toFixed(2) : "";
+  const label = cam.ppe_compliant === false ? "NO HI-VIS " + conf : "IN ZONE " + conf;
+  // 事件片中間偏右的作業員；其餘人員保持為場景背景，不虛構額外辨識數量。
+  detBox(96, 31, 17, 49, C.boxBad, label, true);
+  rect(3, 88, 132, 7, C.hud);
+  text("RESTRICTED AREA / MACHINE RUNNING", 5, 89, C.white, 1);
+}
+
+/* 公開素材只是視覺底片，不宣稱是 Vision Agent 的輸入。使用 cover 裁切，讓
+   16:9 影片填滿既有 168:106 監視器比例；上層 HUD 與事件標籤仍吃即時資料。 */
+function drawDemoFootage(cam, snap) {
+  const v = V.video, cw = V.cv.width, ch = V.cv.height;
+  const scale = Math.max(cw / v.videoWidth, ch / v.videoHeight);
+  const sw = cw / scale, sh = ch / scale;
+  const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
+  V.ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cw, ch);
+
+  // CCTV 冷色調與讀字遮罩；不遮掉輸送線的動態。
+  V.ctx.fillStyle = "rgba(10,30,40,.16)";
+  V.ctx.fillRect(0, 0, cw, ch);
+
+  const danger = !!(cam.person_in_hazard_zone || cam.smoke_detected || cam.fall_detected);
+  const col = danger ? C.boxBad : C.boxOk;
+  if (V.videoKind === "hazard") drawHazardVideoOverlay(cam);
+  else {
+    // 對輸送區畫設備 ROI；這是介面示意框，不虛構影片中不存在的人員框。
+    detBox(11, 43, 145, 42, col, "PROCESS ROI " + (cam.confidence != null ? cam.confidence.toFixed(2) : ""), false);
+  }
+  rect(3, sceneTop + 3, 96, 7, C.hud);
+  text("DEMO FOOTAGE / NOT LIVE", 5, sceneTop + 4, C.white, 1);
+  rect(3, sceneTop + 12, 108, 7, C.hud);
+  text(V.videoKind === "hazard" ? "EVENT-MATCHED STOCK CLIP" : "SYNTHETIC VISION EVENTS",
+    5, sceneTop + 13, C.hudDim, 1);
+  drawFraming();
+  drawHUD(cam, snap);
+  drawFooter(cam);
+}
+
 /* ==================================================================== 主畫面 */
 
 /* 人員站位。有人闖入危險區時，第一個人站進斜紋帶內、靠近機台；
@@ -301,6 +382,12 @@ function draw() {
   const st = V.state, snap = st ? st.snapshot : null;
   const cam = snap ? (snap.cameras || [])[0] : null;
   if (!cam) { noSignal(); return; }
+
+  selectVideo(cam);
+  if (V.videoReady && V.video && V.video.videoWidth) {
+    drawDemoFootage(cam, snap);
+    return;
+  }
 
   const machine = snap.machines ? snap.machines[cam.machine_id] : null;
   const intruding = !!cam.person_in_hazard_zone;
@@ -386,7 +473,7 @@ window.CamView = {
     host.innerHTML = "";
     V.cv = document.createElement("canvas");
     V.cv.setAttribute("role", "img");
-    V.cv.setAttribute("aria-label", "CAM-01 工安監視畫面，內容由 Vision Agent 的判讀欄位驅動");
+    V.cv.setAttribute("aria-label", "CAM-01 Demo 工廠監視畫面；底片非即時現場，事件標籤由合成資料驅動");
     host.appendChild(V.cv);
     V.ctx = V.cv.getContext("2d", {alpha:false});
     V.ctx.imageSmoothingEnabled = false;
@@ -394,9 +481,43 @@ window.CamView = {
     ({rect, box, text, textR, textW} = V.P);
     V.ready = true;
 
+    const sources = {
+      normal:[
+        ["/static/factory-cctv-demo.webm?v=20260813-4", "video/webm"],
+        ["/static/factory-cctv-demo.mp4?v=20260813-4", "video/mp4"],
+      ],
+      hazard:[
+        ["/static/factory-cctv-hazard-demo.webm?v=20260813-4", "video/webm"],
+        ["/static/factory-cctv-hazard-demo.mp4?v=20260813-4", "video/mp4"],
+      ],
+    };
+    Object.entries(sources).forEach(([kind, files]) => {
+      const video = document.createElement("video");
+      files.forEach(([src, type]) => {
+        const source = document.createElement("source");
+        source.src = src; source.type = type; video.appendChild(source);
+      });
+      video.muted = true; video.loop = true;
+      video.playsInline = true; video.preload = "auto";
+      video.setAttribute("aria-hidden", "true");
+      video.addEventListener("canplay", () => {
+        V.videoReadyKinds.add(kind);
+        const cam = V.state && V.state.snapshot ? (V.state.snapshot.cameras || [])[0] : null;
+        selectVideo(cam); draw();
+      });
+      video.addEventListener("error", () => { V.videoReadyKinds.delete(kind); draw(); });
+      V.videos[kind] = video;
+      video.load();
+    });
+    V.video = V.videos.normal;
+
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     V.reduce = mq.matches;
-    mq.addEventListener("change", e => { V.reduce = e.matches; stop(); start(); });
+    mq.addEventListener("change", e => {
+      V.reduce = e.matches;
+      if (e.matches) pauseVideos(); else if (V.video) V.video.play().catch(() => {});
+      stop(); start();
+    });
 
     if (window.ResizeObserver) {
       V.ro = new ResizeObserver(() => resize());
@@ -404,11 +525,13 @@ window.CamView = {
     } else window.addEventListener("resize", resize);
 
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stop(); else start();
+      if (document.hidden) { stop(); pauseVideos(); }
+      else { if (V.videoReady && !V.reduce) V.video.play().catch(() => {}); start(); }
     });
 
     resize();
     V.active = true;
+    if (V.videoReady && !V.reduce) V.video.play().catch(() => {});
     start();
     return true;
   },
@@ -416,7 +539,16 @@ window.CamView = {
     V.state = state;
     if (!V.active || V.reduce) draw();
   },
-  setActive(on) { V.active = !!on; if (V.active) start(); else stop(); },
+  setActive(on) {
+    V.active = !!on;
+    if (V.active) {
+      if (V.videoReady && !V.reduce) V.video.play().catch(() => {});
+      start();
+    } else {
+      pauseVideos();
+      stop();
+    }
+  },
   get ready() { return V.ready; },
 };
 })();

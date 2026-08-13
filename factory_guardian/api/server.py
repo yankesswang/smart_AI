@@ -39,6 +39,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 # application/octet-stream，瀏覽器就不當圖片處理。這裡明確補上。
 mimetypes.add_type("image/webp", ".webp")
 mimetypes.add_type("image/avif", ".avif")
+mimetypes.add_type("video/mp4", ".mp4")
+mimetypes.add_type("video/webm", ".webm")
 
 
 # --------------------------------------------------------------------------------------

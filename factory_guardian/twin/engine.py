@@ -663,7 +663,9 @@ class FactoryTwin:
         if hazard_active:
             person_count = 1
             in_zone = True
-            ppe = _stable_unit(self.seed, "ppe", self.tick) > 0.7
+            # 情境定義與 caption 都明確指定「護具不全」；這裡不能再隨機變成合規，
+            # 否則 CameraObservation、Safety UI 與示範影片會互相矛盾。
+            ppe = False
             caption = "偵測到 1 名人員進入 Machine A 運轉危險區，未偵測到完整護具。"
             confidence = 0.86 + 0.08 * _stable_unit(self.seed, "conf", self.tick)
         elif maintenance:

@@ -200,6 +200,30 @@ def test_static_css_is_served(client):
     assert "--red:" in css.text.replace(" ", "")
 
 
+def test_factory_cctv_demo_asset_is_served_and_disclosed(client):
+    page = client.get("/")
+    script = client.get("/static/camview.js")
+    video = client.get("/static/factory-cctv-demo.mp4")
+    hazard_video = client.get("/static/factory-cctv-hazard-demo.mp4")
+    webm = client.get("/static/factory-cctv-demo.webm")
+    hazard_webm = client.get("/static/factory-cctv-hazard-demo.webm")
+
+    assert page.status_code == script.status_code == video.status_code == hazard_video.status_code == 200
+    assert webm.status_code == hazard_webm.status_code == 200
+    assert "DEMO FOOTAGE" in page.text
+    assert "/static/factory-cctv-demo.mp4" in script.text
+    assert "/static/factory-cctv-hazard-demo.mp4" in script.text
+    assert "EVENT-MATCHED STOCK CLIP" in script.text
+    assert "NO HI-VIS" in script.text
+    assert "DEMO FOOTAGE / NOT LIVE" in script.text
+    assert video.headers["content-type"] == "video/mp4"
+    assert hazard_video.headers["content-type"] == "video/mp4"
+    assert webm.headers["content-type"] == "video/webm"
+    assert hazard_webm.headers["content-type"] == "video/webm"
+    assert len(video.content) > 100_000
+    assert len(hazard_video.content) > 100_000
+
+
 def test_war_room_uses_light_industrial_palette(client):
     page = client.get("/")
     compact = page.text.replace(" ", "")
