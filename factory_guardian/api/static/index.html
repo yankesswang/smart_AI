@@ -49,6 +49,32 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .factory-entry a:hover{background:var(--panel);border-color:var(--panel);color:var(--fg)}
 .factory-entry a:active{transform:translateY(1px)}
 
+/* ---- 代號降級 ----------------------------------------------------------
+   畫面上一律「白話為主、代號為輔」：主標題是「主要加工機」，M-A 退成尾隨的
+   小字。代號不刪 —— 稽核軌跡、工單與跨畫面對照都靠它，評審追問細節時也要
+   指得回去。所以做的是降視覺層級，不是消滅。 */
+.code{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;
+      color:var(--dimmer);margin-left:6px;white-space:nowrap}
+/* 表格欄位窄，代號改成掛在名稱下面一行，欄寬才不會被撐開 */
+td .code{display:block;margin-left:0}
+.name{font-family:var(--cjk);letter-spacing:.01em}
+
+/* ---- 名詞對照 ----------------------------------------------------------
+   收在 details 裡且預設收合。第一眼要看懂的人不該先被迫讀一張對照表；
+   想追代號的人則有一個固定的地方可以查，不必去翻另一個頁面。
+   內容在 boot() 由 /api/topology 灌進來，不是硬寫的。 */
+.glossary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));
+               gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.gl-group{background:var(--panel);padding:11px 13px;min-width:0}
+.gl-group>.micro{display:block;margin-bottom:7px;color:var(--fg)}
+.gl-row{display:flex;gap:10px;align-items:baseline;justify-content:space-between;
+        padding:3px 0;border-bottom:1px dotted var(--line);font-size:var(--t-meta)}
+.gl-row:last-child{border-bottom:0}
+.gl-row .gl-n{font-family:var(--cjk);color:var(--fg);min-width:0;overflow-wrap:anywhere}
+.gl-row .gl-c{flex:0 0 auto;font-family:var(--mono);font-size:var(--t-micro);
+              color:var(--dimmer);letter-spacing:.06em}
+.gl-note{font-family:var(--cjk);font-size:var(--t-micro);line-height:1.7;color:var(--dimmer);margin-top:8px}
+
 /* ---- Guided Demo -------------------------------------------------------
    主畫面只保留一條敘事：選案例 -> 看 Agent 思考 -> 看修復結果。
    技術控制與完整稽核仍在，但退到 details 裡，避免第一次看的人失去焦點。 */
@@ -80,35 +106,99 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .demo-flow-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
 .demo-flow-head h2{font-family:var(--cjk);font-size:1rem;letter-spacing:.01em}
 .demo-flow-head p{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim)}
-.demo-spotlight{display:grid;grid-template-columns:auto minmax(150px,.45fr) minmax(220px,1fr) auto;gap:14px;align-items:center;background:var(--fg);color:var(--accent-ink);padding:13px 15px;margin-bottom:1px;border-left:4px solid var(--accent)}
+/* 欄位下限刻意壓低：最左邊多了一格圖示，中間兩欄的最小寬度要讓出對應的空間，
+   否則 1000px 上下的視窗會把右邊的 HOLD 標籤推出容器、撐寬整頁。 */
+.demo-spotlight{display:grid;grid-template-columns:auto auto minmax(112px,.42fr) minmax(180px,1fr) auto;gap:6px 14px;align-items:center;background:var(--fg);color:var(--accent-ink);padding:11px 15px;margin-top:1px;border-left:4px solid var(--accent)}
 .demo-spotlight[hidden]{display:none}
 .demo-spotlight .spot-index{font-size:var(--t-micro);letter-spacing:.1em;color:var(--accent-ink);opacity:.72;white-space:nowrap}
 .demo-spotlight .spot-agent{font-size:var(--t-micro);letter-spacing:.09em;text-transform:uppercase;color:var(--accent-ink);opacity:.78}
 .demo-spotlight strong{display:block;font-family:var(--cjk);font-size:1rem;margin-top:2px}
 .demo-spotlight p{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.55;color:var(--accent-ink)}
+.demo-spotlight .spot-body{min-width:0}
+.demo-spotlight .spot-desc{opacity:.74}
+/* 六列表格裡的 OUTPUT 欄整併到這裡：畫面上同時只需要看一格的產出。 */
+.demo-spotlight .spot-out{margin-top:3px;font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.05em;overflow-wrap:anywhere}
+.demo-spotlight .spot-out::before{content:"OUTPUT · ";opacity:.66;font-weight:600}
 .demo-spotlight .spot-hold{font-size:var(--t-micro);letter-spacing:.08em;color:var(--accent-ink);white-space:nowrap}
 .demo-steps{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line)}
-/* 步驟卡是按鈕：點開才看得到 Agent 的推理過程。這裡把 hmi.css 的按鈕外觀
-   （大寫、字距、邊框、hover 反白）全部退掉，只留下可點擊與鍵盤可及。 */
-.demo-step{background:var(--panel-2);padding:11px 13px;min-height:82px;position:relative;transition:background .2s ease,color .2s ease,opacity .2s ease,transform .2s ease;
-  display:grid;grid-template-areas:"agent title copy open" "agent value value open";grid-template-columns:145px minmax(110px,.7fr) minmax(180px,1.5fr) 78px;gap:4px 10px;align-items:center;
-  width:100%;text-align:left;border:0;cursor:pointer;font:inherit;color:var(--fg);letter-spacing:inherit;text-transform:none}
-.demo-step:disabled{opacity:1;cursor:default}
-/* color 必須一起寫回來：hmi.css 的 button:hover 會把文字轉成 #000（反白按鈕用的），
-   套在這張暗底卡片上會讓標題整個消失。 */
-.demo-step:not(.live):not(.fail):hover:not(:disabled){background:var(--panel-3);color:var(--fg)}
-.demo-step::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-hi)}
-.demo-step .ds-agent{grid-area:agent;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer);padding-right:10px;display:block}
-.demo-step h3{grid-area:title;font-family:var(--cjk);font-size:var(--t-body)}
-.demo-step p{grid-area:copy;font-family:var(--cjk);font-size:var(--t-meta);line-height:1.55;color:var(--dim)}
-.demo-step .ds-value{grid-area:value;font-size:var(--t-micro);letter-spacing:.06em;color:var(--fg);overflow-wrap:anywhere}
-.demo-step .ds-value::before{content:"OUTPUT · ";color:var(--dimmer);font-weight:600}
-.demo-step .ds-open{grid-area:open;justify-self:end;font-size:var(--t-micro);letter-spacing:.06em;color:var(--dimmer);white-space:nowrap}
-.demo-step[aria-expanded="true"]{background:var(--panel-3);box-shadow:inset 0 -3px 0 var(--fg)}
-.demo-step[aria-expanded="true"] .ds-open{color:var(--fg)}
-.demo-step.done::before{background:var(--fg)}
-.demo-step.done .ds-agent{color:var(--fg)}
-.demo-flow.presenting .demo-step:not(.live){opacity:.42}
+
+/* ---- 閉環流程圖 --------------------------------------------------------
+   原本這裡是六列文字表格（標題／OUTPUT／一句說明），直排讀起來像功能列表，
+   看不出「這是一個環」。改成一張 inline SVG：節點上只留動詞短語，說明與
+   OUTPUT 移到下方聚光燈列，推理仍在點開的 .step-why。
+   顏色一律走既有 token：已完成用亮度分級（不用綠色，綠色全站只給驗證通過
+   鋼印），進行中整格反白，被安全規則擋下／未取得核准／驗證未過才轉 hazard。 */
+.loop-map{background:var(--panel-2);border:1px solid var(--line);padding:9px 10px;overflow-x:auto}
+.loop-map svg{display:block;width:100%;height:auto;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.loop-map [hidden]{display:none}
+.lm-edge{fill:none;stroke:var(--line-hi);stroke-width:1.6}
+.lm-head{fill:var(--line-hi)}
+.lm-edge.on{stroke:var(--fg);stroke-width:2.2}
+.lm-head.on{fill:var(--fg)}
+/* 回饋線＝這張圖的靈魂：永遠畫出來（虛線），真的退回重跑時才轉 hazard 實線。 */
+.lm-edge.back{stroke-dasharray:7 5}
+.lm-edge.back.hot{stroke:var(--red);stroke-width:2.4;stroke-dasharray:none}
+.lm-head.back.hot{fill:var(--red)}
+.lm-lb{fill:var(--dimmer);font-size:11px;font-family:var(--cjk);letter-spacing:.02em;
+       paint-order:stroke;stroke:var(--panel-2);stroke-width:4;stroke-linejoin:round}
+.lm-lb.hot{fill:var(--red);font-weight:700}
+.lm-lb.sub{font-size:10px}
+.lm-node{cursor:pointer}
+.lm-node .bx{fill:var(--panel);stroke:var(--line-hi);stroke-width:1}
+.lm-node .bar{fill:var(--line-hi)}
+.lm-node .no{fill:var(--dimmer);font-size:9.5px;letter-spacing:.1em}
+.lm-node .tx{fill:var(--dim);font-size:14px;font-family:var(--cjk);letter-spacing:.02em;font-weight:700}
+.lm-node .mk{fill:var(--dimmer);font-size:11px;text-anchor:end;letter-spacing:.04em}
+.lm-node:hover .bx{stroke:var(--fg)}
+/* 已完成：抬高亮度並把邊框轉成前景色，不換色相。 */
+.lm-node.done .bx{fill:var(--panel-3);stroke:var(--fg)}
+.lm-node.done .bar,.lm-node.done .mk{fill:var(--fg)}
+.lm-node.done .tx{fill:var(--fg)}
+.lm-node.done .no{fill:var(--dim)}
+/* 進行中：整格反白，左側標記閃爍。 */
+.lm-node.live .bx{fill:var(--fg);stroke:var(--fg)}
+.lm-node.live .tx,.lm-node.live .no,.lm-node.live .mk{fill:var(--accent-ink)}
+.lm-node.live .bar{fill:var(--red);animation:agent-critical 1s steps(2,start) infinite}
+/* hazard：被 BLOCK、等待人工核准、或驗證未過。 */
+.lm-node.hz .bx{fill:var(--red);stroke:var(--red)}
+.lm-node.hz .tx,.lm-node.hz .no,.lm-node.hz .mk{fill:var(--accent-ink)}
+.lm-node.hz .bar{fill:var(--accent-ink)}
+.lm-node.sel .bx{stroke:var(--fg);stroke-width:3}
+.lm-node.off{cursor:default}
+.lm-node:focus-visible{outline:none}
+.lm-node:focus-visible .bx{stroke:var(--fg);stroke-width:3}
+.lm-term .bx{fill:var(--panel);stroke:var(--line-hi);stroke-dasharray:4 3}
+.lm-term .tx{fill:var(--dimmer);font-size:11px;font-family:var(--cjk);text-anchor:middle;letter-spacing:.06em}
+.lm-term.on .bx{fill:var(--fg);stroke:var(--fg);stroke-dasharray:none}
+.lm-term.on .tx{fill:var(--accent-ink);font-weight:700}
+.demo-flow.presenting .lm-node:not(.live):not(.hz){opacity:.42}
+
+/* ---- Agent 視覺識別 ----------------------------------------------------
+   六個 Agent ＋ 一格「人」各給一個圖示。圖示編碼的是職責，不是裝飾：
+   感測波形＝監看訊號、指紋＝根因比對（診斷核心就是感測器指紋餘弦相似度）、
+   知識圖節點＝下游訂單與機台影響、排名長條＝方案加權排名、盾牌＋橫槓＝安全
+   阻擋、扳手＝執行、量測標註＝拿實際值回頭量。
+   「核准」那一格刻意不是線稿：全套只有它是實心填滿（人形＋簽名底線），
+   一眼看得出這一步不是機器在做 —— 人在環中是這套系統的治理主張。
+   造型一律直線直角，沒有圓角、陰影、漸層；顏色只用 currentColor，狀態分級
+   走亮度與反白，不引進新色相（綠色全站只給驗證通過鋼印，這裡不碰）。
+   全部是 inline SVG symbol，不載圖示函式庫、不載 web font、不新增圖檔。 */
+.ag-sprite{position:absolute;width:0;height:0;overflow:hidden}
+.ag,.lm-ic{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:miter;stroke-linecap:butt}
+svg.ag{width:1.05em;height:1.05em;flex:0 0 auto;vertical-align:-.17em}
+/* 流程圖節點：等待中壓暗、已完成轉前景色、進行中與被擋下跟著整格反白。 */
+.lm-ic{color:var(--dimmer);opacity:.8}
+.lm-node.done .lm-ic{color:var(--fg);opacity:1}
+.lm-node.live .lm-ic,.lm-node.hz .lm-ic{color:var(--accent-ink);opacity:1}
+.lm-node:hover .lm-ic,.lm-node:focus-visible .lm-ic{opacity:1}
+.lm-ic.key{color:var(--dim);opacity:1}
+/* 主控台面板標頭：這塊資料是誰算出來的，用同一組圖示標，切分頁時對得起來。 */
+.sec-h .sec-id{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.sec-h .sec-id svg.ag{width:15px;height:15px;color:var(--dim)}
+/* 聚光燈列：把當下這一步是誰在做放到最左邊，比讀完 agent 名字快。 */
+.demo-spotlight .spot-mark{display:flex;align-items:center;color:var(--accent-ink)}
+.demo-spotlight .spot-mark svg.ag{width:27px;height:27px}
+
 .demo-live{display:grid;grid-template-columns:minmax(330px,.82fr) minmax(560px,1.45fr);gap:1px;background:var(--line);align-items:stretch}
 .demo-hardware{background:var(--panel);padding:17px 18px;min-width:0}
 .demo-hardware-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:12px;border-bottom:2px solid var(--fg)}
@@ -119,6 +209,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .demo-hardware-row{background:var(--panel-2);padding:10px 11px;min-width:0}
 .demo-hardware-row .dh-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .demo-hardware-row .dh-name{font-family:var(--cjk);font-size:var(--t-body);font-weight:700;min-width:0;overflow-wrap:anywhere}
+.demo-hardware-row .dh-name .code{font-weight:400}
 .demo-hardware-row .dh-state{font-size:var(--t-micro);letter-spacing:.08em;color:var(--dim);white-space:nowrap}
 .demo-hardware-row .dh-state.warning,.demo-hardware-row .dh-state.critical,.demo-hardware-row .dh-state.offline{color:var(--red);font-weight:700}
 .demo-hardware-row .dh-health{display:flex;align-items:center;gap:8px;margin-top:8px}
@@ -135,14 +226,6 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .demo-hardware-log .dh-log-row.warning .msg,.demo-hardware-log .dh-log-row.critical .msg{color:var(--red)}
 .demo-agent{background:var(--panel);min-width:0}
 .demo-agent .demo-flow{height:100%}
-.demo-step.live{background:var(--fg);color:var(--accent-ink);z-index:2;transform:translateX(5px) scale(1.012);box-shadow:-7px 0 0 rgba(22,48,68,.12)}
-.demo-step.live::before{background:var(--red);animation:agent-critical 1s steps(2,start) infinite}
-.demo-step.live::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent);transform-origin:top;animation:demo-stage-hold 1.4s linear both}
-.demo-step.live .ds-agent,.demo-step.live p,.demo-step.live .ds-value,.demo-step.live .ds-open{color:var(--accent-ink)}
-.demo-step.fail{background:var(--red);color:var(--accent-ink)}
-.demo-step.fail::before{background:var(--fg)}
-.demo-step.fail .ds-agent,.demo-step.fail p,.demo-step.fail .ds-value,.demo-step.fail .ds-open{color:var(--accent-ink)}
-@keyframes demo-stage-hold{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 
 /* ---- 步驟推理面板 ------------------------------------------------------
    六格是同一列 grid，卡片自己往下長會把整列都拉高（grid row 預設等高），
@@ -152,7 +235,8 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .step-why[hidden]{display:none}
 .dw-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
       padding:9px 13px;background:var(--panel-2);border-bottom:1px solid var(--line-hi)}
-.dw-h .agent{font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--red);font-weight:700}
+.dw-h .agent{display:inline-flex;align-items:center;gap:7px;font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--red);font-weight:700}
+.dw-h .agent svg.ag{width:16px;height:16px}
 .dw-h b{font-family:var(--cjk);font-size:var(--t-prose);margin-left:8px}
 .dw-h button{padding:4px 9px;font-size:var(--t-micro)}
 .dw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:1px;background:var(--line)}
@@ -190,7 +274,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .plan-card.recommended{background:var(--panel-3);box-shadow:inset 0 3px 0 var(--accent)}
 .plan-card.blocked{box-shadow:inset 0 3px 0 var(--red)}
 .plan-card .pc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.plan-card .pc-rank{font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.08em;white-space:nowrap}
+.plan-card .pc-rank{font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.04em;min-width:0}
 .plan-card .pc-title{font-family:var(--cjk);font-size:var(--t-body);font-weight:700;line-height:1.4;margin-top:5px}
 .plan-card .pc-summary{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.6;color:var(--dim);margin-top:5px;min-height:3.2em}
 .plan-card .pc-badge{font-size:var(--t-micro);letter-spacing:.08em;color:var(--accent);font-weight:800;white-space:nowrap}
@@ -205,7 +289,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .pc-delta.bad{color:var(--red)}
 .plan-guide{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.65;color:var(--dim);padding:9px 11px;border-top:1px solid var(--line);background:var(--panel-2)}
 @media(max-width:1240px){.plan-compare{grid-template-columns:repeat(2,minmax(220px,1fr))}}
-@media(max-width:680px){.plan-compare{grid-template-columns:1fr}.demo-step .ds-value::before{content:"輸出 · "}}
+@media(max-width:680px){.plan-compare{grid-template-columns:1fr}.demo-spotlight .spot-out::before{content:"輸出 · "}}
 .dw-verdict{display:inline-block;font-size:var(--t-micro);letter-spacing:.1em;text-transform:uppercase;
             font-weight:700;padding:2px 7px;margin-bottom:8px;background:var(--fg);color:var(--accent-ink)}
 .dw-verdict.bad{background:var(--red);color:var(--accent-ink)}
@@ -230,7 +314,9 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .advanced-controls summary::before{content:"+ ";color:var(--fg)}
 .advanced-controls[open] summary::before{content:"- "}
 .demo-progress{display:none;font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim)}
-.demo-lab.running .demo-progress{display:block}
+/* 進度句前面掛當下這一步的 Agent 圖示，和流程圖亮著的那一格是同一個造型。 */
+.demo-lab.running .demo-progress{display:flex;align-items:center;gap:7px}
+.demo-progress svg.ag{width:15px;height:15px}
 
 /* Agent 判讀列：正常時像安靜的系統狀態，異常時才成為全頁的視覺錨點。
    --agent-confidence 與 --incident-speed 由 Agent 結果寫入，不使用假資料。 */
@@ -249,6 +335,14 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .as-state,.as-copy{border-right:1px solid var(--line)}
 .as-state{display:flex;align-items:center;gap:11px}
 .as-mark{width:12px;height:32px;flex:0 0 auto;background:var(--dim);transform-origin:center}
+/* 判讀列左側掛「現在是誰在做」的 Agent 圖示（等核准時會變成實心人形）。
+   分級跟著 .as-mark 同一套：正常暗前景 → 警告紅 → 危險整列反白。 */
+.agent-signal svg.as-glyph{width:27px;height:27px;color:var(--dim)}
+.agent-signal[data-mode="observing"] svg.as-glyph,
+.agent-signal[data-mode="recovering"] svg.as-glyph,
+.agent-signal[data-mode="verified"] svg.as-glyph{color:var(--fg)}
+.agent-signal[data-mode="warning"] svg.as-glyph{color:var(--red)}
+.agent-signal[data-mode="critical"] svg.as-glyph{color:var(--accent-ink)}
 .as-code{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--dim)}
 .as-title{font-family:var(--cjk);font-size:1rem;font-weight:700;letter-spacing:.01em;margin-top:2px}
 .as-copy{display:flex;flex-direction:column;justify-content:center;gap:4px}
@@ -354,14 +448,14 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
    那條沒有命名空間限制的 [hidden] 規則。自己寫一條，不賭。 */
 .floor [hidden]{display:none}
 
-.fp-t{fill:var(--dim);font-size:9px;letter-spacing:.14em;text-transform:uppercase}
+.fp-t{fill:var(--dim);font-size:9px;letter-spacing:.14em;text-transform:uppercase;font-family:var(--cjk)}
 .fp-t2{fill:var(--dimmer);font-size:9px;letter-spacing:.1em}
 
 /* 進料 / 出貨端點 */
 .fp-node .bx{fill:var(--panel-3);stroke:var(--line-hi)}
-.fp-node .t1{fill:var(--fg);font-size:10px;font-weight:700;letter-spacing:.1em;text-anchor:middle}
+.fp-node .t1{fill:var(--fg);font-size:10px;font-weight:700;letter-spacing:.06em;text-anchor:middle;font-family:var(--cjk)}
 .fp-node .t2{fill:var(--dim);font-size:12px;font-weight:700;text-anchor:middle}
-.fp-node .t3{fill:var(--dimmer);font-size:8.5px;letter-spacing:.08em;text-anchor:middle}
+.fp-node .t3{fill:var(--dimmer);font-size:8.5px;letter-spacing:.04em;text-anchor:middle;font-family:var(--cjk)}
 
 /* 輸送帶：底層是實體軌道，上層跑虛線代表物料在動 */
 .cv-track{fill:none;stroke:var(--line);stroke-width:8;stroke-linejoin:miter}
@@ -381,9 +475,11 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .fm{cursor:pointer}
 .fm .body{fill:var(--panel-3);stroke:var(--line-hi)}
 .fm .hd,.fm .ft{fill:var(--panel-2)}
-.fm .id{fill:var(--fg);font-size:11px;font-weight:700;letter-spacing:.06em}
+/* 示意圖是 SVG，中文畫得出來：標題列放白話名稱，代號降到機身旁的小字。
+   （像素視圖的 canvas 只有 3×5 ASCII 字模，那邊維持代號，見 #arcadeNames。） */
+.fm .id{fill:var(--fg);font-size:10.5px;font-weight:700;font-family:var(--cjk);letter-spacing:.01em}
 .fm .st{fill:var(--dim);font-size:8.5px;letter-spacing:.1em;text-anchor:end}
-.fm .nm{fill:var(--dim);font-size:9.5px;font-family:var(--cjk);letter-spacing:.01em}
+.fm .nm{fill:var(--dimmer);font-size:9px;letter-spacing:.08em}
 .fm .rate .n{fill:var(--fg);font-size:15px;font-weight:700;letter-spacing:-.03em}
 .fm .rate .u{fill:var(--dim);font-size:8.5px;letter-spacing:.08em}
 .fm .fl{fill:var(--dim);font-size:8.5px;letter-spacing:.1em}
@@ -476,6 +572,12 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
         font-size:var(--t-micro);letter-spacing:.06em;color:var(--dimmer);text-transform:uppercase}
 .fp-key span{display:inline-flex;align-items:center;gap:6px}
 .fp-key i{width:15px;height:8px;flex:0 0 auto;border:1px solid var(--line-hi)}
+/* 像素視圖的 canvas 只畫得出 ASCII（3×5 點陣字模，而且刻意不載任何字型），
+   所以圖上維持 M-A 這種短代號，白話對照用 HTML 補在圖的正下方 ——
+   圖與字分工，不必為了一行中文去賭競賽場地的網路。 */
+.fp-key .names{flex:1 1 100%;font-family:var(--cjk);text-transform:none;
+               letter-spacing:.02em;color:var(--dim);gap:4px 14px;flex-wrap:wrap}
+.fp-key .names b{font-family:var(--mono);font-weight:700;color:var(--fg);letter-spacing:.06em}
 .fp-key i.ln{border:0;background:repeating-linear-gradient(90deg,var(--dim) 0 5px,transparent 5px 10px)}
 .fp-key i.ht{background:repeating-linear-gradient(45deg,var(--line-hi) 0 2px,transparent 2px 5px)}
 .fp-key i.hz{border-color:var(--red);background:repeating-linear-gradient(45deg,var(--red) 0 3px,transparent 3px 6px)}
@@ -488,8 +590,9 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
                      100%{background:transparent;box-shadow:inset 3px 0 0 transparent}}
 .mach:last-child{border-bottom:0}
 .mach-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;background:var(--panel-2)}
-.mach-h .id{font-size:var(--t-prose);font-weight:700;letter-spacing:.05em}
-.mach-h .nm{font-size:var(--t-meta);color:var(--dim);letter-spacing:.02em}
+/* 白話名稱當主標題（.id），代號退成旁邊的小字（.nm）。 */
+.mach-h .id{font-family:var(--cjk);font-size:var(--t-prose);font-weight:700;letter-spacing:.01em}
+.mach-h .nm{font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.06em}
 .mach-h .rate{font-size:var(--t-micro);color:var(--dim)}
 /* 欄數由 JS 用 --cols 帶進來，不直接寫 grid-template-columns：
    行內樣式的優先權高過 media query，寫死欄數會讓下面的窄視窗規則永遠失效。 */
@@ -514,6 +617,10 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .loop{display:grid;grid-template-columns:repeat(8,1fr);gap:1px;background:var(--line)}
 .stg{background:var(--panel);padding:10px 5px 9px;text-align:center;position:relative;transition:background .18s linear,color .18s linear}
 .stg .i{font-size:var(--t-micro);letter-spacing:.06em;color:var(--dimmer);display:block;margin-bottom:3px}
+/* 八階段條的圖示與流程圖同一組；狀態一樣走亮度／反白，不換色相。 */
+.stg svg.ag{width:16px;height:16px;color:var(--dimmer);margin-bottom:2px}
+.stg.done svg.ag{color:var(--fg)}
+.stg.live svg.ag,.stg.void svg.ag{color:var(--accent-ink)}
 .stg .e{display:block;font-size:var(--t-micro);letter-spacing:.1em;font-weight:700;color:var(--dim);text-transform:uppercase}
 .stg .z{display:block;font-size:var(--t-micro);color:var(--dimmer);margin-top:3px;font-family:var(--cjk)}
 .stg.done .e{color:var(--fg)} .stg.done .z{color:var(--dim)} .stg.done .i{color:var(--dim)}
@@ -527,14 +634,16 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 /* 核准 */
 .appr{border-top:1px solid var(--red)}
 .appr-b{padding:13px}
-.appr h3{font-size:var(--t-body);letter-spacing:var(--tr-label);color:var(--red);text-transform:uppercase;margin-bottom:9px}
+/* 核准框標題掛實心人形：這一格和流程圖第 06 格是同一件事，圖示也要同一個。 */
+.appr h3{display:flex;align-items:center;gap:8px;font-size:var(--t-body);letter-spacing:var(--tr-label);color:var(--red);text-transform:uppercase;margin-bottom:9px}
+.appr h3 svg.ag{width:19px;height:19px}
 
 /* 證據 / 敘述 */
 .narr{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.85;color:var(--fg-2);letter-spacing:.01em}
-.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:var(--t-body);border-bottom:1px dotted var(--line)}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:var(--t-body);border-bottom:1px dotted var(--line);flex-wrap:wrap}
 .kv:last-child{border-bottom:0}
 .kv .k{color:var(--dim);letter-spacing:.05em;font-size:var(--t-micro);text-transform:uppercase;white-space:nowrap}
-.kv .v{text-align:right;font-variant-numeric:tabular-nums}
+.kv .v{text-align:right;font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
 .ev{display:flex;gap:8px;padding:5px 0;font-size:var(--t-meta);line-height:1.65;border-bottom:1px dotted var(--line)}
 .ev:last-child{border-bottom:0}
 .ev .src{flex:0 0 auto;font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);
@@ -580,15 +689,20 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 .log .msg{color:var(--dim);font-family:var(--cjk);overflow-wrap:anywhere}
 .log .alarm .stg-n{color:var(--red)}
 .telemetry-log{max-height:230px;overflow-y:auto;font-size:var(--t-meta);line-height:1.55}
-.telemetry-log .tl-row{display:grid;grid-template-columns:74px 42px 52px 1fr;gap:8px;padding:3px 11px;border-bottom:1px solid var(--line);align-items:baseline}
+.telemetry-log .tl-row{display:grid;grid-template-columns:74px 42px 96px 1fr;gap:8px;padding:3px 11px;border-bottom:1px solid var(--line);align-items:baseline}
 .telemetry-log .tl-time,.telemetry-log .tl-tick{color:var(--dimmer);font-variant-numeric:tabular-nums}
-.telemetry-log .tl-machine{color:var(--fg);font-weight:700}
+.telemetry-log .tl-machine{color:var(--fg);font-weight:700;font-family:var(--cjk);letter-spacing:.01em}
+.telemetry-log .tl-machine .code{margin-left:0;display:block;font-weight:400}
 .telemetry-log .tl-msg{color:var(--dim);overflow-wrap:anywhere}
 .telemetry-log .tl-warning .tl-msg{color:var(--amber)}
 .telemetry-log .tl-critical .tl-msg{color:var(--red);font-weight:700}
 
 @media(max-width:1240px){
   .loop{grid-template-columns:repeat(4,1fr)}
+  /* 兩欄版面被壓窄時，聚光燈列的說明自己換到第二行，右側的 HOLD 標籤才不會
+     被擠出容器。圖示、步數與名字仍留在第一行。 */
+  .demo-spotlight{grid-template-columns:auto auto 1fr auto}
+  .demo-spotlight .spot-body{grid-column:1/-1}
   .agent-signal{grid-template-columns:minmax(150px,.6fr) minmax(260px,1.4fr)}
   .as-copy{border-right:0}
   .as-evidence{grid-column:1/-1;border-top:1px solid var(--line)}
@@ -606,8 +720,8 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
   .demo-intro{border-right:0;border-bottom:1px solid var(--line);padding:18px}
   .demo-intro h2{max-width:none}
   .demo-steps{grid-template-columns:1fr}
-  .demo-spotlight{grid-template-columns:auto 1fr auto}
-  .demo-spotlight p{grid-column:1/-1}
+  .demo-spotlight{grid-template-columns:auto auto 1fr auto}
+  .demo-spotlight .spot-body{grid-column:1/-1}
   .console-head{grid-template-columns:1fr;padding:14px 14px 0}
   .console-tabs{width:100%}
   .console-tabs button{flex:1 0 auto}
@@ -626,10 +740,10 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
   .factory-entry a{width:100%}
   .demo-case{min-height:118px}
   .demo-steps{grid-template-columns:1fr}
-  .demo-step{min-height:94px;grid-template-areas:"agent open" "title title" "copy copy" "value value";grid-template-columns:1fr auto;gap:4px 8px}
-  .demo-spotlight{grid-template-columns:1fr auto;gap:7px 12px}
+  .demo-spotlight{grid-template-columns:auto 1fr auto;gap:7px 12px}
   .demo-spotlight .spot-index{display:none}
-  .demo-spotlight p{grid-column:1/-1}
+  .demo-spotlight .spot-body{grid-column:1/-1}
+  .demo-flow{padding:14px 12px 14px}
   .demo-flow-head{align-items:flex-start;flex-direction:column}
   .demo-hardware-head{align-items:flex-start;flex-direction:column}
   .result-metrics{grid-template-columns:repeat(2,1fr)}
@@ -639,6 +753,28 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
 </style>
 </head>
 <body>
+<!-- ================= Agent 圖示（symbol 定義） =================
+     一次定義、全頁 <use> 引用：流程圖節點、聚光燈列、推理面板、判讀列與
+     核准框共用同一組造型，所以「同一個 Agent 在不同地方長得一樣」。
+     每個 symbol 內都不寫死顏色（一律 currentColor），顏色與狀態由引用處決定。 -->
+<svg class="ag-sprite" aria-hidden="true" focusable="false">
+  <!-- 01 Monitoring：感測波形。看的是訊號本身，包含還沒破線但正在往上走的斜率。 -->
+  <symbol id="agi-monitor" viewBox="0 0 24 24"><path d="M2,15 H7 L10,4.5 L13.5,19.5 L16.5,15 H22"/></symbol>
+  <!-- 02 Diagnosis：指紋。診斷核心就是把觀測到的感測器指紋和故障指紋庫比餘弦相似度。 -->
+  <symbol id="agi-fingerprint" viewBox="0 0 24 24"><path d="M3,22 V13 L7,6 L12,3.2 L17,6 L21,13 V22"/><path d="M7.5,22 V14.5 L10,9.8 L12,8.8 L14,9.8 L16.5,14.5 V22"/><path d="M12,14 V22"/></symbol>
+  <!-- 03 Production（影響）：知識圖節點。一台機台的問題會往下游訂單與機台擴散。 -->
+  <symbol id="agi-impact" viewBox="0 0 24 24"><rect x="1.5" y="8.5" width="7" height="7"/><rect x="15.5" y="1.5" width="7" height="7"/><rect x="15.5" y="15.5" width="7" height="7"/><path d="M8.5,12 H12 V5 H15.5"/><path d="M12,12 V19 H15.5"/></symbol>
+  <!-- 04 Production + Optimizer（規劃）：加權排名長條，最上面那條實心＝被選中的方案。 -->
+  <symbol id="agi-rank" viewBox="0 0 24 24"><rect x="2.5" y="3" width="18" height="4.6" fill="currentColor"/><rect x="2.5" y="9.7" width="12.5" height="4.6"/><rect x="2.5" y="16.4" width="7.5" height="4.6"/></symbol>
+  <!-- 05 Safety + Policy：盾牌加一道橫槓。硬規則不是打分數，是直接擋。 -->
+  <symbol id="agi-shield" viewBox="0 0 24 24"><path d="M12,2 L21,5.5 V12 L12,22 L3,12 V5.5 Z"/><path d="M7,11.5 H17"/></symbol>
+  <!-- 06 人工核准：全套唯一的實心圖示，人形站在簽名底線上。這一格不是 Agent。 -->
+  <symbol id="agi-human" viewBox="0 0 24 24"><polygon points="12,1.5 16,4 16,8.5 12,11 8,8.5 8,4" fill="currentColor" stroke="none"/><polygon points="4.5,19 7,12.5 17,12.5 19.5,19" fill="currentColor" stroke="none"/><rect x="3" y="20.5" width="18" height="2" fill="currentColor" stroke="none"/></symbol>
+  <!-- 07 Maintenance：扳手。真的動到設備、開維修工單的那一步。 -->
+  <symbol id="agi-wrench" viewBox="0 0 24 24"><path d="M8.5,2 H13.5 V12.5 H2.5 V7"/><path d="M13,12 L21.5,20.5" stroke-width="4"/></symbol>
+  <!-- 08 Verification：量測標註（兩端界限＋雙向箭頭）。回頭量實際值，不是相信預測。 -->
+  <symbol id="agi-measure" viewBox="0 0 24 24"><path d="M4,3 V21"/><path d="M20,3 V21"/><path d="M4,12 H20"/><polygon points="4,12 8.5,9.6 8.5,14.4" fill="currentColor" stroke="none"/><polygon points="20,12 15.5,9.6 15.5,14.4" fill="currentColor" stroke="none"/></symbol>
+</svg>
 <div class="shell">
 
   <!-- ================= 頂列 ================= -->
@@ -650,6 +786,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
     <div class="slot"><span class="k">Tick</span><span class="v" id="tTick">0000</span></div>
     <div class="slot"><span class="k">Scenario</span><span class="v" id="tScen">--</span></div>
     <div class="slot"><span class="k">LLM</span><span class="v" id="tLlm">--</span></div>
+    <div class="slot"><span class="k">Cloud Link</span><span class="v" id="tLink">--</span></div>
     <div class="slot"><span class="k">Run ID</span><span class="v" id="tRun">--</span></div>
     <div class="fill"></div>
     <div class="slot"><span class="k">Factory</span><span class="v"><a href="/factory">LINE CONFIG <span class="gl" aria-hidden="true">▸</span></a></span></div>
@@ -661,9 +798,18 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
   <!-- ================= 工廠配置入口 ================= -->
   <section class="factory-entry" aria-labelledby="factoryEntryTitle">
     <div><div class="entry-label">Before the demo</div><h2 id="factoryEntryTitle">第一次來？先搞懂產線配置</h2></div>
-    <p>先認識 M-A、M-B、M-C 的用途與產品流向，才看得懂 Agent 為什麼停機、轉單，以及評估下游影響。</p>
+    <p>這條線上有三台設備：<b>主要加工機</b>、<b>替代加工機</b>、<b>包裝機</b>。先認識它們的用途與產品流向，才看得懂 Agent 為什麼停機、轉單，以及評估下游影響。</p>
     <a href="/factory">查看產線配置 →</a>
   </section>
+
+  <!-- ================= 名詞對照 =================
+       畫面一律「白話為主、代號為輔」，這裡是那個「輔」的落腳處。
+       預設收合：第一次看的人不該被迫先讀一張表；要追代號的人有固定地方可查。
+       內容由 boot() 從 /api/topology 灌進來，不硬寫。 -->
+  <details class="advanced-controls" id="glossary">
+    <summary>名詞對照：畫面上的代號分別是什麼</summary>
+    <div class="glossary-grid" id="glossaryGrid"><div class="gl-group"><span class="empty">LOADING</span></div></div>
+  </details>
 
   <!-- ================= 一鍵 Demo ================= -->
   <section class="demo-lab" id="demoLab" aria-labelledby="demoTitle">
@@ -705,20 +851,17 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
     </section>
     <div class="demo-agent">
   <section class="demo-flow" aria-labelledby="flowTitle">
-    <div class="demo-flow-head"><div><h2 id="flowTitle">Agent 現在做到哪裡？</h2><p>點任一步展開：看到什麼、怎麼算、為什麼不是別的。</p></div><span class="micro" id="demoFlowMeta">WAITING FOR CASE</span></div>
-    <div class="demo-spotlight" id="demoSpotlight" role="status" aria-live="polite" aria-atomic="true" hidden>
-      <span class="spot-index" id="spotIndex">STEP 1 / 6</span>
-      <span><span class="spot-agent" id="spotAgent">Monitoring Agent</span><strong id="spotTitle">發現異常</strong></span>
-      <p id="spotValue">Digital Twin 正在產生真實訊號變化</p>
+    <div class="demo-flow-head"><div><h2 id="flowTitle">Agent 現在做到哪裡？</h2><p>這是一個會轉的環：驗證沒過就退回重新規劃。點任一格看它的推理。</p></div><span class="micro" id="demoFlowMeta">WAITING FOR CASE</span></div>
+    <!-- 閉環流程圖。節點與連線由 buildLoopMap() 產生，狀態由 /api/state 推導。 -->
+    <div class="loop-map" id="loopMap"></div>
+    <div class="demo-spotlight" id="demoSpotlight" data-actor="agent" role="status" aria-live="polite" aria-atomic="true" hidden>
+      <span class="spot-mark" id="spotMark" aria-hidden="true"><svg class="ag"><use href="#agi-monitor"/></svg></span>
+      <span class="spot-index" id="spotIndex">STEP 1 / 8</span>
+      <span class="spot-id"><span class="spot-agent" id="spotAgent">Monitoring Agent</span><strong id="spotTitle">發現異常</strong></span>
+      <span class="spot-body"><p class="spot-desc" id="spotDesc">把感測器變化轉成可處理事件。</p><p class="spot-out" id="spotValue">Digital Twin 正在產生真實訊號變化</p></span>
       <span class="spot-hold" id="spotHold">FOCUS 1.4 SEC</span>
     </div>
     <div class="demo-steps" id="demoSteps">
-      <button type="button" class="demo-step" data-demo-step="detect" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Monitoring Agent</span><span class="ds-open"></span><h3>發現異常</h3><p>把感測器變化轉成可處理事件。</p><div class="ds-value">尚未開始</div></button>
-      <button type="button" class="demo-step" data-demo-step="diagnose" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Diagnosis Agent</span><span class="ds-open"></span><h3>找出根因</h3><p>交叉比對手冊、歷史與即時訊號。</p><div class="ds-value">等待異常</div></button>
-      <button type="button" class="demo-step" data-demo-step="impact" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Impact Agent</span><span class="ds-open"></span><h3>算出影響</h3><p>確認產量、訂單與下游機台風險。</p><div class="ds-value">等待診斷</div></button>
-      <button type="button" class="demo-step" data-demo-step="plan" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Planning Agent</span><span class="ds-open"></span><h3>比較方案</h3><p>模擬每個方案並選出最佳解。</p><div class="ds-value">等待影響評估</div></button>
-      <button type="button" class="demo-step" data-demo-step="safety" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Safety + Policy</span><span class="ds-open"></span><h3>守住安全邊界</h3><p>阻擋危險方案，高風險動作保留核准。</p><div class="ds-value">等待方案</div></button>
-      <button type="button" class="demo-step" data-demo-step="verify" aria-expanded="false" aria-controls="stepWhy" disabled><span class="ds-agent">Execution Agent</span><span class="ds-open"></span><h3>執行並驗證</h3><p>套用處置，再用量測結果確認修復。</p><div class="ds-value">等待核准</div></button>
       <div class="step-why" id="stepWhy" role="region" aria-label="這一步的推理過程" hidden></div>
     </div>
   </section>
@@ -762,6 +905,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
   <section class="agent-signal" id="agentSignal" data-mode="nominal" role="status" aria-live="polite" aria-atomic="true">
     <div class="as-state">
       <i class="as-mark" aria-hidden="true"></i>
+      <svg class="ag as-glyph" id="agentGlyph" aria-hidden="true" focusable="false"><use href="#agi-monitor"/></svg>
       <div><div class="as-code" id="agentCode">SYSTEM NOMINAL</div><div class="as-title" id="agentTitle">產線穩定</div></div>
     </div>
     <div class="as-copy"><b id="agentHeadline">Agent 持續監看遙測與工安訊號</b><p id="agentDetail">尚未偵測到需要介入的異常。</p></div>
@@ -778,6 +922,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       <button type="button" role="tab" aria-controls="consolePanels" aria-selected="false" data-console-tab="equipment">設備</button>
       <button type="button" role="tab" aria-controls="consolePanels" aria-selected="false" data-console-tab="decision">決策</button>
       <button type="button" role="tab" aria-controls="consolePanels" aria-selected="false" data-console-tab="prediction">預測</button>
+      <button type="button" role="tab" aria-controls="consolePanels" aria-selected="false" data-console-tab="deployment">部署</button>
       <button type="button" role="tab" aria-controls="consolePanels" aria-selected="false" data-console-tab="evidence">證據</button>
     </div>
   </div>
@@ -800,6 +945,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
           <div id="arcade" class="arc"></div>
           <div id="floor" hidden></div>
           <div class="fp-key" id="keyArcade">
+            <span class="names" id="arcadeNames"></span>
             <span><i class="c-run"></i>運轉中</span>
             <span><i class="c-warn"></i>警告 / 降速</span>
             <span><i class="c-bad"></i>CRITICAL・冒煙噴火花</span>
@@ -816,7 +962,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       </section>
 
       <section class="sec panel-wide" data-console-panel="equipment" hidden>
-        <div class="sec-h"><b>Machine Telemetry</b><span class="meta" id="mMeta">LINE-1 / 3 UNITS</span></div>
+        <div class="sec-h"><b>Machine Telemetry</b><span class="meta cjk" id="mMeta">LOADING</span></div>
         <div class="sec-b flush" id="machines"></div>
         <div class="sec-h"><b>PLC / MES Machine Log</b><span class="meta" id="machineLogMeta">SYNTHETIC TELEMETRY</span></div>
         <div class="sec-b flush telemetry-log" id="machineLog" role="log" aria-label="機台遙測紀錄"></div>
@@ -829,7 +975,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       </section>
 
       <section class="sec panel-wide" data-console-panel="decision" hidden>
-        <div class="sec-h"><b>Plan Matrix</b><span class="meta">RANKED BY RULE ENGINE, NOT LLM</span></div>
+        <div class="sec-h"><span class="sec-id"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-rank"/></svg><b>Plan Matrix</b></span><span class="meta">RANKED BY RULE ENGINE, NOT LLM</span></div>
         <div class="sec-b" id="plans"><span class="empty">NO PLANS GENERATED</span></div>
         <div class="sec-b" id="rankWrap" hidden style="border-top:1px solid var(--line)">
           <span class="micro">RANKING RATIONALE</span>
@@ -864,7 +1010,7 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       </section>
 
       <section class="sec panel-side" data-console-panel="decision" hidden>
-        <div class="sec-h"><b>Post-Execution Verification</b><span class="meta">MEASURED ON DIGITAL TWIN</span></div>
+        <div class="sec-h"><span class="sec-id"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-measure"/></svg><b>Post-Execution Verification</b></span><span class="meta">MEASURED ON DIGITAL TWIN</span></div>
         <div class="sec-b" id="verify"><span class="empty">NOT VERIFIED</span></div>
       </section>
 
@@ -875,17 +1021,17 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
     <div class="colR">
 
       <section class="sec panel-side" data-console-panel="overview">
-        <div class="sec-h"><b>Anomaly / Root Cause</b><span class="meta" id="dxMeta">NO EVENT</span></div>
+        <div class="sec-h"><span class="sec-id"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-fingerprint"/></svg><b>Anomaly / Root Cause</b></span><span class="meta" id="dxMeta">NO EVENT</span></div>
         <div class="sec-b" id="diagnosis"><span class="empty">NOMINAL / NO ANOMALY DETECTED</span></div>
       </section>
 
       <section class="sec panel-side" data-console-panel="overview">
-        <div class="sec-h"><b>Production Impact</b><span class="meta">VIA KNOWLEDGE GRAPH</span></div>
+        <div class="sec-h"><span class="sec-id"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-impact"/></svg><b>Production Impact</b></span><span class="meta">VIA KNOWLEDGE GRAPH</span></div>
         <div class="sec-b" id="impact"><span class="empty">NOT ASSESSED</span></div>
       </section>
 
       <section class="sec panel-side" data-console-panel="overview">
-        <div class="sec-h"><b>Safety Vision / Work Order</b><span class="meta" id="camMeta">CAM-01</span></div>
+        <div class="sec-h"><span class="sec-id"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-shield"/></svg><b>Safety Vision / Work Order</b></span><span class="meta" id="camMeta">CAM-01</span></div>
         <!-- 監視畫面放在 #safety 外面：renderSafety() 每次 render 都會整塊換掉
              innerHTML，canvas 若放在裡面會被丟掉再重建。 -->
         <div class="cam" id="camview"></div>
@@ -895,6 +1041,25 @@ button:hover:not(:disabled),select:hover,button.primary:hover:not(:disabled),but
       <section class="sec panel-side" data-console-panel="equipment" hidden>
         <div class="sec-h"><b>Order Book</b><span class="meta">MES-LIKE SYNTHETIC</span></div>
         <div class="sec-b flush" id="orders"></div>
+      </section>
+
+      <!-- 部署分層。刻意只用既有的 sec / tbl / tag / narr，沒有新的視覺語彙：
+           這一頁要說的是架構，不是再多一種樣式。 -->
+      <section class="sec panel-full" data-console-panel="deployment" hidden>
+        <div class="sec-h"><b>Edge / Cloud Deployment</b><span class="meta" id="deployMeta">LOADING</span></div>
+        <div class="sec-b" id="deployLink"><span class="empty">LOADING</span></div>
+
+        <div class="sec-h"><b>Component Placement</b><span class="meta" id="deployTierMeta">EDGE / CLOUD</span></div>
+        <div class="sec-b flush" id="deployTiers"><span class="empty">LOADING</span></div>
+
+        <div class="sec-h"><b>Safety Latency Budget</b><span class="meta" id="deployLatMeta">--</span></div>
+        <div class="sec-b flush" id="deployLatency"><span class="empty">LOADING</span></div>
+
+        <div class="sec-h"><b>Uplink Bandwidth Budget</b><span class="meta" id="deployBwMeta">--</span></div>
+        <div class="sec-b flush" id="deployBandwidth"><span class="empty">LOADING</span></div>
+
+        <div class="sec-h"><b>OT Segmentation / Data Egress</b><span class="meta">IEC 62443 ZONES</span></div>
+        <div class="sec-b flush" id="deployEgress"><span class="empty">LOADING</span></div>
       </section>
 
       <section class="sec panel-full" data-console-panel="evidence" hidden>
@@ -921,6 +1086,7 @@ const consoleCopy = {
   equipment:"查看機台遙測與訂單流，定位設備和產能細節。",
   decision:"檢查 Agent 閉環、方案排名與執行後驗證。",
   prediction:"用可觀測遙測建立時序表格，預測健康度與感測器風險。",
+  deployment:"看哪些元件跑在廠內 MEC、哪些在雲端，以及斷網時會發生什麼事。",
   evidence:"集中閱讀完整稽核軌跡，追溯每一個系統決定。",
 };
 const consoleTabs = [...document.querySelectorAll("[data-console-tab]")];
@@ -957,6 +1123,114 @@ selectConsoleTab("overview");
    一律經過 esc() 才進 innerHTML。 */
 const ESCAPES = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
 const esc = v => (v === null || v === undefined) ? "" : String(v).replace(/[&<>"']/g, c => ESCAPES[c]);
+
+/* ================= 名詞：白話為主、代號為輔 =================
+   專案擁有者的回饋是「畫面上專有名詞太多，第一眼看不懂」。解法不是把代號刪掉——
+   稽核軌跡、工單、跨畫面對照都靠它，評審追問細節時也要指得回去——而是把它降到
+   次要視覺層級：白話當主標題，代號當尾隨的小字。
+
+   對照表在 boot() 從 /api/topology 灌進來（後端的 short_name 欄位）。拿不到
+   拓撲時所有函式都退回原本的代號，畫面只是變回舊樣子，不會壞。 */
+const NAMES={machine:{},product:{},line:{}};
+
+/* 名稱的優先序：/api/topology 的 short_name（權威來源，boot 時取一次）
+   → 快照自帶的 short_name（拓撲拿不到時的降級，由 name 推導）→ 代號本身。
+   這樣就算拓撲 API 掛了，遙測卡上仍然是白話，不會整排退回 M-A / M-B / M-C。 */
+const machineName = (id,fallback) => NAMES.machine[id] || fallback || id || NODATA;
+const productName = id => NAMES.product[id] || id || NODATA;
+const lineName    = id => NAMES.line[id]    || id || NODATA;
+/* ORD-A001 → 訂單 A001；PLAN-B → 方案 B。代號的識別部分留在名字裡，
+   所以「降級」之後仍然指得回原本的 ID。 */
+const orderName = id => id ? String(id).replace(/^ORD-/,"訂單 ") : NODATA;
+const planName  = id => id ? String(id).replace(/^PLAN-/,"方案 ") : NODATA;
+
+/* 純文字場合（textContent、SVG、tooltip）的「白話 代號」寫法。 */
+const mFull = id => NAMES.machine[id] ? `${NAMES.machine[id]} ${id}` : (id||NODATA);
+/* HTML 場合：代號包在 .code 裡，字級與顏色都降一階。 */
+const mHtml = id => NAMES.machine[id]
+  ? `<span class="name">${esc(NAMES.machine[id])}</span><span class="code">${esc(id)}</span>`
+  : esc(id||NODATA);
+
+/* 動作 target 可能是機台、訂單或產品的代號 —— 一律翻成白話再顯示。 */
+function entityName(id){
+  if(!id) return NODATA;
+  if(NAMES.machine[id]) return mFull(id);
+  if(NAMES.product[id]) return `${NAMES.product[id]} ${id}`;
+  if(NAMES.line[id])    return `${NAMES.line[id]} ${id}`;
+  if(/^ORD-/.test(id))  return orderName(id);
+  if(/^PLAN-/.test(id)) return planName(id);
+  return String(id);
+}
+
+/* 後端寫的敘述句（方案標題、排名理由、影響摘要、規則訊息）裡仍然夾著代號。
+   那些字串由 optimizer 與各 Agent 產生，不歸這個檔案管，而且會隨 LLM 模式改寫 ——
+   所以在「送進畫面的最後一刻」把代號換成「白話 代號」，不必要求後端改敘述，
+   也不會有哪一句被漏掉。代號留在原句裡，稽核時仍然對得回去。 */
+let CODE_RE=null, DEDUPE_RE=null;
+function humanize(text){
+  if(text===null||text===undefined) return text;
+  let out=String(text);
+  const ids=Object.keys(NAMES.machine).concat(Object.keys(NAMES.product),Object.keys(NAMES.line));
+  if(ids.length){
+    // 前後都要求非識別字元，SPINDLE-BRG-6208 或 MAN-A-3.2 這種料號不會被誤傷。
+    if(!CODE_RE) CODE_RE=new RegExp(`(^|[^0-9A-Za-z-])(${ids.join("|")})(?![0-9A-Za-z-])`,"g");
+    out=out.replace(CODE_RE,(m,pre,id)=>
+      `${pre}${NAMES.machine[id]||NAMES.product[id]||NAMES.line[id]} ${id}`);
+  }
+  out=out.replace(/\bORD-(?=[A-Z])/g,"訂單 ").replace(/\bPLAN-(?=[A-Z])/g,"方案 ");
+  // 後端有些句子本來就寫「方案 PLAN-D」「訂單 ORD-A001」，換完會變成「方案 方案 D」。
+  // 這一步把重複的前綴收掉；名詞清單同時涵蓋機台／產品／產線，將來後端改寫敘述也不會壞。
+  if(!DEDUPE_RE){
+    const words=["訂單","方案"].concat(ids.map(i=>NAMES.machine[i]||NAMES.product[i]||NAMES.line[i]));
+    DEDUPE_RE=new RegExp(`(${[...new Set(words)].join("|")})\\s*\\1\\s*`,"g");
+  }
+  return out.replace(DEDUPE_RE,"$1 ");
+}
+/* esc 之前一定先 humanize：順序反了會把中文名稱塞進已跳脫的字串裡。 */
+const escH = v => esc(humanize(v));
+
+/* 動作代碼（transfer_order）對操作人員沒有意義，畫面上只出現中文動詞。 */
+const ACTION_LABEL={
+  raise_alert:"發出告警", create_work_order:"開立維修工單", update_schedule:"調整排程",
+  transfer_order:"轉單", derate_machine:"降速運轉", stop_machine:"停機",
+  start_maintenance:"進場維修", safety_override:"跳過安全規則",
+};
+const actionName = kind => ACTION_LABEL[kind] || String(kind||"").toUpperCase().replace(/_/g," ");
+
+/* 安全規則：畫面上要看懂的是「為什麼擋下來」，不是規則編號。
+   safetyRules 在 boot() 由 /api/policy 填入（rule_id / title / sop_ref）。 */
+const ruleName = id => (safetyRules[id]||{}).title || id || NODATA;
+
+function renderGlossary(){
+  const host=$("glossaryGrid"); if(!host) return;
+  const rows=(items)=>items.map(([n,c])=>
+    `<div class="gl-row"><span class="gl-n">${esc(n)}</span><span class="gl-c">${esc(c)}</span></div>`).join("");
+  const group=(label,items,note)=>`<div class="gl-group"><span class="micro">${esc(label)}</span>
+    ${rows(items)}${note?`<div class="gl-note">${esc(note)}</div>`:""}</div>`;
+
+  const machines=(topoData?.machines||[]).map(m=>[m.short_name||m.name,m.machine_id]);
+  const products=(topoData?.products||[]).map(p=>[p.short_name||p.name,p.product_id]);
+  const lines=(topoData?.lines||[]).map(l=>[l.short_name||l.name,l.line_id]);
+  const rules=Object.values(safetyRules).slice(0,6).map(r=>[r.title,r.rule_id]);
+
+  // 訂單代號裡的字母對應產品（ORD-A### = P-100）。這條規律從實際訂單推出來，
+  // 不硬寫 —— 換一組 MES 資料時對照表要跟著換，不能留下一句對不上的說明。
+  const byPrefix={};
+  Object.values((state?.snapshot||{}).orders||{}).forEach(o=>{
+    const m=/^ORD-([A-Z]+)/.exec(o.order_id||"");
+    if(m && !byPrefix[m[1]]) byPrefix[m[1]]=productName(o.product_id);
+  });
+  const orderRows=Object.entries(byPrefix).map(([p,name])=>[`${p} 開頭 ＝ ${name}`,`ORD-${p}###`]);
+  orderRows.push(["方案 A ~ D：同一次事故的候選處置","PLAN-A ~ D"]);
+
+  host.innerHTML=[
+    machines.length?group("機台",machines,"像素視圖（ARCADE）的畫面上只印得出代號，中文對照就在那張圖的正下方。"):"",
+    products.length?group("產品",products):"",
+    lines.length?group("產線",lines):"",
+    group("訂單與方案",orderRows,"畫面上一律寫成「訂單 A001」「方案 B」；完整代號保留在稽核軌跡與工單裡。"),
+    rules.length?group("安全規則",rules,"畫面上以規則描述為主、編號為輔。完整規則表在 /system。"):"",
+  ].filter(Boolean).join("");
+}
 
 const SIGNALS = ["temperature","vibration","current","rpm_pct"];
 const SIG_META = {
@@ -1001,11 +1275,126 @@ const fmt=(v,d=1)=> (v===null||v===undefined||Number.isNaN(v)) ? NODATA : Number
 const pad=(n,w)=> String(n).padStart(w,"0");
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-function setDemoProgress(text){ $("demoProgress").textContent=text; $("demoFlowMeta").textContent=text.toUpperCase(); }
+/* icon 有給就在進度句前面掛上該 Agent 的圖示，和流程圖上亮著的那一格對得起來。 */
+function setDemoProgress(text,icon){
+  $("demoProgress").innerHTML=(icon?agGlyph(icon):"")+esc(text);
+  $("demoFlowMeta").textContent=text.toUpperCase();
+}
+
+/* ================= 閉環流程圖 =================
+   舊版是六列文字表格，直排讀起來像功能列表，看不出「這是一個環」。這裡改成
+   一張 inline SVG（不是 canvas —— pixel.js 的點陣字模只有 ASCII，而且全站
+   不載任何字型），節點上只留動詞短語，說明與 OUTPUT 移到下方的聚光燈列。
+
+   八個節點對回六個後端階段：核准與執行是 safety / verify 階段裡本來就存在的
+   兩個真實環節（PolicyDecision + ApprovalDecision、LoopAttempt.executed），
+   不是為了畫圖新增的假格子。每一格的狀態都由 /api/state 推導。
+
+   icon 是這一格的職責圖示（symbol 定義在 <body> 開頭的 .ag-sprite）：
+   節點上「圖示 + 動詞短語」同時出現，評審不必先讀完 agent 名字才知道是誰在做。
+   actor 只有 machine / human 兩種：人工核准那一格是人，圖示是全套唯一的實心
+   人形，而且左側標記改成分段的簽名式短線，和 Agent 的實心色條分開。 */
+const LOOP_NODES=[
+  {id:"detect",  stage:"detect",  no:"01",label:"發現異常",agent:"Monitoring Agent",
+   icon:"monitor",
+   desc:"把感測器變化轉成可處理事件。"},
+  {id:"diagnose",stage:"diagnose",no:"02",label:"找出根因",agent:"Diagnosis Agent",
+   icon:"fingerprint",
+   desc:"交叉比對手冊、歷史與即時訊號。"},
+  {id:"impact",  stage:"impact",  no:"03",label:"算出影響",agent:"Production Agent",
+   icon:"impact",
+   desc:"確認產量、訂單與下游機台風險。"},
+  {id:"plan",    stage:"plan",    no:"04",label:"比較方案",agent:"Production Agent + Optimizer",
+   icon:"rank",
+   desc:"模擬每個方案並選出最佳解。"},
+  {id:"safety",  stage:"safety",  no:"05",label:"安全把關",agent:"Safety Agent + Policy Engine",
+   icon:"shield",
+   desc:"阻擋危險方案，高風險動作保留核准。"},
+  {id:"approve", stage:"safety",  no:"06",label:"核准",    agent:"現場主管（人）+ Policy Engine",
+   icon:"human", actor:"human",
+   desc:"會動到設備的動作一定要具名核准，逾時不執行。"},
+  {id:"execute", stage:"verify",  no:"07",label:"執行",    agent:"Maintenance Agent",
+   icon:"wrench",
+   desc:"下指令前重跑一次安全閘門，再開維修工單。"},
+  {id:"verify",  stage:"verify",  no:"08",label:"驗證",    agent:"Orchestrator + Verification Agent",
+   icon:"measure",
+   desc:"套用處置，再用量測結果確認修復。"},
+];
+const NODE_BY_ID={}; LOOP_NODES.forEach((n,i)=>{ n.index=i; NODE_BY_ID[n.id]=n; });
+/* 一個階段亮起來時，先亮它的第一個節點。 */
+const STAGE_PRIMARY={detect:"detect",diagnose:"diagnose",impact:"impact",plan:"plan",safety:"safety",verify:"execute"};
+
+/* 版面座標。寬版是環（一眼看得出回饋線把 08 接回 04），
+   窄版改直排＋左側回饋軌，兩版共用同一份節點與狀態。 */
+const LM_WIDE={
+  vb:[920,270], nw:155, nh:44, tx:52, tsz:14, ic:[27,19],
+  at:{detect:[15,12],diagnose:[200,12],impact:[385,12],plan:[385,100],
+      safety:[570,100],approve:[755,100],execute:[570,188],verify:[385,188]},
+  edges:[
+    {to:"diagnose",d:"M170,34 H196",         tip:[200,34,"r"]},
+    {to:"impact",  d:"M355,34 H381",         tip:[385,34,"r"]},
+    {to:"plan",    d:"M462.5,56 V96",        tip:[462.5,100,"d"]},
+    {to:"safety",  d:"M540,122 H566",        tip:[570,122,"r"]},
+    {to:"approve", d:"M725,122 H751",        tip:[755,122,"r"]},
+    {to:"execute", d:"M832.5,144 V210 H729", tip:[725,210,"l"]},
+    {to:"verify",  d:"M570,210 H544",        tip:[540,210,"l"]},
+  ],
+  back:{d:"M385,210 H60 V122 H381",tip:[385,122,"r"]},
+  lb:[222,164,"middle"], sub:[222,184,"middle"],
+  pass:{d:"M462.5,232 V242",tip:[462.5,246,"d"],box:[385,248,155,20]},
+  key:[912,22,"end"], ikey:[676,32,15,699,44],
+};
+const LM_TALL={
+  vb:[330,600], nw:272, nh:40, tx:52, tsz:13.5, ic:[27,18],
+  at:{detect:[46,6],diagnose:[46,76],impact:[46,146],plan:[46,216],
+      safety:[46,286],approve:[46,356],execute:[46,426],verify:[46,496]},
+  edges:[
+    {to:"diagnose",d:"M182,46 V72",  tip:[182,76,"d"]},
+    {to:"impact",  d:"M182,116 V142",tip:[182,146,"d"]},
+    {to:"plan",    d:"M182,186 V212",tip:[182,216,"d"]},
+    {to:"safety",  d:"M182,256 V282",tip:[182,286,"d"]},
+    {to:"approve", d:"M182,326 V352",tip:[182,356,"d"]},
+    {to:"execute", d:"M182,396 V422",tip:[182,426,"d"]},
+    {to:"verify",  d:"M182,466 V492",tip:[182,496,"d"]},
+  ],
+  back:{d:"M46,516 H16 V236 H42",tip:[46,236,"r"]},
+  lb:[52,208,"start"], sub:[318,208,"end"],
+  pass:{d:"M182,536 V546",tip:[182,550,"d"],box:[46,552,272,20]},
+};
+
+/* 狀態來源。stepFlags/stepValue 對應六個後端階段；nodeFacts 是核准／執行／驗證
+   這三格從 last_loop.attempts 與 pending_approval 推出來的節點級事實。 */
+const stepFlags={}, stepValue={}, nodeFacts={};
+let loopBack={hot:false,retries:0}, loopPassed=false;
+let lmEls=null, selectedNode=null;
+
+const LM_MARK={idle:"",live:"▶",done:"✓",hz:"!"};
+const LM_STATE_TEXT={idle:"等待中",live:"進行中",done:"已完成",hz:"需注意"};
+
 function setDemoStep(key,status,value){
-  const el=document.querySelector(`[data-demo-step="${key}"]`); if(!el) return;
-  el.className="demo-step"+(status?` ${status}`:"");
-  if(value) el.querySelector(".ds-value").textContent=value;
+  if(!DEMO_ORDER.includes(key)) return;
+  stepFlags[key]={done:status==="done",live:status==="live",fail:status==="fail"};
+  if(value) stepValue[key]=value;
+  paintLoopMap();
+}
+/* 一鍵 Demo 會逐格解說，後端往往跑得比解說快。還沒講到的格子先壓回等待中，
+   否則畫面會出現「連線亮了但格子還沒亮」這種自相矛盾的中間狀態。 */
+function presentingClamped(stage){
+  return demoRunning && demoPresentedIndex>=0 && DEMO_ORDER.indexOf(stage)>demoPresentedIndex;
+}
+function nodeStatus(n){
+  if(presentingClamped(n.stage)) return "idle";
+  const fact=nodeFacts[n.id];
+  if(fact&&fact.st) return fact.st;
+  const f=stepFlags[n.stage]||{};
+  if(f.fail) return "hz";
+  if(f.done) return "done";
+  if(f.live) return STAGE_PRIMARY[n.stage]===n.id?"live":"idle";
+  return "idle";
+}
+function nodeOutput(n){
+  const fact=nodeFacts[n.id];
+  return (fact&&fact.out)||stepValue[n.stage]||"尚未開始";
 }
 function currentDemoStep(st){
   const live=st?.live||{}, loop=st?.last_loop||{};
@@ -1022,31 +1411,171 @@ function currentDemoStep(st){
   if(live.execute||live.verify||verification) current="verify";
   return current;
 }
+/* ---- 繪圖 --------------------------------------------------------------
+   建一次 DOM，之後只換 class 與文字：重畫整張 SVG 會把鍵盤焦點吃掉。 */
+function lmHead(x,y,dir){
+  const a=8, b=4.6;
+  if(dir==="r") return `${x-a},${y-b} ${x},${y} ${x-a},${y+b}`;
+  if(dir==="l") return `${x+a},${y-b} ${x},${y} ${x+a},${y+b}`;
+  if(dir==="d") return `${x-b},${y-a} ${x},${y} ${x+b},${y-a}`;
+  return `${x-b},${y+a} ${x},${y} ${x+b},${y+a}`;
+}
+function pickLoopLayout(){
+  return matchMedia("(max-width:760px)").matches ? LM_TALL : LM_WIDE;
+}
+function buildLoopMap(){
+  const host=$("loopMap"); if(!host) return;
+  const L=pickLoopLayout();
+  const [vw,vh]=L.vb, out=[];
+  out.push(`<svg viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" role="group"
+     aria-label="Agent 閉環流程圖：偵測到驗證共八格，驗證未過會退回比較方案重新規劃">`);
+
+  /* 連線亮不亮，看的是流程有沒有真的走到下一格（目的節點不再是「等待中」）。 */
+  L.edges.forEach(e=>out.push(
+    `<g data-lm-edge="${esc(e.to)}"><path class="lm-edge" d="${e.d}"/>
+     <polygon class="lm-head" points="${lmHead(...e.tip)}"/></g>`));
+  out.push(`<g id="lmBack"><path class="lm-edge back" d="${L.back.d}"/>
+     <polygon class="lm-head back" points="${lmHead(...L.back.tip)}"/></g>`);
+  out.push(`<text class="lm-lb" id="lmBackLabel" x="${L.lb[0]}" y="${L.lb[1]}" text-anchor="${L.lb[2]}">驗證未過 → 退回重新規劃</text>`);
+  out.push(`<text class="lm-lb sub" id="lmBackSub" x="${L.sub[0]}" y="${L.sub[1]}" text-anchor="${L.sub[2]}" hidden></text>`);
+
+  /* 圖例：狀態不能只靠顏色分辨，每一格右側都有對應的符號。 */
+  if(L.key) out.push(`<text class="lm-lb sub" x="${L.key[0]}" y="${L.key[1]}" text-anchor="${L.key[2]}">▶ 進行中　✓ 已完成　! 被擋下／等人簽名</text>`);
+  /* 第二行圖例只講一件事：實心人形那一格是人做的，其餘七格的線稿圖示是 Agent。 */
+  if(L.ikey) out.push(`<use class="lm-ic key" href="#agi-human" x="${L.ikey[0]}" y="${L.ikey[1]}" width="${L.ikey[2]}" height="${L.ikey[2]}"/>
+     <text class="lm-lb sub" x="${L.ikey[3]}" y="${L.ikey[4]}">實心人形＝人工核准，線稿＝Agent</text>`);
+  out.push(`<g id="lmPass"><path class="lm-edge" d="${L.pass.d}"/>
+     <polygon class="lm-head" points="${lmHead(...L.pass.tip)}"/></g>`);
+  const [bx,by,bw,bh]=L.pass.box;
+  out.push(`<g class="lm-term" id="lmTerm"><rect class="bx" x="${bx+.5}" y="${by+.5}" width="${bw-1}" height="${bh-1}"/>
+     <text class="tx" x="${bx+bw/2}" y="${by+bh/2+4}">通過 → 閉環完成</text></g>`);
+
+  LOOP_NODES.forEach(n=>{
+    const [x,y]=L.at[n.id], [ix,isz]=L.ic;
+    /* Agent 那七格的左側標記是一條實心色條；「核准」那一格改成三段短線，
+       像簽名的筆畫，配上實心人形圖示，不必讀字也看得出這格換人做。 */
+    const seg=(L.nh-6)/3;
+    const bar = n.actor==="human"
+      ? [0,1,2].map(i=>`<rect class="bar" x="${x+1}" y="${y+3+i*seg}" width="3" height="${seg-3}"/>`).join("")
+      : `<rect class="bar" x="${x+1}" y="${y+1}" width="3" height="${L.nh-2}"/>`;
+    out.push(`<g class="lm-node" data-demo-step="${esc(n.id)}" data-actor="${esc(n.actor||"agent")}" role="button" tabindex="0" aria-controls="stepWhy" aria-expanded="false">
+      <title>${esc(n.label)}｜${esc(n.agent)}｜${esc(n.desc)}</title>
+      <rect class="bx" x="${x+.5}" y="${y+.5}" width="${L.nw-1}" height="${L.nh-1}"/>
+      ${bar}
+      <text class="no" x="${x+11}" y="${y+L.nh/2+4}">${n.no}</text>
+      <use class="lm-ic" href="#agi-${esc(n.icon)}" x="${x+ix}" y="${y+(L.nh-isz)/2}" width="${isz}" height="${isz}"/>
+      <text class="tx" x="${x+L.tx}" y="${y+L.nh/2+5}" style="font-size:${L.tsz}px">${esc(n.label)}</text>
+      <text class="mk" x="${x+L.nw-10}" y="${y+L.nh/2+4}"></text></g>`);
+  });
+  out.push(`</svg>`);
+  host.innerHTML=out.join("");
+
+  lmEls={host, svg:host.querySelector("svg"),
+    nodes:{}, edges:{},
+    back:host.querySelector("#lmBack"), backLabel:host.querySelector("#lmBackLabel"),
+    backSub:host.querySelector("#lmBackSub"),
+    pass:host.querySelector("#lmPass"), term:host.querySelector("#lmTerm")};
+  host.querySelectorAll("[data-lm-edge]").forEach(g=>{
+    (lmEls.edges[g.dataset.lmEdge]=lmEls.edges[g.dataset.lmEdge]||[]).push(g);
+  });
+  host.querySelectorAll(".lm-node").forEach(g=>{
+    const id=g.dataset.demoStep; lmEls.nodes[id]=g;
+    g.addEventListener("click",()=>openLoopNode(id));
+    g.addEventListener("keydown",ev=>{
+      if(ev.key==="Enter"||ev.key===" "||ev.key==="Spacebar"){ ev.preventDefault(); openLoopNode(id); }
+    });
+    g.addEventListener("mouseenter",()=>{ if(!demoRunning) showSpotlight(id,{hold:"HOVER"}); });
+    g.addEventListener("focus",()=>{ if(!demoRunning) showSpotlight(id,{hold:"FOCUS"}); });
+  });
+  paintLoopMap();
+}
+function paintLoopMap(){
+  if(!lmEls) return;
+  const reached={};
+  LOOP_NODES.forEach(n=>{
+    const st=nodeStatus(n), g=lmEls.nodes[n.id]; if(!g) return;
+    reached[n.id]=st!=="idle";
+    g.setAttribute("class","lm-node"+(st!=="idle"?` ${st}`:"")
+      +(selectedNode===n.id?" sel":"")+(loopReasonFor(n)?"":" off"));
+    g.querySelector(".mk").textContent=LM_MARK[st]||"";
+    g.setAttribute("aria-label",
+      `步驟 ${n.no} ${n.label}，${n.agent}，${LM_STATE_TEXT[st]}。${n.desc} 輸出：${nodeOutput(n)}`);
+    if(st==="live") g.setAttribute("aria-current","step"); else g.removeAttribute("aria-current");
+  });
+  Object.entries(lmEls.edges).forEach(([to,list])=>list.forEach(g=>{
+    g.querySelector(".lm-edge").setAttribute("class","lm-edge"+(reached[to]?" on":""));
+    g.querySelector(".lm-head").setAttribute("class","lm-head"+(reached[to]?" on":""));
+  }));
+  const told=!presentingClamped("verify");
+  const hot=loopBack.hot&&told, passed=loopPassed&&told;
+  lmEls.back.querySelector(".lm-edge").setAttribute("class","lm-edge back"+(hot?" hot":""));
+  lmEls.back.querySelector(".lm-head").setAttribute("class","lm-head back"+(hot?" hot":""));
+  lmEls.backLabel.setAttribute("class","lm-lb"+(hot?" hot":""));
+  if(loopBack.retries>0&&told){ lmEls.backSub.textContent=`已退回 ${loopBack.retries} 次`; lmEls.backSub.removeAttribute("hidden"); }
+  else lmEls.backSub.setAttribute("hidden","");
+  lmEls.pass.querySelector(".lm-edge").setAttribute("class","lm-edge"+(passed?" on":""));
+  lmEls.pass.querySelector(".lm-head").setAttribute("class","lm-head"+(passed?" on":""));
+  lmEls.term.setAttribute("class","lm-term"+(passed?" on":""));
+}
+/* 節點有沒有推理可看，取決於後端真的算出東西沒有，不是前端自己開關。 */
+function loopReasonFor(n){ return !!(loopReasoning&&loopReasoning[n.stage]); }
+function openLoopNode(id){
+  const n=NODE_BY_ID[id]; if(!n||!loopReasonFor(n)) { showSpotlight(id,{hold:"尚無資料"}); return; }
+  expandedStep = (expandedStep===n.stage && selectedNode===id) ? null : n.stage;
+  selectedNode = expandedStep?id:null;
+  renderStepReasoning(); showSpotlight(id,{hold:"SELECTED"});
+  if(expandedStep) $("stepWhy").scrollIntoView({block:"nearest",
+    behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+}
+/* 一個地方產生所有 HTML 情境下的 Agent 圖示：流程圖用 <use>，其餘用這個。
+   symbol 只定義一次，所以同一個 Agent 在哪裡都長一樣。 */
+function agGlyph(icon){ return `<svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-${esc(icon)}"/></svg>`; }
+/* 六個後端階段 → 圖示。階段層級（推理面板、判讀列）用得到，節點層級走 n.icon。 */
+const STAGE_ICON={detect:"monitor",diagnose:"fingerprint",impact:"impact",plan:"rank",
+                  safety:"shield",approve:"human",execute:"wrench",verify:"measure",escalate:"shield"};
+
+function showSpotlight(id,{hold}={}){
+  const n=NODE_BY_ID[id]; if(!n) return;
+  $("demoSpotlight").hidden=false;
+  $("demoSpotlight").dataset.actor=n.actor||"agent";
+  $("spotMark").innerHTML=agGlyph(n.icon);
+  $("spotIndex").textContent=`STEP ${n.index+1} / ${LOOP_NODES.length}`;
+  $("spotAgent").textContent=n.agent;
+  $("spotTitle").textContent=n.label;
+  $("spotDesc").textContent=n.desc;
+  $("spotValue").textContent=nodeOutput(n);
+  if(hold) $("spotHold").textContent=hold;
+}
 function presentDemoStep(key,{scroll=true}={}){
   const index=DEMO_ORDER.indexOf(key); if(index<0) return;
   DEMO_ORDER.forEach((step,i)=>{
-    const el=document.querySelector(`[data-demo-step="${step}"]`); if(!el) return;
-    el.classList.toggle("done",i<index);
-    el.classList.toggle("live",i===index);
-    if(i===index) el.setAttribute("aria-current","step"); else el.removeAttribute("aria-current");
+    const f=stepFlags[step]||(stepFlags[step]={});
+    f.done=i<index; f.live=i===index;
   });
-  const active=document.querySelector(`[data-demo-step="${key}"]`);
-  $("demoSpotlight").hidden=false; $("demoFlowMeta").textContent=`STEP ${index+1} / ${DEMO_ORDER.length}`;
+  const nodeId=STAGE_PRIMARY[key]||key;
+  $("demoFlowMeta").textContent=`STEP ${NODE_BY_ID[nodeId].index+1} / ${LOOP_NODES.length}`;
   $("demoSteps").closest(".demo-flow").classList.add("presenting");
-  $("spotIndex").textContent=`STEP ${index+1} / ${DEMO_ORDER.length}`;
-  $("spotAgent").textContent=active.querySelector(".ds-agent").textContent;
-  $("spotTitle").textContent=active.querySelector("h3").textContent;
-  $("spotValue").textContent=active.querySelector(".ds-value").textContent;
-  $("spotHold").textContent=`FOCUS ${(DEMO_STEP_HOLD_MS/1000).toFixed(1)} SEC`;
+  paintLoopMap();
+  showSpotlight(nodeId,{hold:`FOCUS ${(DEMO_STEP_HOLD_MS/1000).toFixed(1)} SEC`});
   focusedDemoStep=key;
-  if(scroll) active.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+  if(scroll&&lmEls) revealLoopNode(nodeId);
+}
+/* 流程圖本身很小，跟著它跑就好；窄螢幕多做一次容器內的橫向捲動。 */
+function revealLoopNode(nodeId){
+  const host=lmEls.host, node=lmEls.nodes[nodeId]; if(!node) return;
+  const smooth=!matchMedia("(prefers-reduced-motion: reduce)").matches;
+  host.scrollIntoView({block:"nearest",behavior:smooth?"smooth":"auto"});
+  if(host.scrollWidth>host.clientWidth){
+    const box=node.getBoundingClientRect(), area=host.getBoundingClientRect();
+    host.scrollLeft += (box.left+box.width/2)-(area.left+area.width/2);
+  }
 }
 async function presentDemoThrough(targetIndex){
   const capped=Math.min(targetIndex,DEMO_ORDER.length-1);
   while(demoPresentedIndex<capped){
     demoPresentedIndex+=1;
     const key=DEMO_ORDER[demoPresentedIndex];
-    setDemoProgress(DEMO_STAGE_PROGRESS[key]);
+    setDemoProgress(DEMO_STAGE_PROGRESS[key],STAGE_ICON[key]);
     presentDemoStep(key);
     await pause(DEMO_STEP_HOLD_MS);
   }
@@ -1056,7 +1585,8 @@ function resetDemoUI(){
   $("demoResult").hidden=true; $("demoLab").classList.remove("running");
   $("demoSpotlight").hidden=true; $("demoSteps").closest(".demo-flow").classList.remove("presenting");
   document.querySelectorAll(".demo-case").forEach(b=>{b.disabled=false;b.removeAttribute("aria-current");});
-  document.querySelectorAll("[data-demo-step]").forEach(step=>step.removeAttribute("aria-current"));
+  Object.keys(nodeFacts).forEach(k=>delete nodeFacts[k]);
+  selectedNode=null; loopBack={hot:false,retries:0}; loopPassed=false;
   const defaults={detect:"尚未開始",diagnose:"等待異常",impact:"等待診斷",plan:"等待影響評估",safety:"等待方案",verify:"等待核准"};
   DEMO_ORDER.forEach(k=>setDemoStep(k,"",defaults[k]));
   $("demoFlowMeta").textContent="WAITING FOR CASE"; $("demoProgress").textContent="正在準備案例...";
@@ -1071,7 +1601,7 @@ function clearAnalysisPanels(){
   $("dxMeta").textContent="NO EVENT"; $("auditMeta").textContent="0 RECORDS";
 }
 
-/* 手動控制（INJECT / RUN AGENT LOOP）跑出來的閉環也要點得亮這六格 —— 只要
+/* 手動控制（INJECT / RUN AGENT LOOP）跑出來的閉環也要點得亮流程圖 —— 只要
    session 裡有階段產出就更新，不再限定一鍵 Demo。 */
 function syncDemoFlowFromState(){
   if(!demoRunning&&!demoScenario&&!state.last_loop&&!Object.keys(state.live||{}).length) return;
@@ -1089,7 +1619,7 @@ function syncDemoFlowFromState(){
   if(event){
     const signals=Object.entries(event.readings||{}).filter(([,r])=>r.band!=="normal")
       .map(([name,r])=>`${name.toUpperCase()} ${fmt(r.value,2)} ${r.unit}`).slice(0,2);
-    setDemoStep("detect",current==="detect"?"live":"done",`${event.machine_id} · ${event.severity.toUpperCase()} · ${signals.join(" / ")||(event.triggers||[]).slice(0,2).join(" / ")} · HEALTH ${fmt(event.health,0)}`);
+    setDemoStep("detect",current==="detect"?"live":"done",`${mFull(event.machine_id)} · ${event.severity.toUpperCase()} · ${signals.join(" / ")||(event.triggers||[]).slice(0,2).join(" / ")} · HEALTH ${fmt(event.health,0)}`);
   }
   if(diagnosis){
     const top=(diagnosis.candidates||[])[0];
@@ -1100,19 +1630,54 @@ function syncDemoFlowFromState(){
   if(plans){
     const picked=plans.find(p=>p.plan_id===ranking.recommended_plan_id)||plans.find(p=>p.rank===1);
     const pr=picked?.projection;
-    setDemoStep("plan",current==="plan"?"live":"done",`${plans.length} 個方案 · ${picked?`推薦 ${picked.plan_id}：${fmt(pr?.production_pct_final??pr?.production_pct,0)}% 產出 / ${fmt(pr?.max_order_delay_min,0)} 分延遲`:"等待排名"}`);
+    setDemoStep("plan",current==="plan"?"live":"done",`${plans.length} 個方案 · ${picked?`推薦${planName(picked.plan_id)}：${fmt(pr?.production_pct_final??pr?.production_pct,0)}% 產出 / ${fmt(pr?.max_order_delay_min,0)} 分延遲`:"等待排名"}`);
   }
-  if(live.safety||state.pending_approval){
-    const blocked=((live.safety||{}).reviews||[]).filter(x=>x.verdict==="BLOCK").length;
-    const reviews=(live.safety||{}).reviews||[];
+  /* 安全把關：被擋下就轉 hazard —— BLOCK 是硬限制，畫面要看得出它真的開過火。
+     方案審查完後 safety 掛在方案上，還沒排名時只有 safety 階段事件，兩邊都算。 */
+  const planReviews=(plans||[]).filter(p=>p.safety).map(p=>p.safety);
+  const reviews=planReviews.length?planReviews:((live.safety||{}).reviews||[]);
+  if(reviews.length||state.pending_approval){
+    const blocked=reviews.filter(x=>x.verdict==="BLOCK").length;
     const approvals=reviews.filter(x=>x.verdict==="APPROVAL_REQUIRED").length;
     setDemoStep("safety",current==="safety"?"live":"done",state.pending_approval?"高風險動作等待核准":`BLOCK ${blocked} · 核准 ${approvals} · 其餘放行`);
+    nodeFacts.safety = blocked>0
+      ? {st:"hz",out:`BLOCK ${blocked} 個方案 · 需核准 ${approvals} · 其餘放行`}
+      : null;
   }
-  if(live.execute) setDemoStep("verify","live","處置已執行，正在量測驗證");
+
+  /* 核准／執行／驗證這三格的事實在 LoopAttempt 裡：approval（誰簽的、是不是
+     依政策自動放行）、executed（執行前安全閘門有沒有攔下來）、verification。 */
+  const attempt=attempts.length?attempts[attempts.length-1]:null;
+  if(state.pending_approval){
+    nodeFacts.approve={st:"hz",out:`${planName(state.pending_approval.plan.plan_id)} 等待具名核准，設備動作停在這裡`};
+  }else if(attempt&&attempt.approval){
+    const ap=attempt.approval;
+    nodeFacts.approve = ap.approved
+      ? {st:"done",out:`${ap.approver} 已核准${ap.auto?"（低風險依政策自動放行）":""}`}
+      : {st:"hz",out:`未取得核准：${humanize(ap.reason)||"已停止自動處置"}`};
+  }else nodeFacts.approve=null;
+
+  if(attempt){
+    nodeFacts.execute = attempt.executed
+      ? {st:current==="verify"&&!verification?"live":"done",out:`已下 ${(attempt.execution_effects||[]).length} 個動作到設備並開工單`}
+      : {st:"hz",out:humanize(attempt.blocked_reason)||"未執行"};
+  }else if(live.execute){
+    nodeFacts.execute={st:"live",out:`${planName((live.execute||{}).plan_id)} 已下到設備，正在量測`};
+  }else nodeFacts.execute=null;
+
+  if(live.execute&&!verification) setDemoStep("verify","live","處置已執行，正在量測驗證");
   if(verification){
     const passed=verification.passed, checks=verification.checks||[];
-    setDemoStep("verify",passed?"done":"fail",`${passed?"PASS":"FAIL"} ${checks.filter(c=>c.passed).length}/${checks.length} checks · ${verification.narrative||"已完成量測"}`);
-  }
+    const text=`${passed?"PASS":"FAIL"} ${checks.filter(c=>c.passed).length}/${checks.length} checks · ${humanize(verification.narrative)||"已完成量測"}`;
+    setDemoStep("verify",passed?"done":"fail",text);
+    nodeFacts.verify={st:passed?"done":"hz",out:text};
+  }else nodeFacts.verify=null;
+
+  /* 回饋線：真的退回重新規劃過幾次，就是 attempts 多出來的那幾次。 */
+  loopBack={hot:attempts.length>1||!!(verification&&!verification.passed)||!!loop.escalated,
+            retries:Math.max(attempts.length-1,0)};
+  loopPassed=!!(verification&&verification.passed);
+  paintLoopMap();
   if(!demoRunning&&state.running&&focusedDemoStep!==current) presentDemoStep(current);
 }
 
@@ -1126,7 +1691,7 @@ const BAND_LABEL={normal:"正常",warning:"警告",critical:"危險"};
 const CRIT_LABEL={safety:"工安裕度",production:"產線達成率",delivery:"交期",recovery:"復原時間",cost:"成本",equipment:"設備保全"};
 const VERDICT_LABEL={ALLOW:"放行",APPROVAL_REQUIRED:"需人工核准",BLOCK:"阻擋"};
 
-let expandedStep=null, confirmInfo=null;
+let expandedStep=null, confirmInfo=null, loopReasoning=null;
 const safetyRules={};   // rule_id -> {rule_id, title, verdict, sop_ref}，boot 時取自 /api/policy
 const pctOf=v=>(v===null||v===undefined||Number.isNaN(v))?NODATA:`${Math.round(v*100)}%`;
 const signed=(v,d=2)=>`${v>0?"+":""}${fmt(v,d)}`;
@@ -1162,10 +1727,11 @@ function explainTrigger(t){
   if((m=/^safety:(.+)$/.exec(t))){
     // 只印編號等於沒說。SR-03 是「高溫仍維持運轉」、SR-04 是「偵測到煙霧仍維持運轉」，
     // 各自的判準也不同 —— 不能一律標成「影像觸發」。
+    // 規則描述當主體、編號退到補充語裡：要看懂的是「為什麼擋下來」，不是編號。
     const rule=safetyRules[m[1]];
-    return {k:"工安規則",v:`${m[1]}　${rule?rule.title:""}`.trim(),
-            tail:rule?`依 ${rule.sop_ref}；由 Safety Agent 觸發，不必等設備訊號變化`
-                     :"由 Safety Agent 觸發，不必等設備訊號變化",bad:true};
+    return {k:"工安規則",v:rule?rule.title:m[1],
+            tail:`${m[1]}${rule?`｜依 ${rule.sop_ref}`:""}；由 Safety Agent 觸發，不必等設備訊號變化`,
+            bad:true};
   }
   return {k:"觸發條件",v:t,bad:true};
 }
@@ -1186,12 +1752,12 @@ function reasonDetect(s){
 
   const others=Object.values((state.snapshot||{}).machines||{})
     .filter(m=>m.machine_id!==e.machine_id).map(m=>({
-      k:m.machine_id,
+      k:machineName(m.machine_id),
       v:m.online?`${BAND_LABEL[m.worst_band]||m.worst_band} · 健康度 ${fmt(m.health,0)}`:"離線",
-      tail:m.online?"未達任何觸發條件":"停機／維修中不做異常判斷"}));
+      tail:`${m.machine_id}｜${m.online?"未達任何觸發條件":"停機／維修中不做異常判斷"}`}));
 
   return {
-    headline:`${e.machine_id} 觸發 ${e.severity.toUpperCase()} 異常`,
+    headline:`${mFull(e.machine_id)} 觸發 ${e.severity.toUpperCase()} 異常`,
     slots:[
       {label:"看到什麼",rows:seen,note:"這些是帶量測雜訊的感測器讀值，Agent 看不到模擬器的真實健康度與故障標籤。"},
       {label:"觸發規則",rows:(e.triggers||[]).map(explainTrigger)},
@@ -1262,18 +1828,19 @@ function reasonImpact(s){
   const orders=im.affected_orders||[];
   const atRisk=orders.filter(o=>o.at_risk);
   return {
-    headline:`${orders.length} 張訂單依賴 ${im.machine_id}，${atRisk.length} 張有交期風險`,
+    headline:`${orders.length} 張訂單依賴${machineName(im.machine_id)}，${atRisk.length} 張有交期風險`,
     slots:[
       {label:"看到什麼",rows:[
-        {k:"下游機台",v:(im.downstream_machines||[]).join(" · ")||"無"},
+        {k:"下游機台",v:(im.downstream_machines||[]).map(machineName).join(" · ")||"無",
+         tail:(im.downstream_machines||[]).join(" · ")},
         {k:"依賴訂單",v:`${orders.length} 張`,tail:"沿 Knowledge Graph（機台→產線→產品→訂單）追出來"},
         {k:"目前達成率",v:`${fmt((state.snapshot||{}).production_pct,1)}%`},
       ]},
       // 已依延遲由大到小排序，列前四張；其餘只給筆數，不假裝全部列完。
       {label:"怎麼算",rows:orders.slice(0,4).map(o=>({
-        k:o.order_id,
+        k:orderName(o.order_id),
         v:o.delay_min>0?`延遲 ${fmt(o.delay_min,0)} 分`:"可準時",
-        tail:`剩 ${fmt(o.remaining,0)} 件｜預估完成 ${fmt(o.projected_finish_min,0)} 分 vs 交期 ${fmt(o.due_in_min,0)} 分`,
+        tail:`${productName(o.product_id)} ×${fmt(o.remaining,0)} 件待產｜預估完成 ${fmt(o.projected_finish_min,0)} 分 vs 交期 ${fmt(o.due_in_min,0)} 分`,
         bad:o.delay_min>0}))
         .concat(orders.length>4?[{k:"其餘",v:`${orders.length-4} 張`,tail:"延遲較小，未逐張列出"}]:[])
         .concat([{k:"產能損失",v:`${fmt(im.production_loss_units,0)} 件`,
@@ -1295,7 +1862,7 @@ function reasonPlan(s){
   const win=sorted.find(p=>p.feasible)||sorted[0];
 
   const seen=sorted.map(p=>({
-    k:p.plan_id, v:p.title,
+    k:planName(p.plan_id), v:humanize(p.title),
     tail:`產出 ${fmt(p.projection.production_pct,0)}%｜延遲 ${fmt(p.projection.max_order_delay_min,0)} 分｜成本 ${Math.round(p.projection.cost_ntd/1000)}K｜${p.projection.recovered?`復原 ${fmt(p.projection.recovery_min,0)} 分`:"未復原"}`}));
 
   const eqs=[];
@@ -1306,7 +1873,7 @@ function reasonPlan(s){
       eqs.push({t:`${CRIT_LABEL[c]||c} 得分 ${fmt(n,2)} × 權重 ${fmt(weights[c],2)}`,
                 v:fmt((win.score_breakdown||{})[c],3)});
     });
-    eqs.push({sum:true,t:`${win.plan_id} 加權總分`,v:fmt(win.score,3)});
+    eqs.push({sum:true,t:`${planName(win.plan_id)} 加權總分`,v:fmt(win.score,3)});
   }
 
   // 落後最多的準則就是這個方案輸在哪裡 —— 和 optimizer.explain_ranking 同一套算法。
@@ -1314,20 +1881,20 @@ function reasonPlan(s){
     ((win.score_breakdown||{})[c]-(p.score_breakdown||{})[c]) >
     ((win.score_breakdown||{})[best]-(p.score_breakdown||{})[best]) ? c : best, wk[0]);
   const rejected=sorted.filter(p=>p!==win).map(p=>p.feasible
-    ? {k:p.plan_id,v:`分數 ${fmt(p.score,3)}`,tail:`落後 ${fmt(win.score-p.score,3)}，主要劣勢在${CRIT_LABEL[worstOf(p)]||worstOf(p)}`}
-    : {k:p.plan_id,v:"不可行",tail:p.infeasible_reason,bad:true});
+    ? {k:planName(p.plan_id),v:`分數 ${fmt(p.score,3)}`,tail:`落後 ${fmt(win.score-p.score,3)}，主要劣勢在${CRIT_LABEL[worstOf(p)]||worstOf(p)}`}
+    : {k:planName(p.plan_id),v:"不可行",tail:humanize(p.infeasible_reason),bad:true});
 
   return {
-    headline:win?`推薦 ${win.plan_id}｜${win.title}`:"沒有可行方案",
+    headline:win?`推薦${planName(win.plan_id)}｜${humanize(win.title)}`:"沒有可行方案",
     slots:[
       {label:"看到什麼（模擬器乾跑結果）",rows:seen,
        note:"每個方案都在「診斷信念模型」上乾跑 30 分鐘，數字是跑出來的，不是估的。"},
       {label:"怎麼排名",eqs,rows:[{k:"硬限制",v:"Safety BLOCK 直接出局",tail:"不進入加權比較"}]},
       {label:"為什麼不是其他方案",rows:rejected},
       {label:"結論",rows:win?[
-        {k:"推薦方案",v:`${win.plan_id}｜${win.title}`,win:true},
+        {k:"推薦方案",v:`${planName(win.plan_id)}｜${humanize(win.title)}`,win:true},
         {k:"加權總分",v:fmt(win.score,3)},
-        {k:"動作",v:(win.actions||[]).map(a=>a.kind.toUpperCase()).join(" → ")},
+        {k:"動作",v:(win.actions||[]).map(a=>actionName(a.kind)).join(" → ")},
       ]:[{k:"結果",v:"所有方案都被擋下，需人工重新規劃",bad:true}]},
     ],
     note:"六個準則用固定尺規換算成 0~1（不是 min-max 正規化），所以分數在不同情境之間可以直接比較。排名由 optimizer.py 計算，LLM 沒有參與。",
@@ -1342,33 +1909,34 @@ function reasonSafety(s){
 
   const seen=[];
   if(cam.camera_id){
-    seen.push({k:"攝影機",v:`${cam.camera_id} / ${cam.zone_id}`,tail:`信心 ${fmt(cam.confidence,2)}`});
+    seen.push({k:"攝影機",v:`工安監視器 ${cam.camera_id}`,tail:`危險區 ${cam.zone_id}｜信心 ${fmt(cam.confidence,2)}`});
     seen.push({k:"現場人員",v:`${cam.person_count} 人`,tail:cam.person_in_hazard_zone?"位於危險區內":"不在危險區",bad:!!cam.person_in_hazard_zone});
     seen.push({k:"防護具",v:cam.ppe_compliant?"合規":"未合規",bad:cam.ppe_compliant===false});
     if(cam.smoke_detected) seen.push({k:"煙霧",v:"偵測到",bad:true});
     if(cam.caption) seen.push({k:"影像描述",v:cam.caption});
   }
-  if(machine.state) seen.push({k:"機台狀態",v:machine.state.toUpperCase(),tail:`健康度 ${fmt(machine.health,0)}`});
+  if(machine.state) seen.push({k:"機台狀態",v:`${machineName((s.event||{}).machine_id)}：${machine.state.toUpperCase()}`,tail:`健康度 ${fmt(machine.health,0)}`});
 
+  // 規則描述當左欄（要看懂的是「為什麼擋下來」），編號退到補充語的最前面。
   const findings=[];
   reviews.forEach(r=>(r.findings||[]).forEach(f=>findings.push({
-    k:f.rule_id, v:`${r.plan_id} → ${VERDICT_LABEL[f.verdict]||f.verdict}`,
-    tail:f.message, bad:f.verdict==="BLOCK"})));
+    k:ruleName(f.rule_id), v:`${planName(r.plan_id)} → ${VERDICT_LABEL[f.verdict]||f.verdict}`,
+    tail:`${f.rule_id}｜${humanize(f.message)}`, bad:f.verdict==="BLOCK"})));
 
   const blocked=reviews.filter(r=>r.verdict==="BLOCK");
   const needAppr=reviews.filter(r=>r.verdict==="APPROVAL_REQUIRED");
   const verdictRows=[
     {k:"審查方案",v:`${reviews.length} 個`},
-    {k:"阻擋",v:`${blocked.length} 個`,tail:blocked.map(r=>r.plan_id).join(" · "),bad:blocked.length>0},
-    {k:"需核准",v:`${needAppr.length} 個`,tail:needAppr.map(r=>r.plan_id).join(" · ")},
+    {k:"阻擋",v:`${blocked.length} 個`,tail:blocked.map(r=>planName(r.plan_id)).join(" · "),bad:blocked.length>0},
+    {k:"需核准",v:`${needAppr.length} 個`,tail:needAppr.map(r=>planName(r.plan_id)).join(" · ")},
   ];
   if(pending){
-    verdictRows.push({k:"等待核准",v:pending.plan.plan_id,tail:pending.plan.title,bad:true});
-    verdictRows.push({k:"風險等級",v:(pending.policy.risk||"").toUpperCase(),tail:(pending.policy.reasons||[]).join("；"),bad:true});
+    verdictRows.push({k:"等待核准",v:planName(pending.plan.plan_id),tail:humanize(pending.plan.title),bad:true});
+    verdictRows.push({k:"風險等級",v:(pending.policy.risk||"").toUpperCase(),tail:humanize((pending.policy.reasons||[]).join("；")),bad:true});
   }
 
   return {
-    headline:pending?`${pending.plan.plan_id} 需要人工核准`:`${blocked.length} 個方案被安全規則擋下`,
+    headline:pending?`${planName(pending.plan.plan_id)}需要人工核准`:`${blocked.length} 個方案被安全規則擋下`,
     slots:[
       // 影像與機台狀態是「現在」的畫面；裁決當下的事實留在下面每條 finding 的訊息裡。
       {label:"看到什麼（現場即時）",rows:seen},
@@ -1385,14 +1953,14 @@ function reasonVerify(s){
   const a=s.attempt; if(!a) return null;
   const v=a.verification, loop=s.loop;
 
-  const seen=[{k:"執行方案",v:`${a.plan.plan_id}｜${a.plan.title}`}];
-  // 底線換成空白，否則 CREATE_WORK_ORDER 這種長 token 會被硬斷成「CREATE_WORK / _ORDER」。
+  const seen=[{k:"執行方案",v:`${planName(a.plan.plan_id)}｜${humanize(a.plan.title)}`}];
+  // 動作代碼（transfer_order）與動作對象（M-B）都翻成白話；對象的代號留在補充語裡。
   (a.plan.actions||[]).forEach(x=>
-    seen.push({k:x.kind.toUpperCase().replace(/_/g," "),v:x.target,tail:x.rationale}));
-  seen.push({k:"政策風險",v:(a.policy.risk||"").toUpperCase(),tail:(a.policy.reasons||[]).join("；")});
+    seen.push({k:actionName(x.kind),v:entityName(x.target),tail:humanize(x.rationale)}));
+  seen.push({k:"政策風險",v:(a.policy.risk||"").toUpperCase(),tail:humanize((a.policy.reasons||[]).join("；"))});
   seen.push({k:"核准",v:`${a.approval.approved?"✓":"✕"} ${a.approval.approver}`,tail:a.approval.reason,bad:!a.approval.approved});
-  if(!a.executed) seen.push({k:"未執行",v:a.blocked_reason,bad:true});
-  (a.execution_effects||[]).forEach((e,i)=>seen.push({k:i?"":"執行結果",v:e.message||""}));
+  if(!a.executed) seen.push({k:"未執行",v:humanize(a.blocked_reason),bad:true});
+  (a.execution_effects||[]).forEach((e,i)=>seen.push({k:i?"":"執行結果",v:humanize(e.message)||""}));
 
   // 判定式是「實際值 comparator 預測值」，寫成「預測 X >= 實際 Y」會把方向講反。
   const checks=(v?v.checks:[]).map(c=>({
@@ -1409,7 +1977,7 @@ function reasonVerify(s){
         v:`${fmt(v.before[k],1)} → ${fmt(v.after[k],1)}`});
     });
   }
-  if(loop.escalated) verdictRows.push({k:"升級",v:loop.escalation_reason,bad:true});
+  if(loop.escalated) verdictRows.push({k:"升級",v:humanize(loop.escalation_reason),bad:true});
 
   return {
     headline:v?(v.passed?"處置已通過量測驗證":"驗證未通過，已停止自動處置"):"尚未取得驗證結果",
@@ -1448,35 +2016,31 @@ function renderStepReasoning(){
   const src=state?stepSources():null;
   const built={};
   DEMO_ORDER.forEach(k=>{ built[k]=src?STEP_META[k].build(src):null; });
+  loopReasoning=built;
 
-  document.querySelectorAll("[data-demo-step]").forEach(btn=>{
-    const key=btn.dataset.demoStep, open=expandedStep===key&&!!built[key];
-    btn.disabled=!built[key];
-    btn.setAttribute("aria-expanded",String(open));
-    btn.querySelector(".ds-open").textContent=!built[key]?"":(open?"▲ 收合":"▼ 推理");
+  LOOP_NODES.forEach(n=>{
+    const g=lmEls?lmEls.nodes[n.id]:null; if(!g) return;
+    g.setAttribute("aria-expanded",String(expandedStep===n.stage&&selectedNode===n.id));
   });
+  if(expandedStep&&!built[expandedStep]){ expandedStep=null; selectedNode=null; }
+  paintLoopMap();
 
   const host=$("stepWhy"), data=expandedStep?built[expandedStep]:null;
   if(!data){ host.hidden=true; host.innerHTML=""; return; }
   const meta=STEP_META[expandedStep];
+  /* 面板標頭掛的是「剛剛被點的那一格」的身分：圖示與名字都跟聚光燈列一致，
+     所以點 06 會看到實心人形＋現場主管，不會變成 Safety Agent。 */
+  const node=NODE_BY_ID[selectedNode]||NODE_BY_ID[STAGE_PRIMARY[expandedStep]];
+  const who=(node&&node.agent)||meta.agent, icon=(node&&node.icon)||STAGE_ICON[expandedStep];
   const slots=data.slots.filter(sl=>(sl.rows||[]).length||(sl.eqs||[]).length);
   host.hidden=false;
   host.innerHTML=`<div class="dw-h">
-      <span><span class="agent">${esc(meta.agent)}</span><b>${esc(data.headline)}</b></span>
+      <span><span class="agent">${agGlyph(icon)}${esc(who)}</span><b>${esc(data.headline)}</b></span>
       <button type="button" class="ghost" id="stepWhyClose">✕ 收合</button></div>
     <div class="dw-grid">${slots.map(dwSlot).join("")}</div>
     ${data.note?`<div class="dw-foot">${esc(data.note)}</div>`:""}`;
-  $("stepWhyClose").onclick=()=>{ expandedStep=null; renderStepReasoning(); };
+  $("stepWhyClose").onclick=()=>{ expandedStep=null; selectedNode=null; renderStepReasoning(); };
 }
-
-document.querySelectorAll("[data-demo-step]").forEach(btn=>{
-  btn.onclick=()=>{
-    expandedStep = expandedStep===btn.dataset.demoStep ? null : btn.dataset.demoStep;
-    renderStepReasoning();
-    if(expandedStep) $("stepWhy").scrollIntoView({block:"nearest",
-      behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
-  };
-});
 
 function incidentMetrics(st){
   const event=((st.live||{}).detect||{}).event;
@@ -1507,7 +2071,8 @@ function renderDemoResult(){
   $("resDelayAfter").textContent=`${fmt(state.kpi.max_order_delay_min,0)} MIN`;
   $("resDelayDelta").textContent=state.kpi.max_order_delay_min<=demoIncident.delay?"交期風險已降低":"持續監控交期";
   $("resConfidenceAfter").textContent=top.confidence?`${Math.round(top.confidence*100)}%`:"RULE BASED";
-  $("resPlan").textContent=last.plan?`${last.plan.plan_id} · ${last.plan.title}`:(loop.recommended_plan_id||"安全升級");
+  $("resPlan").textContent=last.plan?`${planName(last.plan.plan_id)} · ${humanize(last.plan.title)}`
+    :(loop.recommended_plan_id?planName(loop.recommended_plan_id):"安全升級");
   $("demoResult").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"center"});
 }
 
@@ -1532,7 +2097,7 @@ async function startGuidedDemo(scenarioId){
       await pause(180); state=await getJSON("/api/state"); render(); syncDemoFlowFromState();
       await presentDemoThrough(DEMO_ORDER.indexOf(currentDemoStep(state)));
       if(state.pending_approval&&!demoAutoApproved){
-        demoAutoApproved=true; setDemoProgress("安全規則要求核准，Demo 模式代行主管確認");
+        demoAutoApproved=true; setDemoProgress("安全規則要求核准，Demo 模式代行主管確認","human");
         setDemoStep("safety","live","方案需人工核准，確認後才可控制設備"); presentDemoStep("safety"); await pause(DEMO_STEP_HOLD_MS);
         await getJSON("/api/session/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
           plan_id:state.pending_approval.plan.plan_id,approved:true,approver:"guided-demo",reason:"一鍵 Demo 模式代行主管核准"})});
@@ -1543,7 +2108,7 @@ async function startGuidedDemo(scenarioId){
     state=await getJSON("/api/state"); render(); syncDemoFlowFromState();
     await presentDemoThrough(DEMO_ORDER.length-1); syncDemoFlowFromState();
     $("demoSteps").closest(".demo-flow").classList.remove("presenting");
-    $("spotHold").textContent="SEQUENCE COMPLETE"; $("spotValue").textContent=document.querySelector('[data-demo-step="verify"] .ds-value').textContent;
+    showSpotlight("verify",{hold:"SEQUENCE COMPLETE"});
     renderDemoResult();
     setDemoProgress(state.last_loop?.attempts?.some(a=>a.verification?.passed)?"Demo 完成：修復結果已驗證":"Demo 完成：已安全升級處理");
   }catch(err){
@@ -1559,6 +2124,14 @@ async function startGuidedDemo(scenarioId){
    看起來像前端壞了。載入中與失敗都要講清楚，並且能重試。 */
 async function boot(){
   renderStages();
+  buildLoopMap();
+  /* 版面斷點換了就換一套座標（寬版是環、窄版直排＋左側回饋軌）。
+     重建之後把目前狀態重畫回去，不會把跑到一半的閉環洗掉。 */
+  showSpotlight("detect",{hold:"點節點看推理"});
+  const lmNarrow=matchMedia("(max-width:760px)");
+  const onLayoutChange=()=>{ buildLoopMap(); renderStepReasoning(); };
+  if(lmNarrow.addEventListener) lmNarrow.addEventListener("change",onLayoutChange);
+  else if(lmNarrow.addListener) lmNarrow.addListener(onLayoutChange);
   showBootState("loading");
   try{
     const cfg = await getJSON("/api/config");
@@ -1567,10 +2140,14 @@ async function boot(){
     // 平面圖的版面靠拓撲推導，只取一次。取不到就把整塊藏起來，
     // 其餘面板照常運作——平面圖是輔助視覺，不該拖垮戰情中心。
     try{
-      topoData = await getJSON("/api/topology"); buildFloor();
-      $("forecastMachine").innerHTML=(topoData.machines||[]).map(m=>`<option value="${esc(m.machine_id)}">${esc(m.machine_id)} / ${esc(m.name)}</option>`).join("");
+      topoData = await getJSON("/api/topology");
+      indexNames(topoData);   // 一定要在 buildFloor() 之前：平面圖的標籤吃這張表
+      buildFloor();
+      $("forecastMachine").innerHTML=(topoData.machines||[]).map(m=>
+        `<option value="${esc(m.machine_id)}">${esc(m.short_name||m.name)}｜${esc(m.machine_id)}</option>`).join("");
     }
-    catch(err){ $("floorSec").hidden = true; }
+    // 拓撲拿不到時平面圖整塊藏起來；遙測面板照常跑，但標題不能卡在 LOADING。
+    catch(err){ $("floorSec").hidden = true; $("mMeta").textContent = "產線遙測"; }
 
     try{
       const capability=await getJSON("/api/prediction/models");
@@ -1588,6 +2165,9 @@ async function boot(){
       (pol.rules||[]).forEach(r=>{ safetyRules[r.rule_id]=r; });
     }catch(err){ /* 拿不到就退回只顯示編號，不影響其他面板 */ }
 
+    // 部署分層是說明性面板，取不到不該擋住戰情中心啟動。
+    await loadDeployment();
+
     if(window.CamView) CamView.init($("camview"));
 
     const sc = await getJSON("/api/scenarios");
@@ -1602,6 +2182,10 @@ async function boot(){
     sel.onchange();
 
     await refresh();   // render() 會覆寫 machines / orders，載入指示自然消失
+
+    // 名詞對照要等拓撲、安全規則與第一份 state 都到齊才畫，否則會少半張表。
+    renderGlossary();
+
     try{ await hydrateAudit(); }
     catch(err){ flashError(err); }
     listen();
@@ -1664,8 +2248,10 @@ function showBootState(kind, err){
 }
 
 function renderStages(){
+  /* 稽核用的八階段條也掛同一組圖示：和上面的閉環流程圖是同一件事的兩種視角。 */
   $("stages").innerHTML = STAGES.map(([k,en,zh],i)=>
     `<div class="stg ${stageState[k]||''}"><span class="i">${pad(i+1,2)}</span>
+      ${agGlyph(STAGE_ICON[k])}
       <span class="e">${en}</span><span class="z">${zh}</span></div>`).join("");
 }
 
@@ -1679,6 +2265,12 @@ function render(){
   $("tTick").textContent  = pad(s.tick,4);
   $("tRun").textContent   = state.run_id.replace("fg-","").toUpperCase();
   $("tScen").textContent  = (state.scenario_id||"NONE").toUpperCase();
+  // 敘述模式與鏈路狀態都會在 Demo 中途被切換，所以跟著每次 render 更新，
+  // 不能只在 boot() 讀一次——頁首寫著 OPENAI 但其實跑在邊緣是最糟的畫面。
+  if(state.settings){
+    $("tLlm").textContent  = String(state.settings.llm_mode||NODATA).toUpperCase();
+    $("tLink").textContent = String(state.settings.cloud_link||NODATA).toUpperCase();
+  }
 
   setKpi("kHealth", fmt(s.factory_health,1), s.factory_health<60, null);
   $("kHealthS").textContent = `${Object.keys(s.machines).length} UNITS MONITORED`;
@@ -1771,23 +2363,26 @@ function renderAgentSignal(p){
   let code=p.mode==="critical"?"CRITICAL INCIDENT":p.mode==="warning"?"ANOMALY CONFIRMED":p.mode==="recovering"?"RECOVERY ACTIVE":p.mode==="verified"?"RECOVERY VERIFIED":p.mode==="observing"?"AGENT OBSERVING":"SYSTEM NOMINAL";
   let headline="Agent 持續監看遙測與工安訊號", detail="尚未偵測到需要介入的異常。";
   if(p.event){
-    headline=`${p.machineId||"產線"}：${p.top.label||kindTitle[p.kind]||"異常待診斷"}`;
+    headline=`${p.machineId?mFull(p.machineId):"產線"}：${p.top.label||kindTitle[p.kind]||"異常待診斷"}`;
     const evidence=(p.top.evidence||[]).map(x=>x.reference).filter(Boolean);
     detail=p.diagnosis
       ? `Agent 以 ${evidence.slice(0,2).join("、")||"遙測與維修知識"} 等 ${evidence.length||"多"} 項證據交叉確認，處置仍受規則引擎與人工核准約束。`
       : `Agent 已鎖定 ${(p.event.triggers||[]).join("、")||"異常訊號"}，正在建立可稽核的處置建議。`;
   }else if(p.severity!=="info"){
-    headline=`${p.machineId||"產線"}：${kindTitle[p.kind]||"即時訊號越界"}`;
+    headline=`${p.machineId?mFull(p.machineId):"產線"}：${kindTitle[p.kind]||"即時訊號越界"}`;
     detail="Digital Twin 已觀測到實際訊號越界，Agent 正在確認根因。";
   }else if(p.mode==="observing"){
     headline="Agent 閉環分析進行中"; detail="正在彙整遙測、訂單影響與工安限制。";
   }
   if(p.mode==="recovering") detail="處置已送入 Digital Twin，動畫將依復原階段收斂，等待量測驗證。";
-  if(p.mode==="verified"){ headline=`${p.machineId||"產線"}：處置通過驗證`; detail="量測結果已符合驗證條件，告警動態已降為穩定狀態。"; }
-  if(p.escalated){ headline=`${p.machineId||"產線"}：自動處置未通過`; detail="Agent 已停止自動閉環並升級人工處理，未執行未核准動作。"; }
+  if(p.mode==="verified"){ headline=`${p.machineId?mFull(p.machineId):"產線"}：處置通過驗證`; detail="量測結果已符合驗證條件，告警動態已降為穩定狀態。"; }
+  if(p.escalated){ headline=`${p.machineId?mFull(p.machineId):"產線"}：自動處置未通過`; detail="Agent 已停止自動閉環並升級人工處理，未執行未核准動作。"; }
   el.dataset.mode=p.mode; el.dataset.kind=p.kind;
   el.style.setProperty("--agent-confidence",String(p.confidence));
   el.style.setProperty("--incident-speed",`${p.speed.toFixed(2)}s`);
+  /* 判讀列左側掛「現在是誰在做」的圖示：等核准時會變成實心人形，
+     所以評審不必讀 AWAITING APPROVAL 也知道系統停在人這一關。 */
+  $("agentGlyph").innerHTML=`<use href="#agi-${STAGE_ICON[p.stage]||"monitor"}"/>`;
   $("agentCode").textContent=code; $("agentTitle").textContent=kindTitle[p.kind]||"設備異常";
   $("agentHeadline").textContent=headline; $("agentDetail").textContent=detail;
   $("agentPhase").textContent=phase[p.stage]||p.stage.toUpperCase();
@@ -1811,6 +2406,13 @@ function setKpi(id,val,alarm,unit){
    少幾十行程式，但輸送帶的虛線動畫每 0.3 秒就會被重置一次，看起來會抖。 */
 const F = {pad:16, nodeW:76, mw:186, gap:46, y0:36, y1:242, fh:272, gy:16, maxH:120, aisleY:248};
 let topoData=null, floorGeom=null, floorEls=null;
+
+/* 白話名稱一次灌進 NAMES，之後全站的渲染點都只問這張表。 */
+function indexNames(topo){
+  (topo.machines||[]).forEach(m=>{ NAMES.machine[m.machine_id]=m.short_name||m.name; });
+  (topo.products||[]).forEach(p=>{ NAMES.product[p.product_id]=p.short_name||p.name; });
+  (topo.lines   ||[]).forEach(l=>{ NAMES.line[l.line_id]      =l.short_name||l.name;  });
+}
 
 function planFloor(stages){
   const boxes={}, avail=F.y1-F.y0;
@@ -1839,17 +2441,19 @@ function machineGlyph(kind){
          <circle class="hub" cx="0" cy="0" r="3"/></g>`;
 }
 
+/* 標題列放白話名稱，代號降到機身旁的小字。SVG 畫得出中文，所以示意圖不受
+   像素視圖那條「只有 ASCII 字模」的限制；tooltip 兩者都留著。 */
 function fmBox(mid, b, kind, name){
   const h=b.h, cy=h/2;
   return `<g class="fm" data-m="${esc(mid)}" transform="translate(${b.x},${b.y})">
-    <title>${esc(mid)}　${esc(name)}</title>
+    <title>${esc(name)}　${esc(mid)}</title>
     <rect class="hz" x="-9" y="-9" width="${b.w+18}" height="${h+18}"/>
     <rect class="body" x="0.5" y="0.5" width="${b.w-1}" height="${h-1}"/>
     <rect class="hd" x="1" y="1" width="${b.w-2}" height="18"/>
-    <text class="id" x="7" y="14">${esc(mid)}</text>
+    <text class="id" x="7" y="14">${esc(name)}</text>
     <text class="st" x="${b.w-7}" y="14">--</text>
     <g transform="translate(38,${cy})">${machineGlyph(kind)}</g>
-    <text class="nm" x="74" y="${cy-13}">${esc(name)}</text>
+    <text class="nm" x="74" y="${cy-13}">${esc(mid)}</text>
     <text class="rate" x="74" y="${cy+6}"><tspan class="n">--</tspan><tspan class="u" dx="4">U/HR</tspan></text>
     <g class="wip" transform="translate(74,${cy+21})"></g>
     <rect class="hatch" x="1" y="19" width="${b.w-2}" height="${h-38}"/>
@@ -1871,7 +2475,7 @@ function buildFloor(){
   (topoData.machines||[]).forEach(m=>{
     kind[m.machine_id]=m.kind;
     rated[m.machine_id]=m.rated_rate_uph||1;
-    nm[m.machine_id]=m.name.split("｜")[1]||m.name;
+    nm[m.machine_id]=machineName(m.machine_id);
   });
 
   const g=planFloor(line.stages);
@@ -1902,7 +2506,7 @@ function buildFloor(){
       <pattern id="fpHaz" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
         <rect width="4.5" height="9" fill="#0B756E"/></pattern>
     </defs>
-    <text class="fp-t" x="${F.pad}" y="17">${esc(line.line_id)} · ${esc(line.name.split("｜")[1]||line.name)}</text>
+    <text class="fp-t" x="${F.pad}" y="17">${esc(lineName(line.line_id))} · ${esc(line.line_id)}</text>
     <text class="fp-t2" x="${g.fw-F.pad}" y="17" text-anchor="end">TOP VIEW · SYNTHETIC LAYOUT</text>
     <rect class="fp-aisle" x="${F.pad+0.5}" y="${F.aisleY+0.5}" width="${g.fw-F.pad*2-1}" height="17"/>
     <text class="fp-t2" x="${F.pad+7}" y="${F.aisleY+12}">AISLE / 人員走道</text>`];
@@ -1922,8 +2526,8 @@ function buildFloor(){
     <text class="t2" x="${x+F.nodeW/2}" y="${nodeY+57}">${lines[1]}</text>
     <text class="t3" x="${x+F.nodeW/2}" y="${nodeY+74}">${lines[2]}</text>
     <text class="t3 t4" x="${x+F.nodeW/2}" y="${nodeY+91}">${lines[3]||""}</text></g>`;
-  svg.push(node(F.pad,"fpIn",["MATERIAL","--","OPEN","ORDERS"]));
-  svg.push(node(outX,"fpOut",["OUTPUT","--","U/HR","--"]));
+  svg.push(node(F.pad,"fpIn",["進料","--","待產","訂單"]));
+  svg.push(node(outX,"fpOut",["出貨","--","U/HR","--"]));
 
   Object.keys(g.boxes).forEach(mid=>
     svg.push(fmBox(mid, g.boxes[mid], kind[mid]||"machining", nm[mid]||mid)));
@@ -1960,6 +2564,13 @@ function buildFloor(){
 
   g.rated=rated; g.kind=kind; g.cy=cy; floorGeom=g;
   sec.hidden=false;
+
+  /* 像素視圖畫不出中文（3×5 ASCII 字模，而且刻意不載字型），所以圖上維持
+     M-A 這種代號，白話對照用 HTML 補在 canvas 正下方 —— 圖歸圖、字歸字。 */
+  $("arcadeNames").innerHTML = line.stages.flat().map(mid=>
+    `<span><b>${esc(mid)}</b> = ${esc(machineName(mid))}</span>`).join("");
+  $("mMeta").textContent =
+    `${lineName(line.line_id)} ${line.line_id} · ${line.stages.flat().length} 台設備`;
 
   // 像素視圖跟示意圖吃同一份拓撲。初始化失敗（舊瀏覽器沒有 canvas）就
   // 退回示意圖，不讓整塊面板消失。
@@ -2102,8 +2713,8 @@ function renderMachines(s){
     const cols = SIGNALS.filter(n=>m.readings[n]).length;
     return `<div class="mach${m.online?"":" offline"}" id="mach-${esc(m.machine_id)}">
       <div class="mach-h">
-        <span class="row gap8"><span class="id">${esc(m.machine_id)}</span>
-          <span class="nm cjk">${esc(m.name.split("｜")[1]||m.name)}</span></span>
+        <span class="row gap8"><span class="id">${esc(machineName(m.machine_id,m.short_name))}</span>
+          <span class="nm">${esc(m.machine_id)}</span></span>
         <span class="row gap6">
           <span class="rate">${fmt(m.production_rate_uph,0)} U/HR</span>
           <span class="tag ${stCls}">${esc(st)}</span></span>
@@ -2132,7 +2743,7 @@ function renderMachineLog(rows){
     const band=row.worst_band||"normal";
     const cls=band==="critical"?"tl-critical":band==="warning"?"tl-warning":"";
     const time=(row.timestamp||"").replace("T"," ").replace("+00:00","");
-    return `<div class="tl-row ${cls}"><span class="tl-time">${esc(time.slice(11,19)||"--:--:--")}</span><span class="tl-tick">T${pad(row.tick,3)}</span><span class="tl-machine">${esc(row.machine_id)}</span><span class="tl-msg">${esc(row.message||"heartbeat")} · ${esc(band.toUpperCase())} · H${fmt(row.health,0)}</span></div>`;
+    return `<div class="tl-row ${cls}"><span class="tl-time">${esc(time.slice(11,19)||"--:--:--")}</span><span class="tl-tick">T${pad(row.tick,3)}</span><span class="tl-machine">${esc(machineName(row.machine_id))}<span class="code">${esc(row.machine_id)}</span></span><span class="tl-msg">${esc(row.message||"heartbeat")} · ${esc(band.toUpperCase())} · H${fmt(row.health,0)}</span></div>`;
   }).join("") : '<span class="empty">NO MACHINE LOGS</span>';
   $("machineLogMeta").textContent=`${rows.length} TELEMETRY RECORDS`;
 }
@@ -2143,7 +2754,7 @@ function renderDemoHardware(st){
   const machines=Object.values(st.snapshot.machines||{});
   $("demoHardwareMeta").textContent=`${machines.length} UNITS · T${pad(st.snapshot.tick,3)}`;
   rowsEl.innerHTML=machines.map(m=>{
-    const label=(m.name||m.machine_id).split("｜")[1]||m.name||m.machine_id;
+    const label=machineName(m.machine_id,m.short_name);
     const band=m.worst_band||"normal";
     const status=!m.online?"OFFLINE":band.toUpperCase();
     const statusClass=!m.online?"offline":band;
@@ -2151,14 +2762,14 @@ function renderDemoHardware(st){
       const r=m.readings[n], meta=SIG_META[n];
       return `${meta.n} ${fmt(r.value,meta.d)}${meta.u}`;
     }).join(" · ");
-    return `<div class="demo-hardware-row"><div class="dh-top"><span class="dh-name">${esc(m.machine_id)} / ${esc(label)}</span><span class="dh-state ${statusClass}">${esc(status)}</span></div><div class="dh-health"><span class="micro">HEALTH</span><span class="bar"><i class="${statusClass}" style="width:${Math.max(2,Math.min(100,m.health||0))}%"></i></span><span class="num">${fmt(m.health,0)}</span></div><div class="dh-signals">${esc(signals||"NO SIGNALS")} · ${fmt(m.production_rate_uph,0)} U/HR</div></div>`;
+    return `<div class="demo-hardware-row"><div class="dh-top"><span class="dh-name">${esc(label)}<span class="code">${esc(m.machine_id)}</span></span><span class="dh-state ${statusClass}">${esc(status)}</span></div><div class="dh-health"><span class="micro">HEALTH</span><span class="bar"><i class="${statusClass}" style="width:${Math.max(2,Math.min(100,m.health||0))}%"></i></span><span class="num">${fmt(m.health,0)}</span></div><div class="dh-signals">${esc(signals||"NO SIGNALS")} · ${fmt(m.production_rate_uph,0)} U/HR</div></div>`;
   }).join("");
   const logs=(st.machine_logs||[]).slice(-8).reverse();
   logEl.innerHTML=`<div class="dh-log-head"><span class="micro">Latest machine log</span><span class="micro">${logs.length} ROWS</span></div>`+
     (logs.length?logs.map(row=>{
       const band=row.worst_band||"normal";
       const time=(row.timestamp||"").slice(11,19)||"--:--:--";
-      return `<div class="dh-log-row ${band}"><span class="time">${esc(time)}</span><span class="tick">T${pad(row.tick,3)}</span><span class="msg">${esc(row.machine_id)} · ${esc(row.message||"heartbeat")}</span></div>`;
+      return `<div class="dh-log-row ${band}"><span class="time">${esc(time)}</span><span class="tick">T${pad(row.tick,3)}</span><span class="msg">${esc(mFull(row.machine_id))} · ${esc(row.message||"heartbeat")}</span></div>`;
     }).join(""):'<span class="empty">NO TELEMETRY</span>');
 }
 
@@ -2184,44 +2795,206 @@ function renderOrders(s){
   const all=Object.values(s.orders);
   const rows=[...all.filter(o=>o.assigned_machine||o.produced>0),
               ...all.filter(o=>!o.assigned_machine&&!o.produced).slice(0,3)].slice(0,7);
+  // 「ORD-A001 / P-100 / M-A」三個代號連成一列，對第一次看的人等於沒有資訊。
+  // 改成「訂單 A001｜精密軸承座｜主要加工機」，代號降成同格裡的小字。
   $("orders").innerHTML = `<div class="tbl"><table><caption class="vh">訂單進度</caption><thead><tr>
-      <th>Order</th><th>Prod</th><th>Unit</th><th class="r">Progress</th><th class="r">Due</th></tr></thead><tbody>` +
+      <th>訂單</th><th>產品</th><th>生產機台</th><th class="r">進度</th><th class="r">交期</th></tr></thead><tbody>` +
     rows.map(o=>{
       const pct=Math.round(100*o.produced/o.quantity);
       const late=o.due_in_min<0;
-      return `<tr><td>${esc(o.order_id)}${o.priority===1?' <span class="tag alarm">P1</span>':''}</td>
-        <td class="dim">${esc(o.product_id)}</td><td>${esc(o.assigned_machine)||`<span class="dimmer">${NODATA}</span>`}</td>
+      return `<tr><td class="cjk">${esc(orderName(o.order_id))}${o.priority===1?' <span class="tag alarm">P1</span>':''}</td>
+        <td class="cjk">${esc(productName(o.product_id))}<span class="code">${esc(o.product_id)}</span></td>
+        <td class="cjk">${o.assigned_machine?`${esc(machineName(o.assigned_machine))}<span class="code">${esc(o.assigned_machine)}</span>`:`<span class="dimmer">未指派</span>`}</td>
         <td class="r">${pct}% <span class="dim">${fmt(o.produced,0)}/${esc(o.quantity)}</span></td>
-        <td class="r" style="${late?'color:var(--red)':''}">${fmt(o.due_in_min,0)}M</td></tr>`;
+        <td class="r" style="${late?'color:var(--red)':''}">${fmt(o.due_in_min,0)} 分</td></tr>`;
     }).join("") + `</tbody></table></div>`;
+}
+
+/* ================= 部署：Edge / Cloud =================
+   這一塊回答的是「這套系統實際上跑在哪裡」。它不是架構示意圖——
+   表格裡的每一列都對應 repo 裡真的存在的模組，延遲數字裡 Safety 與 Policy
+   那兩段是後端在回應這個請求時當場量的，不是預錄值。 */
+let deployData=null;
+
+const tierTag = tier => tier==="edge"
+  ? '<span class="tag on">EDGE</span>'
+  : '<span class="tag">CLOUD</span>';
+
+async function loadDeployment(){
+  try{ deployData = await getJSON("/api/deployment"); }
+  catch(err){
+    $("deployMeta").textContent="UNAVAILABLE";
+    $("deployLink").innerHTML=`<div class="errbox"><div class="t">Deployment API unreachable</div>
+      <div class="d">拿不到部署分層資料。<span class="dim">${esc(err&&err.message)}</span></div></div>`;
+    return;
+  }
+  renderDeployment();
+}
+
+function renderDeployment(){
+  if(!deployData) return;
+  const d=deployData, link=d.link, tiers=d.tiers, lat=d.latency_budget, bw=d.bandwidth_budget;
+
+  /* --- 鏈路狀態 + 斷網開關 --- */
+  const up=link.up;
+  $("deployMeta").textContent = `${tiers.summary.edge_count} EDGE / ${tiers.summary.cloud_count} CLOUD`;
+  $("deployLink").innerHTML=`
+    <div class="row between gap8 wrap">
+      <span class="row gap8 wrap">
+        <span class="micro">CLOUD LINK</span>
+        <span class="tag ${up?"on":"solid"}">${up?"UP":"DOWN"}</span>
+        <span class="dim">${esc(link.mode.toUpperCase())}</span>
+      </span>
+      <button type="button" class="${up?"":"primary"}" id="btnCloudLink">
+        ${up?"◆ SIMULATE WAN OUTAGE":"↺ RESTORE CLOUD LINK"}</button>
+    </div>
+    <div class="narr mt10">${esc(link.note)}</div>
+    <div class="narr mt10">${esc(tiers.invariant)}</div>
+    <div class="row wrap gap4 mt10">
+      <span class="tag ${tiers.summary.critical_path_is_edge_only?"on":"alarm"}">
+        CRITICAL PATH ${tiers.summary.critical_path_count} / ALL EDGE ${tiers.summary.critical_path_is_edge_only?"YES":"NO"}</span>
+      <span class="tag">CONTROL LOOP IMPACT ${esc((d.degradation.control_loop_impact||"").toUpperCase())}</span>
+      <span class="tag">${up?"NO DEGRADATION":`DEGRADED ${d.degradation.degraded_components.length}`}</span>
+    </div>`;
+  $("btnCloudLink").onclick = () => toggleCloudLink(!up);
+
+  /* --- 分層對照表 --- */
+  $("deployTierMeta").textContent = up ? "ALL NOMINAL" : "CLOUD TIER DEGRADED";
+  $("deployTiers").innerHTML=`<div class="tbl"><table>
+    <caption class="vh">元件的 Edge / Cloud 分層與斷網行為</caption>
+    <thead><tr><th>Component</th><th>Tier</th><th class="r">關鍵路徑</th>
+      <th class="r">延遲預算</th><th>斷網時的行為</th></tr></thead><tbody>` +
+    tiers.components.map(c=>`<tr class="${(!up&&c.tier==="cloud")?"void":""}">
+      <td>${esc(c.name)}<div class="dimmer" style="font-size:var(--t-micro)">${esc(c.module)}</div></td>
+      <td>${tierTag(c.tier)}</td>
+      <td class="r">${c.critical_path?"YES":`<span class="dimmer">${NODATA}</span>`}</td>
+      <td class="r">${c.latency_budget_ms===null?`<span class="dimmer">${NODATA}</span>`:fmt(c.latency_budget_ms,0)+" MS"}</td>
+      <td class="cjk">${esc(c.offline_behavior)}</td></tr>`).join("") +
+    `</tbody></table></div>
+    <div class="sec-b"><div class="narr">分層依據：${tiers.placement_criteria.map(esc).join(" ")}</div></div>`;
+
+  /* --- 延遲預算 --- */
+  $("deployLatMeta").textContent = `${fmt(lat.total_ms,1)} / ${fmt(lat.target_ms,0)} MS BUDGET`;
+  $("deployLatency").innerHTML=`<div class="tbl"><table>
+    <caption class="vh">工安鏈路端到端延遲預算</caption>
+    <thead><tr><th>Segment</th><th>Where</th><th class="r">MS</th><th>Basis</th></tr></thead><tbody>` +
+    lat.segments.map(s=>`<tr><td>${esc(s.label)}</td><td class="dim">${esc(s.where)}</td>
+      <td class="r">${fmt(s.ms,s.ms<1?3:1)}</td><td class="dim">${esc(s.basis)}</td></tr>`).join("") +
+    `<tr class="pick"><td><b>${esc(lat.chain_name)}</b></td><td class="dim">END TO END</td>
+      <td class="r"><b>${fmt(lat.total_ms,1)}</b></td>
+      <td class="dim">餘裕 ${fmt(lat.headroom_ms,1)} MS</td></tr>
+    </tbody></table></div>
+    <div class="sec-b">
+      <div class="narr">${esc(lat.scope_note)}</div>
+      <hr class="rule">
+      <span class="micro">${esc(lat.why_not_cloud.headline)}</span>
+      <div class="narr mt6">${lat.why_not_cloud.points.map(p=>esc(p)).join("<br>")}</div>
+      <hr class="rule">
+      <span class="micro">串聯可用度</span>
+      <div class="mt6">` +
+      lat.availability.paths.map(p=>`<div class="kv"><span class="k">${esc(p.path)}</span>
+        <span class="v">${fmt(p.availability_pct,3)}% · 每月 ${fmt(p.downtime_min_per_month,1)} MIN</span></div>`).join("") +
+      `</div><div class="narr mt6">${esc(lat.availability.note)}</div>
+      <hr class="rule">
+      <div class="narr">${esc(lat.edge_compute.note)}</div>
+    </div>`;
+
+  /* --- 頻寬預算 --- */
+  $("deployBwMeta").textContent = `${fmt(bw.total_uplink_mbps,1)} MBPS UPLINK / ${bw.scale.cameras} CAM`;
+  $("deployBandwidth").innerHTML=`<div class="tbl"><table>
+    <caption class="vh">上行頻寬預算</caption>
+    <thead><tr><th>Stream</th><th class="r">Mbps</th><th>計算式</th></tr></thead><tbody>` +
+    bw.streams.map(s=>`<tr><td>${esc(s.stream)}<div class="dimmer" style="font-size:var(--t-micro)">${esc(s.detail)}</div></td>
+      <td class="r">${fmt(s.mbps,3)}</td><td class="dim">${esc(s.formula)}</td></tr>`).join("") +
+    `<tr class="pick"><td><b>${esc(bw.scale.label)}</b></td>
+      <td class="r"><b>${fmt(bw.total_uplink_mbps,2)}</b></td>
+      <td class="dim">持續上行需求</td></tr>
+    </tbody></table></div>
+    <div class="sec-b">
+      <div class="narr">${esc(bw.edge_preprocessing_gain.note)}</div>
+      <div class="narr mt6">${esc(bw.monthly_egress.note)}</div>
+      <hr class="rule">
+      <span class="micro">為什麼是 5G 專網而不是 WI-FI</span>
+      <div class="tbl mt6"><table><caption class="vh">Wi-Fi 的限制</caption><tbody>` +
+      bw.why_not_wifi.map(w=>`<tr><td style="white-space:nowrap">${esc(w.issue)}</td>
+        <td class="cjk">${esc(w.detail)}</td></tr>`).join("") +
+      `</tbody></table></div>
+      <hr class="rule">
+      <span class="micro">計算假設</span>
+      <div class="narr mt6">${bw.assumptions.map(a=>esc(a)).join("<br>")}</div>
+    </div>`;
+
+  /* --- OT 網段隔離 --- */
+  $("deployEgress").innerHTML=`<div class="tbl"><table>
+    <caption class="vh">OT 網段分區</caption>
+    <thead><tr><th>Zone</th><th>Level</th><th>承載</th><th>出廠限制</th></tr></thead><tbody>` +
+    tiers.network_zones.map(z=>`<tr><td>${esc(z.name)}<div class="dimmer" style="font-size:var(--t-micro)">${esc(z.zone_id)}</div></td>
+      <td class="dim">${esc(z.level)}</td><td class="cjk dim">${esc(z.transport)}</td>
+      <td class="cjk">${esc(z.egress)}</td></tr>`).join("") +
+    `</tbody></table></div>
+    <div class="tbl" style="border-top:1px solid var(--line)"><table>
+    <caption class="vh">資料分類與出廠政策</caption>
+    <thead><tr><th>資料類別</th><th class="r">可否出廠</th><th>控制方式</th></tr></thead><tbody>` +
+    tiers.egress_policy.map(r=>`<tr class="${r.allowed?"":"void"}">
+      <td>${esc(r.data_class)}<div class="dimmer cjk" style="font-size:var(--t-micro)">${esc(r.reason)}</div></td>
+      <td class="r">${r.allowed?"ALLOW":`<span class="tag solid">BLOCK</span>`}</td>
+      <td class="cjk">${esc(r.control)}</td></tr>`).join("") +
+    `</tbody></table></div>
+    <div class="tbl" style="border-top:1px solid var(--line)"><table>
+    <caption class="vh">中華電信能力對應</caption>
+    <thead><tr><th>中華電信能力</th><th>在系統中的角色</th><th class="r">Status</th><th>依據</th></tr></thead><tbody>` +
+    tiers.cht_capabilities.map(c=>`<tr><td>${esc(c.capability)}</td>
+      <td class="cjk">${esc(c.role)}</td>
+      <!-- 這裡刻意不用 .tag.ok：terminal green 全站只留給 VERIFIED 鋼印。
+           成熟度的層級靠框線強度分（demonstrated 亮框 / 其餘暗框）。 -->
+      <td class="r"><span class="tag ${c.status==="demonstrated"?"on":""}">${esc(c.status.toUpperCase())}</span></td>
+      <td class="cjk dim">${esc(c.evidence)}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+}
+
+async function toggleCloudLink(up){
+  const button=$("btnCloudLink");
+  if(button) button.disabled=true;
+  try{
+    await getJSON("/api/deployment/link", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({up, actor:"operator",
+        reason: up ? "Dashboard 恢復雲端鏈路" : "Dashboard 模擬廠區對外鏈路中斷"}),
+    });
+    await loadDeployment();
+    await refresh();
+  }catch(err){ flashError(err); if(button) button.disabled=false; }
 }
 
 /* ================= 工安 / 工單 ================= */
 function renderSafety(s){
   const cam=(s.cameras||[])[0];
   if(!cam){ $("safety").innerHTML='<span class="empty">NO CAMERA FEED</span>'; return; }
-  $("camMeta").textContent = `${cam.camera_id} / ZONE ${cam.zone_id} / CONF ${fmt(cam.confidence,2)}`;
+  $("camMeta").textContent =
+    `工安監視器 ${cam.camera_id} · 危險區 ${cam.zone_id} · 信心 ${fmt(cam.confidence,2)}`;
+  // 標籤講事實，不講欄位名：PPE / HAZARD ZONE 這種縮寫評審不必先學。
+  // 每個標籤的文字都跟著狀態換，滅燈的標籤不能還寫著「有人在危險區內」。
   const flags=[
-    ["PERSON "+cam.person_count, cam.person_count>0, false],
-    ["HAZARD ZONE", cam.person_in_hazard_zone, true],
-    ["PPE "+(cam.ppe_compliant?"OK":"VIOLATION"), !cam.ppe_compliant, true],
-    ["SMOKE", cam.smoke_detected, true],
+    [`現場人員 ${cam.person_count} 人`, cam.person_count>0, false],
+    [cam.person_in_hazard_zone?"有人在危險區內":"危險區無人", cam.person_in_hazard_zone, true],
+    [cam.ppe_compliant?"防護具合規":"未依規定配戴防護具", !cam.ppe_compliant, true],
+    [cam.smoke_detected?"偵測到煙霧":"未偵測到煙霧", cam.smoke_detected, true],
   ];
   let html = `<div class="narr">${esc(cam.caption)}</div>
     <div class="row wrap gap4 mt10">` +
-    flags.map(([t,on,danger])=>`<span class="tag ${on?(danger?'solid':'on'):''}">${esc(t)}</span>`).join("") + `</div>`;
+    flags.map(([t,on,danger])=>`<span class="tag cjk ${on?(danger?'solid':'on'):''}">${esc(t)}</span>`).join("") + `</div>`;
 
   const wo = lastLoop && lastLoop.work_order;
   if(wo){
-    html += `<hr class="rule hi"><span class="micro">WORK ORDER</span><div class="mt6">
-      <div class="kv"><span class="k">ID / Priority</span><span class="v">${esc(wo.work_order_id)} <span class="tag ${wo.priority==='P1'?'solid':'on'}">${esc(wo.priority)}</span></span></div>
-      <div class="kv"><span class="k">Problem</span><span class="v cjk">${esc(wo.problem)}</span></div>
-      <div class="kv"><span class="k">Skill / Est</span><span class="v">${esc(wo.required_skill)} · ${fmt(wo.estimated_repair_min,0)} MIN</span></div>
-      <div class="kv"><span class="k">Parts</span><span class="v">${esc(wo.suggested_parts.join(" · "))||NODATA}</span></div>
-      <div class="kv"><span class="k">SOP</span><span class="v">${esc(wo.sop_refs.join(" · "))||NODATA}</span></div>
-      <div class="kv"><span class="k">Completeness</span><span class="v">${fmt(wo.completeness_pct,0)}%</span></div></div>`;
+    html += `<hr class="rule hi"><span class="micro cjk">維修工單</span><div class="mt6">
+      <div class="kv"><span class="k cjk">工單編號 / 優先級</span><span class="v">${esc(wo.work_order_id)} <span class="tag ${wo.priority==='P1'?'solid':'on'}">${esc(wo.priority)}</span></span></div>
+      <div class="kv"><span class="k cjk">故障描述</span><span class="v cjk">${escH(wo.problem)}</span></div>
+      <div class="kv"><span class="k cjk">技能 / 工時</span><span class="v">${esc(wo.required_skill)} · ${fmt(wo.estimated_repair_min,0)} 分</span></div>
+      <div class="kv"><span class="k cjk">建議備料</span><span class="v">${esc(wo.suggested_parts.join(" · "))||NODATA}</span></div>
+      <div class="kv"><span class="k cjk">SOP 出處</span><span class="v">${esc(wo.sop_refs.join(" · "))||NODATA}</span></div>
+      <div class="kv"><span class="k cjk">欄位完整度</span><span class="v">${fmt(wo.completeness_pct,0)}%</span></div></div>`;
     if(wo.safety_precautions.length){
-      html += `<div class="mt10"><span class="micro">LOTO / PRECAUTIONS</span>
+      html += `<div class="mt10"><span class="micro cjk">維修前安全措施（LOTO）</span>
         <div class="narr mt6" style="font-size:var(--t-meta);color:var(--dim)">
         ${wo.safety_precautions.slice(0,3).map(p=>"· "+esc(p)).join("<br>")}</div></div>`;
     }
@@ -2254,11 +3027,16 @@ function renderLoop(loop){
 
 function renderDiagnosis(loop){
   const e=loop.event, d=loop.diagnosis;
-  $("dxMeta").textContent = `${e.event_id} / TICK ${e.tick} / ${e.kind.toUpperCase()}`;
+  $("dxMeta").textContent = `${machineName(e.machine_id)} ${e.machine_id} / TICK ${e.tick}`;
+  // 觸發字串（threshold:vibration=CRITICAL）是給稽核看的規則紀錄，畫面上翻成
+  // 人話；原字串留在 title 裡，滑過去仍然指得回規則本身。
   let html = `<div class="row between gap8">
       <span class="tag ${e.severity==='critical'?'solid':'alarm'}">${esc(e.severity.toUpperCase())}</span>
-      <span class="micro">${esc(e.detector.toUpperCase())}</span></div>
-    <div class="row wrap gap4 mt6">${e.triggers.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`;
+      <span class="micro">${esc(e.event_id)}</span></div>
+    <div class="row wrap gap4 mt6">${e.triggers.map(t=>{
+      const x=explainTrigger(t);
+      return `<span class="tag cjk" title="${esc(t)}">${esc(x.v)}</span>`;
+    }).join("")}</div>`;
 
   if(d && d.candidates.length){
     html += `<hr class="rule hi"><span class="micro">ROOT CAUSE CANDIDATES</span><div class="mt6">` +
@@ -2267,7 +3045,7 @@ function renderDiagnosis(loop){
           <span class="lb trunc">${esc(c.label)}</span>
           <span class="bar"><i style="width:${Math.round(c.confidence*100)}%"></i></span>
           <span class="pc">${Math.round(c.confidence*100)}%</span></div>`).join("") + `</div>`;
-    html += `<div class="narr mt10">${esc(d.narrative)}</div>`;
+    html += `<div class="narr mt10">${escH(d.narrative)}</div>`;
     const ev=(d.candidates[0].evidence||[]).slice(0,5);
     if(ev.length){
       html += `<hr class="rule"><span class="micro">EVIDENCE</span><div class="mt6">` +
@@ -2279,16 +3057,16 @@ function renderDiagnosis(loop){
 }
 
 function renderImpact(im){
-  $("impact").innerHTML = `<div class="narr">${esc(im.narrative)}</div>
+  $("impact").innerHTML = `<div class="narr">${escH(im.narrative)}</div>
     <div class="row wrap gap4 mt10">
-      <span class="tag">DOWNSTREAM ${esc(im.downstream_machines.join(" "))||"NONE"}</span>
-      <span class="tag">ORDERS ${im.affected_orders.length}</span>
-      <span class="tag ${im.production_loss_units>40?'alarm':''}">LOSS ${fmt(im.production_loss_units,0)} U</span></div>
+      <span class="tag cjk">下游 ${esc(im.downstream_machines.map(machineName).join("、"))||"無"}</span>
+      <span class="tag cjk">受影響訂單 ${im.affected_orders.length}</span>
+      <span class="tag cjk ${im.production_loss_units>40?'alarm':''}">產能損失 ${fmt(im.production_loss_units,0)} 件</span></div>
     <div class="mt10 tbl"><table><caption class="vh">受影響訂單</caption><thead><tr>
-      <th>Order</th><th class="r">Rem</th><th class="r">Finish</th><th class="r">Due</th><th class="r">Delay</th>
+      <th>訂單</th><th class="r">待產</th><th class="r">預估完成</th><th class="r">交期</th><th class="r">延遲</th>
     </tr></thead><tbody>` +
     im.affected_orders.slice(0,4).map(o=>`<tr>
-      <td>${esc(o.order_id)}</td><td class="r">${fmt(o.remaining,0)}</td>
+      <td class="cjk">${esc(orderName(o.order_id))}</td><td class="r">${fmt(o.remaining,0)}</td>
       <td class="r">${fmt(o.projected_finish_min,0)}M</td><td class="r">${fmt(o.due_in_min,0)}M</td>
       <td class="r" style="${o.delay_min>0?'color:var(--red);font-weight:700':'color:var(--dim)'}">${fmt(o.delay_min,0)}M</td>
     </tr>`).join("") + `</tbody></table></div>`;
@@ -2306,7 +3084,7 @@ function renderPlans(plans, explain){
   };
   const deltaText=p=>{
     const pr=p.projection||{}, base=recommended?.projection||{};
-    if(!p.feasible) return `不能執行：${p.infeasible_reason||"被安全規則擋下"}`;
+    if(!p.feasible) return `不能執行：${humanize(p.infeasible_reason)||"被安全規則擋下"}`;
     if(p===recommended) return `推薦：30 分鐘後產出 ${fmt(pr.production_pct_final??pr.production_pct,0)}%，交期延遲 ${fmt(pr.max_order_delay_min,0)} 分`;
     const output=(pr.production_pct_final??pr.production_pct)-(base.production_pct_final??base.production_pct);
     const delay=pr.max_order_delay_min-base.max_order_delay_min;
@@ -2318,8 +3096,8 @@ function renderPlans(plans, explain){
     const output=pr.production_pct_final??pr.production_pct;
     const safetyLabel=safety==="APPROVAL_REQUIRED"?"需核准":safety==="BLOCK"?"不可執行":safety==="PASS"?"安全放行":"待審查";
     return `<article class="plan-card ${isRecommended?"recommended":""} ${blocked?"blocked":""}">
-      <div class="pc-head"><span class="pc-rank">RANK ${pad(p.rank||0,2)} · ${esc(p.plan_id)}</span><span class="pc-badge ${blocked?"bad":""}">${isRecommended?"RECOMMENDED":blocked?"BLOCKED":"ALTERNATIVE"}</span></div>
-      <h3 class="pc-title">${esc(p.title)}</h3><p class="pc-summary">${esc(p.summary||actionText(p))}</p>
+      <div class="pc-head"><span class="pc-rank cjk">第 ${p.rank||"-"} 名 · ${esc(planName(p.plan_id))}</span><span class="pc-badge cjk ${blocked?"bad":""}">${isRecommended?"推薦執行":blocked?"不可執行":"備選方案"}</span></div>
+      <h3 class="pc-title">${escH(p.title)}</h3><p class="pc-summary">${escH(p.summary||actionText(p))}</p>
       <div class="pc-metrics">
         <div class="pc-metric"><span class="k">30 分鐘後產出</span><span class="v">${fmt(output,0)}%</span></div>
         <div class="pc-metric"><span class="k">最大交期延遲</span><span class="v ${pr.max_order_delay_min>30?"bad":""}">${fmt(pr.max_order_delay_min,0)} 分</span></div>
@@ -2330,9 +3108,9 @@ function renderPlans(plans, explain){
       <div class="pc-delta ${blocked?"bad":""}">${esc(deltaText(p))}</div>
     </article>`;
   }).join("");
-  const guidance=recommended?`先看三個關鍵差異：${esc(recommended.plan_id)} 是目前推薦；產出看「30 分鐘後產出」，交期看「最大交期延遲」，安全看「不可執行／需核准／安全放行」。分數只是排序依據，不是現場 KPI。`:"目前沒有可執行方案，請查看安全裁決原因。";
+  const guidance=recommended?`先看三個關鍵差異：${esc(planName(recommended.plan_id))} 是目前推薦；產出看「30 分鐘後產出」，交期看「最大交期延遲」，安全看「不可執行／需核准／安全放行」。分數只是排序依據，不是現場 KPI。`:"目前沒有可執行方案，請查看安全裁決原因。";
   $("plans").innerHTML = `<div class="plan-compare">${cards}</div><div class="plan-guide">${guidance}</div>`;
-  if(explain){ $("rankWrap").hidden = false; $("rankExplain").textContent = explain; }
+  if(explain){ $("rankWrap").hidden = false; $("rankExplain").textContent = humanize(explain); }
 }
 
 function renderVerify(attempt, loop){
@@ -2340,10 +3118,10 @@ function renderVerify(attempt, loop){
   $("verify").innerHTML = `
     <div class="row between gap8 wrap">
       <span><span class="micro">EXECUTED</span>
-        <b style="font-size:var(--t-prose);margin-left:7px">${esc(attempt.plan.plan_id)}</b>
-        <span class="cjk dim" style="margin-left:6px">${esc(attempt.plan.title)}</span></span>
+        <b class="cjk" style="font-size:var(--t-prose);margin-left:7px">${esc(planName(attempt.plan.plan_id))}</b>
+        <span class="cjk dim" style="margin-left:6px">${escH(attempt.plan.title)}</span></span>
       <span class="stamp ${v.passed?'':'bad'}">${v.passed?'◼ VERIFIED':'✕ FAILED'}</span></div>
-    <div class="kv mt10"><span class="k">Approval</span><span class="v">
+    <div class="kv mt10"><span class="k cjk">人工核准</span><span class="v">
       ${attempt.approval.approved?"✓":"✕"} ${esc(attempt.approval.approver.toUpperCase())}
       <span class="dim cjk">${esc(attempt.approval.reason)}</span></span></div>
     <hr class="rule"><span class="micro">CHECKS</span>
@@ -2351,8 +3129,8 @@ function renderVerify(attempt, loop){
       <span class="m">${c.passed?"PASS":"FAIL"}</span>
       <span class="b">${esc(c.name)}<br><span class="n">EXPECT ${fmt(c.expected,1)} ${esc(c.comparator)} ACTUAL ${fmt(c.actual,1)}</span></span>
     </div>`).join("")}</div>
-    <div class="narr mt10">${esc(v.narrative)}</div>
-    ${loop.escalated?`<div class="esc mt10">⚠ ${esc(loop.escalation_reason)}</div>`:""}`;
+    <div class="narr mt10">${escH(v.narrative)}</div>
+    ${loop.escalated?`<div class="esc mt10">⚠ ${escH(loop.escalation_reason)}</div>`:""}`;
 }
 
 /* ================= 人工核准 ================= */
@@ -2362,12 +3140,12 @@ function renderApproval(p){
   $("approvalBox").innerHTML = `<div class="appr">
     <div class="hazard-stripe"></div>
     <div class="appr-b">
-      <h3 class="blink" role="alert">⚠ HUMAN APPROVAL REQUIRED / 高風險動作</h3>
-      <div class="kv"><span class="k">Plan</span><span class="v"><b>${esc(p.plan.plan_id)}</b> <span class="cjk">${esc(p.plan.title)}</span></span></div>
-      <div class="kv"><span class="k">Actions</span><span class="v">${esc(p.plan.actions.map(a=>a.kind.toUpperCase()).join(" → "))}</span></div>
+      <h3 class="blink" role="alert">${agGlyph("human")} HUMAN APPROVAL REQUIRED / 高風險動作</h3>
+      <div class="kv"><span class="k">Plan</span><span class="v"><b class="cjk">${esc(planName(p.plan.plan_id))}</b> <span class="cjk">${escH(p.plan.title)}</span></span></div>
+      <div class="kv"><span class="k">Actions</span><span class="v cjk">${esc(p.plan.actions.map(a=>actionName(a.kind)).join(" → "))}</span></div>
       <div class="kv"><span class="k">Projection</span><span class="v">OUT ${fmt(pr.production_pct,0)}% · DELAY ${fmt(pr.max_order_delay_min,0)}M · RECOV ${fmt(pr.recovery_min,0)}M</span></div>
       <div class="kv"><span class="k">Risk</span><span class="v"><span class="tag solid">${esc(p.policy.risk.toUpperCase())}</span></span></div>
-      <div class="narr mt6" style="font-size:var(--t-meta);color:var(--dim)">${esc(p.policy.reasons.join("；"))}</div>
+      <div class="narr mt6" style="font-size:var(--t-meta);color:var(--dim)">${escH(p.policy.reasons.join("；"))}</div>
       <div class="row gap8 mt10">
         <button class="primary" data-approve="1">✓ APPROVE &amp; EXECUTE</button>
         <button data-approve="0">✕ REJECT</button>
@@ -2429,9 +3207,11 @@ function onEvent(e){
   if(e.stage==="tick" && e.payload.snapshot){ state.snapshot=e.payload.snapshot; render(); }
   if(e.stage==="plan" && e.payload.plans) renderPlans(e.payload.plans,"");
   if(e.stage==="rank" && e.payload.ranking){
-    if(e.payload.explanation){ $("rankWrap").hidden = false; $("rankExplain").textContent=e.payload.explanation; }
+    if(e.payload.explanation){ $("rankWrap").hidden = false; $("rankExplain").textContent=humanize(e.payload.explanation); }
   }
   if(e.stage==="approval_required") renderApproval(e.payload);
+  // 鏈路狀態可能從別的分頁或 CLI 切換，收到事件就把部署面板拉回一致。
+  if(e.stage==="cloud_link") loadDeployment().catch(flashError);
   if(["detect","diagnose","impact","rank","approval_required","execute","verify","escalate"].includes(e.stage))
     refresh().catch(flashError);
   else if(["loop_done","reset","inject","idle","error","approval_submitted"].includes(e.stage))
@@ -2456,6 +3236,7 @@ function log(e){
   else if(e.stage==="work_order"&&p.work_order) msg=`${p.work_order.work_order_id} ${p.work_order.priority}`;
   else if(e.stage==="inject") msg=(p.title||p.scenario_id||"");
   else if(e.stage==="reset") msg="SESSION RESET";
+  else if(e.stage==="cloud_link") msg=`LINK ${String(p.status||"").toUpperCase()} / ${p.reason||""}`;
 
   const el=$("log");
   const alarm=["escalate","error","approval_required"].includes(e.stage)||

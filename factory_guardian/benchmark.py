@@ -36,6 +36,15 @@ REPORT_COLUMNS: tuple[tuple[str, str, bool], ...] = (
     ("max_order_delay_min", "最大交期延遲(min)", False),
     ("late_orders", "延遲訂單數", False),
     ("recovery_min", "復原時間(min)", False),
+    # 永續發展性：能源浪費與碳排都是「劣化多耗的電」積分出來的，不是另外估的。
+    # 總能耗（energy_kwh）單看會被「停機當然省電」誤導，所以永遠要和
+    # 單位產出能耗（energy_intensity_kwh_per_unit）一起看 —— 後者同時吃到分子與分母。
+    ("energy_kwh", "總能耗(kWh)", False),
+    ("energy_waste_kwh", "劣化浪費電力(kWh)", False),
+    ("energy_waste_ntd", "浪費電費(NTD)", False),
+    ("co2e_kg", "碳排(kgCO2e)", False),
+    ("co2e_waste_kg", "浪費碳排(kgCO2e)", False),
+    ("energy_intensity_kwh_per_unit", "單位產出能耗(kWh/件)", False),
     ("unsafe_block_rate_pct", "不安全方案阻擋率(%)", True),
     ("safety_violations_executed", "執行到的違規方案", False),
     ("hazard_exposure_min", "人員危險曝露(min)", False),
@@ -55,6 +64,15 @@ class BenchmarkRow:
 
     def to_dict(self) -> dict[str, Any]:
         return {"scenario_id": self.scenario_id, "mode": self.mode, "kpi": self.kpi, "ground_truth": self.ground_truth}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkRow":
+        return cls(
+            scenario_id=data["scenario_id"],
+            mode=data["mode"],
+            kpi=dict(data.get("kpi") or {}),
+            ground_truth=dict(data.get("ground_truth") or {}),
+        )
 
 
 @dataclass
@@ -90,6 +108,15 @@ class BenchmarkReport:
             agg["diagnosis_accuracy_pct"] = round(100.0 * sum(bool(c) for c in judged) / len(judged), 1) if judged else None
             summary[mode] = agg
         return summary
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BenchmarkReport":
+        """從 ``to_dict()`` 的輸出重建報表（不含 EpisodeResult）。
+
+        Benchmark 要跑滿 5 情境 × 3 模式，不便宜。商業案例層只需要 KPI 差值，
+        所以讓 `--out` 存下來的 JSON 可以直接餵回去，不必為了換一組假設重跑一次模擬。
+        """
+        return cls(rows=[BenchmarkRow.from_dict(r) for r in data.get("rows", [])])
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,7 +162,9 @@ def format_cell(value: Any) -> str:
     if isinstance(value, bool):
         return "✔" if value else "✘"
     if isinstance(value, float):
-        return f"{value:,.1f}"
+        # 小數值要多給一位：單位產出能耗（0.82 vs 0.32 kWh/件）與診斷信心度
+        # 在只有一位小數時會被四捨五入成同一個數字，鑑別力就沒了。
+        return f"{value:,.2f}" if abs(value) < 10 else f"{value:,.1f}"
     return str(value)
 
 

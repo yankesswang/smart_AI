@@ -9,6 +9,12 @@
 
 沒有 API 金鑰時自動退回**確定性離線敘述器**：Demo 不會因為沒網路而開天窗，
 而且每次輸出一樣，Benchmark 才可重現。所有 LLM 呼叫都會進稽核軌跡。
+
+部署上這一層就是 **Edge / Cloud 的分界線**：整個閉環只有敘述生成放在 hicloud，
+其餘元件全部跑在廠內 MEC。因此廠區對外鏈路一斷，受影響的也只有這裡 ——
+敘述改由邊緣確定性敘述器產生（數字與證據完全相同），
+偵測、診斷、安全阻擋、核准、執行與驗證一律不受影響。
+鏈路狀態由 :mod:`factory_guardian.deployment.link` 管理，降級會寫進稽核軌跡。
 """
 
 from __future__ import annotations
@@ -20,6 +26,11 @@ from typing import Any, Callable
 
 from .audit import AuditLog
 from .config import Settings, get_settings
+from .deployment.link import DEGRADE_STAGE, is_cloud_up
+
+#: 雲端鏈路中斷時的敘述模式名稱。刻意與 "offline-deterministic"（沒金鑰）區分，
+#: 因為兩者的原因不同：一個是沒設定，一個是網路斷了。
+MODE_EDGE_AUTONOMOUS = "edge-autonomous"
 
 
 @dataclass
@@ -50,6 +61,8 @@ class LLMClient:
 
     @property
     def mode(self) -> str:
+        if not is_cloud_up():
+            return MODE_EDGE_AUTONOMOUS
         return f"openai:{self.settings.openai_model}" if self.settings.llm_enabled else "offline-deterministic"
 
     def _ensure_client(self) -> Any:
@@ -73,6 +86,16 @@ class LLMClient:
         """產生敘述文字。``fallback`` 是離線／失敗時使用的確定性敘述器。"""
         prompt_hash = hashlib.blake2b((system + "\x00" + user).encode("utf-8"), digest_size=8).hexdigest()
         start = time.perf_counter()
+
+        # --- 雲端鏈路中斷：邊緣自主模式 -------------------------------------------------
+        # 這一段刻意排在 llm_enabled 判斷之前。鏈路斷掉是網路事實，不是設定問題，
+        # 所以它也蓋過 FG_ALLOW_OFFLINE_LLM=0 —— 那個旗標的用途是「別讓我不小心在
+        # 沒金鑰的情況下以為自己在打真 LLM」，不是「寧可讓工廠的閉環停下來」。
+        if not is_cloud_up():
+            response = LLMResponse(fallback(), MODE_EDGE_AUTONOMOUS, (time.perf_counter() - start) * 1000, prompt_hash)
+            self._audit_degradation(actor)
+            self._audit(actor, response, user)
+            return response
 
         if not self.settings.llm_enabled:
             if not self.settings.allow_offline_llm:
@@ -111,8 +134,31 @@ class LLMClient:
             "llm_call",
             actor,
             **response.to_dict(),
+            cloud_link="up" if is_cloud_up() else "down",
             prompt_preview=prompt[:400],
             note="LLM 僅產生敘述，不參與方案排名、安全裁決或動作執行。",
+        )
+
+    def _audit_degradation(self, actor: str) -> None:
+        """把「雲端能力降級」寫成獨立的稽核事件。
+
+        降級不能是靜悄悄發生的：事後看稽核軌跡的人必須能分辨這段敘述
+        是雲端 LLM 寫的還是邊緣敘述器寫的，否則證據鏈就有一個說不清楚的洞。
+        """
+        if self.audit is None:
+            return
+        self.audit.log(
+            DEGRADE_STAGE,
+            "cloud-link",
+            capability="llm_narrative",
+            tier="cloud",
+            requested_by=actor,
+            fallback="edge-deterministic-narrator",
+            control_loop_impact="none",
+            note=(
+                "廠區對外鏈路中斷，敘述改由 MEC 邊緣確定性敘述器產生（數字與證據不變）。"
+                "偵測、診斷、安全裁決、核准、執行與驗證全部在邊緣完成，未受影響。"
+            ),
         )
 
 
@@ -125,4 +171,4 @@ SYSTEM_PROMPT = (
 )
 
 
-__all__ = ["LLMClient", "LLMResponse", "SYSTEM_PROMPT"]
+__all__ = ["LLMClient", "LLMResponse", "MODE_EDGE_AUTONOMOUS", "SYSTEM_PROMPT"]

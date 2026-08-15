@@ -14,7 +14,7 @@ from typing import Iterable
 
 import networkx as nx
 
-from ..domain import Machine, MachineKind, Order, Product, SignalSpec
+from ..domain import Machine, MachineKind, Order, Product, SignalSpec, plain_name
 
 # --------------------------------------------------------------------------------------
 # 感測器規格（規格書 §7.1 表格；競賽 Digital Twin 假設值，非任何真實設備商規格）
@@ -61,6 +61,12 @@ class ProductionLine:
     name: str
     # 依序的製程階段；每個階段是「可互相替代」的機台集合
     stages: tuple[tuple[str, ...], ...]
+    # 白話短名（例：「精密零件產線」）。理由同 Machine.short_name。
+    short_name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.short_name or plain_name(self.name)
 
 
 @dataclass
@@ -162,6 +168,7 @@ def build_factory() -> FactoryTopology:
     machine_a = Machine(
         machine_id="M-A",
         name="Machine A｜CNC 主要加工機",
+        short_name="主要加工機",
         kind=MachineKind.MACHINING,
         line_id="LINE-1",
         rated_rate_uph=120.0,
@@ -170,10 +177,14 @@ def build_factory() -> FactoryTopology:
         changeover_min=10.0,
         repair_min=40.0,
         hourly_cost_ntd=1250.0,
+        # 中型立式綜合加工中心：主軸 15 kW + 伺服/油壓/冷卻/排屑等輔機約 7 kW。
+        # 對應 CURRENT 訊號的額定值 10.2 A（同一個工作點）。
+        rated_power_kw=22.0,
     )
     machine_b = Machine(
         machine_id="M-B",
         name="Machine B｜CNC 替代加工機",
+        short_name="替代加工機",
         kind=MachineKind.MACHINING,
         line_id="LINE-1",
         rated_rate_uph=140.0,
@@ -182,10 +193,14 @@ def build_factory() -> FactoryTopology:
         changeover_min=12.0,
         repair_min=45.0,
         hourly_cost_ntd=1180.0,
+        # 產能較高（140 vs 120 件/hr）的同型加工機，主軸與輔機都大一級。
+        # 每件產出的電力需求與 M-A 同量級（0.19 vs 0.18 kW·hr/件），符合同製程階段的互為替代設定。
+        rated_power_kw=26.0,
     )
     machine_c = Machine(
         machine_id="M-C",
         name="Machine C｜後段包裝機",
+        short_name="包裝機",
         kind=MachineKind.PACKAGING,
         line_id="LINE-1",
         rated_rate_uph=200.0,
@@ -194,17 +209,24 @@ def build_factory() -> FactoryTopology:
         changeover_min=0.0,
         repair_min=25.0,
         hourly_cost_ntd=620.0,
+        # 包裝機：輸送 + 封膜熱源 + 貼標，沒有主軸切削負載。
+        # 產能最高（200 件/hr）但單位產出電力需求只有加工機的三分之一（0.055 kW·hr/件），
+        # 這也是為什麼把訂單留在產線上（而不是讓上游停擺）在能源上是划算的。
+        rated_power_kw=11.0,
     )
 
     line = ProductionLine(
         line_id="LINE-1",
         name="Line 1｜精密零件產線",
         stages=(("M-A", "M-B"), ("M-C",)),
+        short_name="精密零件產線",
     )
 
     products = {
-        "P-100": Product("P-100", "精密軸承座 P-100", routing=(("M-A", "M-B"), ("M-C",))),
-        "P-200": Product("P-200", "通用連接件 P-200", routing=(("M-B",), ("M-C",))),
+        "P-100": Product("P-100", "精密軸承座 P-100", routing=(("M-A", "M-B"), ("M-C",)),
+                         short_name="精密軸承座"),
+        "P-200": Product("P-200", "通用連接件 P-200", routing=(("M-B",), ("M-C",)),
+                         short_name="通用連接件"),
     }
 
     # MES-like synthetic orders（規格 §7.2：10–20 筆）

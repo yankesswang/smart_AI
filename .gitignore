@@ -25,6 +25,9 @@ runs/
 benchmark.json
 .tmp/
 
+# 外部公開資料集（需自行下載，見 README）
+data/external/
+
 # 編輯器 / 作業系統
 .DS_Store
 .idea/

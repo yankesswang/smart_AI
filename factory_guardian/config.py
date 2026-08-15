@@ -57,6 +57,12 @@ class Settings:
     # 高風險動作（停機 / 改變控制狀態）預設需要人工核准。
     require_approval: bool = field(default_factory=lambda: _env_flag("FG_REQUIRE_APPROVAL", True))
 
+    # --- 部署 / 網路 ---
+    # 廠區對外（MEC → hicloud）鏈路的**開機**狀態。設 0 就是一開機即為斷網模式，
+    # 用來在沒有網路的場地重現「邊緣自主」情境。執行期可再由
+    # deployment.link.set_cloud_link() 或 POST /api/deployment/link 切換。
+    cloud_link_up: bool = field(default_factory=lambda: _env_flag("FG_CLOUD_LINK", True))
+
     # --- 模擬 ---
     seed: int = field(default_factory=lambda: int(os.getenv("FG_SEED", "20260809")))
     tick_seconds: float = field(default_factory=lambda: _env_float("FG_TICK_SECONDS", 60.0))
@@ -67,13 +73,26 @@ class Settings:
         return bool(self.openai_api_key)
 
     def describe(self) -> dict[str, object]:
+        # 延遲匯入：link 反向需要 config 的開機預設值，兩邊都在函式內匯入才不會有迴圈。
+        from .deployment.link import cloud_link
+
+        link = cloud_link()
+        if not link.up:
+            # 鏈路斷了，llm_mode 就必須誠實反映「現在實際上是誰在產生敘述」，
+            # 不能還顯示 openai:xxx —— Dashboard 頁首那一格是評審會盯著看的。
+            llm_mode = "edge-autonomous"
+        elif self.llm_enabled:
+            llm_mode = "openai:" + self.openai_model
+        else:
+            llm_mode = "offline-deterministic"
         return {
-            "llm_mode": "openai:" + self.openai_model if self.llm_enabled else "offline-deterministic",
+            "llm_mode": llm_mode,
             "allow_offline_llm": self.allow_offline_llm,
             "require_approval": self.require_approval,
             "audit_dir": str(self.audit_dir),
             "seed": self.seed,
             "tick_seconds": self.tick_seconds,
+            "cloud_link": "up" if link.up else "down",
         }
 
 
@@ -85,4 +104,10 @@ def get_settings(refresh: bool = False) -> Settings:
     global _SETTINGS
     if _SETTINGS is None or refresh:
         _SETTINGS = Settings()
+        if refresh:
+            # 鏈路狀態是執行期的操作員狀態，會被 Demo 現場切換。重讀設定時一併歸位，
+            # 測試之間才不會互相汙染（conftest 的 autouse fixture 就是靠這個）。
+            from .deployment.link import reset_cloud_link
+
+            reset_cloud_link()
     return _SETTINGS

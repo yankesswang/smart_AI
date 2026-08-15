@@ -5,195 +5,339 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#E9EEF1">
-<meta name="description" content="以流程圖說明 Factory Guardian AI 的問題定義、Agent 閉環、權責邊界與安全治理。">
-<title>AGENT SYSTEM / FACTORY GUARDIAN AI</title>
+<meta name="description" content="用白話拆解 Factory Guardian AI 的運作機制：七個步驟、六個 Agent，異常如何從偵測走到人工核准、執行與量測驗證。">
+<title>AGENT MECHANISM / FACTORY GUARDIAN AI</title>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/static/agent-system-light.webp" as="image" type="image/webp">
 <link rel="stylesheet" href="/static/hmi.css">
 <style>
 :root{
   color-scheme:light;
-  --page-max:1440px;
+  --page-max:1280px;
   --bg:#E9EEF1;
   --panel:#F8FAF9;
   --panel-2:#EEF3F4;
   --panel-3:#E2EAEC;
   --line:#C8D4D8;
   --line-hi:#9FB1B8;
-  --line-lo:#D9E2E5;
   --fg:#163044;
   --fg-2:#314C5D;
   --dim:#516B78;
   --dimmer:#667E88;
   --accent:#0B756E;
+  --accent-deep:#075D58;
+  --accent-soft:#DCE9E8;
+  --ink:#F8FAF9;
+  /* 深底上的三階前景。原本散在各處硬寫，收成 token 給 SVG 與既有區塊共用。 */
+  --tint:#8FC7C2;
+  --ink-2:#C6D6DA;
+  --ink-3:#A7BEC6;
   --red:var(--accent);
-  --red-deep:#075D58;
-  --red-ghost:rgba(11,117,110,.12);
   --green:var(--accent);
   --flow-red:var(--accent);
-  --flow-ink:#F8FAF9;
+  --flow-ink:var(--ink);
+  /* 這一頁是「解釋用」的頁面，字級刻意比 HMI 主控台大一階，先求讀得懂。 */
+  --s-lead:clamp(1.02rem,1.35vw,1.24rem);
+  --s-prose:clamp(.96rem,1.05vw,1.08rem);
+  --s-body:.9375rem;
+  --s-meta:.8125rem;
+  --s-label:.6875rem;
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--fg)}
 body::before{background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(22,48,68,.045) 2px 3px)}
 body::after{opacity:.012}
-::selection{background:var(--accent);color:var(--flow-ink)}
+::selection{background:var(--accent);color:var(--ink)}
 .system-page{min-height:100dvh;background:var(--line);display:grid;gap:1px}
+/* grid item 的自動最小尺寸預設是 min-content：圖在窄螢幕有最小寬度，少了這一行
+   會由它把整條 grid track 撐寬，連帶把 hero 與頁首一起推出視窗外。 */
+.system-page > *{min-width:0}
 .top{position:sticky;top:0;z-index:4;max-width:100vw}
 .top .brand{flex:0 0 auto}.top .fill{min-width:12px}
-.top .synth{color:var(--flow-ink)}
+.top .synth{color:var(--ink)}
+.cn{font-family:var(--cjk)}
 
-.hero{background:var(--panel);display:grid;grid-template-columns:minmax(360px,.84fr) minmax(520px,1.5fr);min-height:calc(100dvh - 58px);max-height:900px;overflow:hidden}
-.hero-copy{padding:clamp(36px,6vw,86px) clamp(24px,5vw,72px);display:flex;flex-direction:column;justify-content:space-between;gap:38px}
-.hero-kicker{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--red);font-weight:800}
-.hero h2{font-family:var(--cjk);font-size:clamp(2.35rem,4.5vw,5.2rem);line-height:1.02;letter-spacing:-.055em;max-width:10ch;margin-top:15px}
-.hero-lead{font-family:var(--cjk);font-size:clamp(.95rem,1.25vw,1.15rem);line-height:1.7;color:var(--fg-2);max-width:32ch;margin-top:22px}
-.hero-actions{display:flex;flex-wrap:wrap;gap:10px}
-.hero-actions a,.closing-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:43px;padding:9px 16px;border:1px solid var(--line-hi);font-size:var(--t-meta);letter-spacing:.08em;text-transform:uppercase;font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,border-color .18s ease,transform .12s ease}
-.hero-actions a.primary{background:var(--red);border-color:var(--red);color:var(--flow-ink)}
-.hero-actions a:hover{background:var(--fg);border-color:var(--fg);color:var(--flow-ink)}
+/* ── Hero ───────────────────────────────────────────────────────────── */
+.hero{background:var(--panel);display:grid;grid-template-columns:minmax(400px,1fr) minmax(420px,.92fr);align-items:stretch}
+.hero-copy{padding:clamp(34px,5vw,72px) clamp(22px,4.5vw,64px);display:flex;flex-direction:column;justify-content:center;gap:22px}
+.hero-kicker{font-size:var(--s-label);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--accent);font-weight:800}
+.hero h2{font-family:var(--cjk);font-size:clamp(2rem,3.4vw,3.5rem);line-height:1.12;letter-spacing:-.045em;max-width:16ch}
+.hero h2 em{font-style:normal;color:var(--accent)}
+.hero-lead{font-family:var(--cjk);font-size:var(--s-lead);line-height:1.75;color:var(--fg-2);max-width:38ch}
+.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.hero-actions a,.closing-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:9px 18px;border:1px solid var(--line-hi);font-size:var(--s-meta);letter-spacing:.08em;text-transform:uppercase;font-weight:800;white-space:nowrap;transition:background .18s ease,color .18s ease,border-color .18s ease,transform .12s ease}
+.hero-actions a.primary{background:var(--accent);border-color:var(--accent);color:var(--ink)}
+.hero-actions a:hover{background:var(--fg);border-color:var(--fg);color:var(--ink)}
 .hero-actions a:active,.closing-actions a:active{transform:translateY(1px)}
-.hero-visual{position:relative;min-width:0;background:#D8E1E4}
+.hero-visual{position:relative;min-width:0;background:#D8E1E4;min-height:340px}
 .hero-visual img{width:100%;height:100%;object-fit:cover;object-position:center;display:block;filter:saturate(.88) contrast(1.02)}
-.hero-visual::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(22,48,68,.18),transparent 30%);pointer-events:none}
-.visual-caption{position:absolute;left:20px;bottom:18px;z-index:1;background:rgba(248,250,249,.94);border-left:3px solid var(--red);padding:10px 13px;max-width:285px;font-family:var(--cjk);font-size:var(--t-meta);line-height:1.55;color:var(--fg-2)}
+.visual-caption{position:absolute;left:18px;right:18px;bottom:16px;background:rgba(248,250,249,.95);border-left:3px solid var(--accent);padding:11px 14px;max-width:330px;font-family:var(--cjk);font-size:var(--s-meta);line-height:1.6;color:var(--fg-2)}
 
-.section{background:var(--panel);padding:clamp(52px,7vw,100px) clamp(18px,5vw,72px)}
+/* ── 一句話流程帶（全頁最重要的一行）───────────────────────────────── */
+.chain-band{background:var(--fg);color:var(--ink);padding:clamp(26px,3.4vw,42px) clamp(18px,5vw,64px)}
+.chain-inner{max-width:var(--page-max);margin:0 auto}
+.chain-title{font-size:var(--s-label);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--tint);font-weight:800;margin-bottom:16px}
+
+/* ── 圖 ──────────────────────────────────────────────────────────────────
+   三張圖全部是 inline SVG：不載圖表函式庫、不載圖檔、不載 web font。
+   座標交給 viewBox，外層只負責等比縮放；顏色一律走既有 token。
+   窄螢幕時 SVG 給一個最小寬度，讓它在自己的容器裡橫捲，不撐寬整個頁面。 */
+.fig{margin-top:16px;overflow-x:auto}
+.fig svg{display:block;width:100%;height:auto;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.fig figcaption{font-family:var(--cjk);font-size:var(--s-meta);line-height:1.75;color:var(--dim);margin-top:14px;max-width:76ch}
+.fig figcaption b{color:var(--fg)}
+.fig .ed path{fill:none;stroke:var(--line-hi);stroke-width:1.8}
+.fig .ed polygon{fill:var(--line-hi)}
+.fig .ed.back path{stroke:var(--accent);stroke-dasharray:8 5}
+.fig .ed.back polygon{fill:var(--accent)}
+.fig .nd rect{fill:var(--panel);stroke:var(--line-hi);stroke-width:1}
+.fig .nd .no{fill:var(--dimmer);font-size:12px;letter-spacing:.1em;font-weight:700}
+.fig .nd .ti{fill:var(--fg);font-size:17px;font-family:var(--cjk);letter-spacing:-.01em;font-weight:700}
+.fig .nd .ag{fill:var(--accent);font-size:10.5px;letter-spacing:.09em}
+.fig .nd .sub{fill:var(--dim);font-size:12px;font-family:var(--cjk)}
+.fig .nd.gate rect{fill:var(--accent);stroke:var(--accent)}
+.fig .nd.gate .ti{fill:var(--ink);font-size:14px}
+.fig .lb{fill:var(--accent-deep);font-size:14px;font-family:var(--cjk);font-weight:700}
+.fig .lb.sub{fill:var(--dim);font-size:12px;font-weight:400}
+.fig .term rect{fill:var(--accent);stroke:var(--accent)}
+.fig .term text{fill:var(--ink);font-size:13.5px;font-family:var(--cjk);font-weight:700}
+/* 決策圖 */
+.fig .nd.ask rect{fill:var(--bg);stroke:var(--fg);stroke-width:1.4}
+.fig .yn{fill:var(--accent-deep);font-size:13px;font-family:var(--cjk);font-weight:700}
+.fig .vd rect{fill:var(--panel-3);stroke:var(--line-hi)}
+.fig .vd .vt{fill:var(--fg-2);font-size:15px;letter-spacing:.1em;font-weight:800}
+.fig .vd .vs{fill:var(--dim);font-size:13.5px;font-family:var(--cjk)}
+.fig .vd.block rect{fill:var(--fg);stroke:var(--fg)}
+.fig .vd.block .vt,.fig .vd.block .vs{fill:var(--ink)}
+.fig .vd.appr rect{fill:var(--accent);stroke:var(--accent)}
+.fig .vd.appr .vt,.fig .vd.appr .vs{fill:var(--ink)}
+.fig .cap{fill:var(--fg-2);font-size:13.5px;font-family:var(--cjk)}
+.fig .cap.eg{fill:var(--dim);font-size:12.5px}
+/* Agent 視覺識別：圖示編碼職責，和戰情中心（index.html）用同一組 symbol 造型。
+   感測波形＝監看、指紋＝根因比對、知識圖節點＝下游影響、排名長條＝方案排名、
+   盾牌＋橫槓＝安全阻擋、扳手＝執行、量測標註＝回頭量。
+   「人工核准」是全套唯一實心填滿的圖示（人形＋簽名底線）—— 那一格不是 Agent。
+   全部 inline SVG，不載圖示函式庫也不載字型；顏色一律 currentColor 跟著容器走。 */
+.ag-sprite{position:absolute;width:0;height:0;overflow:hidden}
+svg.ag,.fig .ic{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:miter;stroke-linecap:butt}
+svg.ag{width:1.05em;height:1.05em;flex:0 0 auto;vertical-align:-.17em}
+.fig .ic{color:var(--accent)}
+.fig-dark .ic{color:var(--tint)}
+.fig-dark .nd.gate .ic{color:var(--ink)}
+/* 權限軸 */
+.fig .gate-l{stroke:var(--accent);stroke-width:1.6;stroke-dasharray:7 5;fill:none}
+.fig .gate-l.wall{stroke:var(--fg);stroke-width:3;stroke-dasharray:none}
+.fig .gate-t{fill:var(--accent-deep);font-size:13px;font-family:var(--cjk);font-weight:700}
+.fig .gate-t.wall{fill:var(--fg)}
+.fig .zn rect{fill:var(--panel-3);stroke:var(--line)}
+.fig .zn.appr rect{fill:var(--accent-soft);stroke:var(--line-hi)}
+.fig .zn.never rect{fill:var(--fg);stroke:var(--fg)}
+.fig .zt rect{fill:var(--panel);stroke:var(--line-hi)}
+.fig .zt text{fill:var(--fg-2);font-size:13px;font-family:var(--cjk);font-weight:700}
+.fig .zt.appr rect{fill:var(--accent);stroke:var(--accent)}
+.fig .zt.appr text{fill:var(--ink)}
+.fig .zt.never rect{fill:var(--ink);stroke:var(--ink)}
+.fig .zt.never text{fill:var(--fg)}
+.fig .zs{fill:var(--dim);font-size:13px;font-family:var(--cjk)}
+.fig .zs.ink,.fig .zf.ink{fill:var(--ink-3)}
+.fig .ac rect{fill:var(--panel);stroke:var(--line-hi)}
+.fig .ac .an{fill:var(--fg);font-size:14.5px;font-family:var(--cjk);font-weight:700}
+.fig .ac .ae{fill:var(--dimmer);font-size:10px;letter-spacing:.09em}
+.fig .ac.hot rect{fill:var(--panel);stroke:var(--accent);stroke-width:1.6}
+.fig .ac.hot .ae{fill:var(--accent-deep)}
+.fig .ac.stop rect{fill:var(--ink);stroke:var(--ink)}
+.fig .zf{fill:var(--dim);font-size:12.5px;font-family:var(--cjk)}
+.fig .axis path{fill:none;stroke:var(--line-hi);stroke-width:1.6}
+.fig .axis polygon{fill:var(--line-hi)}
+.fig .axis text{fill:var(--dim);font-size:12.5px;font-family:var(--cjk);letter-spacing:.04em}
+
+/* 深底版本（放在 .chain-band 上）：同一套結構，前景階梯換成深底上的三階。 */
+.fig-dark .ed path{stroke:rgba(248,250,249,.42)}
+.fig-dark .ed polygon{fill:rgba(248,250,249,.42)}
+.fig-dark .ed.back path{stroke:var(--tint)}
+.fig-dark .ed.back polygon{fill:var(--tint)}
+.fig-dark .nd rect{fill:rgba(248,250,249,.07);stroke:rgba(248,250,249,.26)}
+.fig-dark .nd .no{fill:rgba(248,250,249,.55)}
+.fig-dark .nd .ti{fill:var(--ink)}
+.fig-dark .nd .ag{fill:var(--tint)}
+.fig-dark .nd.gate rect{fill:var(--accent);stroke:var(--accent)}
+.fig-dark .lb{fill:var(--tint)}
+.fig-dark .lb.sub{fill:var(--ink-2)}
+.fig-dark .term rect{fill:var(--ink);stroke:var(--ink)}
+.fig-dark .term text{fill:var(--fg)}
+.fig-dark figcaption{color:var(--ink-2)}
+.fig-dark figcaption b{color:var(--ink)}
+
+/* ── 通用區塊 ───────────────────────────────────────────────────────── */
+.section{background:var(--panel);padding:clamp(46px,5.5vw,84px) clamp(18px,5vw,64px)}
 .section.alt{background:var(--panel-2)}
 .section-inner{max-width:var(--page-max);margin:0 auto}
-.section h2{font-family:var(--cjk);font-size:clamp(1.9rem,3.8vw,4.1rem);line-height:1.08;letter-spacing:-.045em;max-width:14ch}
-.section-intro{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.75;color:var(--fg-2);max-width:48ch;margin-top:16px}
-.micro-label{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--red);font-weight:800;margin-bottom:14px}
-.diagram{margin-top:44px;border:1px solid var(--line-hi);background:var(--panel-3);padding:clamp(16px,2.5vw,34px);overflow:hidden}
-.diagram-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
-.diagram-title b{font-size:var(--t-meta);letter-spacing:.09em;text-transform:uppercase}
-.diagram-title span{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dimmer)}
-.flow-node{background:var(--panel-2);border:1px solid var(--line-hi);min-width:0;padding:15px}
-.flow-node b{display:block;font-family:var(--cjk);font-size:var(--t-body);line-height:1.4}
-.flow-node small{display:block;font-family:var(--cjk);font-size:var(--t-micro);line-height:1.55;color:var(--dim);margin-top:6px}
-.flow-node.red{background:var(--red);border-color:var(--red);color:var(--flow-ink)}
-.flow-node.red small{color:rgba(248,250,249,.82)}
-.flow-node.danger{border-color:var(--red);background:#DCE9E8}
-.flow-node.dark{background:var(--bg)}
-.flow-arrow{display:grid;place-items:center;color:var(--red);font-size:1.2rem;font-weight:900;min-width:22px}
-.down-arrow{text-align:center;color:var(--red);font-size:1.3rem;font-weight:900;line-height:1;padding:8px 0}
+.micro-label{font-size:var(--s-label);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--accent);font-weight:800;margin-bottom:12px}
+.section h2{font-family:var(--cjk);font-size:clamp(1.7rem,2.9vw,2.9rem);line-height:1.16;letter-spacing:-.04em;max-width:20ch}
+.section-intro{font-family:var(--cjk);font-size:var(--s-prose);line-height:1.8;color:var(--fg-2);max-width:56ch;margin-top:14px}
 
-/* 圖一：傳統告警與閉環系統的差異。 */
-.gap-compare{display:grid;grid-template-columns:104px minmax(0,1fr);gap:1px;background:var(--line)}
-.gap-label{background:var(--bg);display:grid;place-items:center;padding:12px;font-size:var(--t-micro);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
-.gap-label.guardian{background:var(--red);color:var(--flow-ink);font-weight:800}
-.gap-lane{background:var(--panel);padding:18px;display:grid;grid-template-columns:minmax(120px,1fr) 30px minmax(120px,1fr) 30px minmax(150px,1.15fr) 30px minmax(130px,1fr);align-items:stretch}
-.gap-lane .manual{border-style:dashed}
-.gap-lane.guardian{background:var(--panel-2)}
-.gap-break{color:var(--red);font-size:1.35rem;font-weight:900}
-.gap-result{display:flex;align-items:center;gap:10px;margin-top:18px;padding:14px 16px;background:var(--bg);border-left:3px solid var(--red)}
-.gap-result b{font-family:var(--cjk);font-size:var(--t-body)}
-.gap-result span{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim)}
+/* ── 三個重點卡 ─────────────────────────────────────────────────────── */
+.points{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:36px;border:1px solid var(--line)}
+.point{background:var(--panel);padding:clamp(20px,2.2vw,30px);display:flex;flex-direction:column;gap:10px}
+.point .pn{font-family:var(--mono);font-size:var(--s-label);letter-spacing:.1em;color:var(--accent);font-weight:800}
+.point h3{font-family:var(--cjk);font-size:clamp(1.06rem,1.35vw,1.3rem);line-height:1.4;letter-spacing:-.02em}
+.point p{font-family:var(--cjk);font-size:var(--s-body);line-height:1.75;color:var(--fg-2)}
+.point .fact{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);font-family:var(--cjk);font-size:var(--s-meta);line-height:1.6;color:var(--dim)}
+.point .fact b{font-family:var(--mono);color:var(--accent);font-size:var(--s-body)}
 
-/* 圖二：資料先收斂成共同世界，再進入六 Agent 閉環。 */
-.sources{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line)}
-.source{background:var(--panel);padding:13px;text-align:center}
-.source b{font-size:var(--t-meta);display:block}
-.source small{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);display:block;margin-top:5px}
-.snapshot{background:var(--fg);color:var(--flow-ink);padding:16px 20px;display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center}
-.snapshot b{font-size:var(--t-body);letter-spacing:.06em}
-.snapshot span{font-family:var(--cjk);font-size:var(--t-meta)}
-.snapshot code{font-family:var(--mono);font-size:var(--t-micro)}
-.agent-loop{display:grid;grid-template-columns:repeat(11,minmax(18px,auto));align-items:stretch;margin-top:1px}
-.agent-loop .flow-node{padding:14px 11px}
-.agent-loop .flow-node b{font-size:var(--t-meta)}
-.agent-loop .flow-node small{font-size:var(--t-micro)}
-.loop-back{margin:12px 4.6% 0 4.6%;border:1px solid var(--red);border-top:0;min-height:40px;display:flex;align-items:flex-end;justify-content:center}
-.loop-back span{background:var(--panel-3);padding:0 12px;transform:translateY(8px);font-family:var(--cjk);font-size:var(--t-micro);color:var(--red)}
-.orchestrator-bar{margin-top:22px;background:var(--bg);border-left:3px solid var(--red);padding:14px 18px;display:grid;grid-template-columns:auto repeat(4,1fr);gap:16px;align-items:center}
-.orchestrator-bar b{font-size:var(--t-meta);letter-spacing:.08em}
-.orchestrator-bar span{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);text-align:center}
+/* ── 主圖：七步驟 ───────────────────────────────────────────────────── */
+.steps{list-style:none;margin-top:38px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line)}
+.step{background:var(--panel);display:grid;grid-template-columns:76px minmax(0,1fr);gap:0}
+.step:nth-child(even){background:var(--panel-2)}
+.step-no{display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:8px;border-right:1px solid var(--line);background:rgba(11,117,110,.05)}
+.step-no b{font-family:var(--mono);font-size:1.5rem;font-weight:800;color:var(--accent);line-height:1}
+.step-no i{flex:1;width:1px;background:var(--line-hi);min-height:12px}
+.step-body{padding:clamp(18px,2vw,26px) clamp(18px,2.2vw,30px);min-width:0}
+.step-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px}
+.step-head h3{font-family:var(--cjk);font-size:clamp(1.14rem,1.5vw,1.45rem);letter-spacing:-.025em;line-height:1.3}
+.step-head .en{font-family:var(--mono);font-size:var(--s-meta);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+.agent-chip{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:var(--s-label);letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--accent);border:1px solid var(--accent);padding:4px 9px;white-space:nowrap}
+.agent-chip.solid{background:var(--accent);color:var(--ink)}
+.agent-chip svg.ag{width:15px;height:15px}
+.say{font-family:var(--cjk);font-size:var(--s-prose);line-height:1.8;color:var(--fg);margin-top:12px;max-width:70ch}
+.say b{color:var(--accent-deep)}
+.io{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:16px}
+.io > div{background:var(--panel-3);padding:12px 14px}
+.io b{display:block;font-family:var(--cjk);font-size:var(--s-label);letter-spacing:.1em;color:var(--dimmer);text-transform:uppercase;margin-bottom:6px}
+.io span{display:block;font-family:var(--cjk);font-size:var(--s-body);line-height:1.65;color:var(--fg-2)}
+.io .out{background:var(--accent-soft)}
+.io .out b{color:var(--accent-deep)}
+.io .out span{color:var(--fg)}
+.rule{margin-top:14px;border-left:3px solid var(--accent);background:var(--bg);padding:11px 15px;font-family:var(--cjk);font-size:var(--s-body);line-height:1.7;color:var(--fg-2)}
+.rule b{color:var(--accent-deep)}
+.rule code{font-family:var(--mono);font-size:var(--s-meta);background:rgba(11,117,110,.1);padding:1px 5px}
+.loopback{background:var(--fg);color:var(--ink);padding:20px clamp(18px,2.2vw,30px);display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center}
+.loopback .lb{font-family:var(--mono);font-size:var(--s-label);letter-spacing:.1em;font-weight:800;color:var(--tint);white-space:nowrap}
+.loopback p{font-family:var(--cjk);font-size:var(--s-body);line-height:1.75;max-width:78ch}
+.loopback p b{color:var(--tint)}
 
-/* 圖三：控制路徑是實線，LLM 只在旁路產生說明。 */
-.control-map{display:grid;grid-template-columns:132px minmax(130px,1fr) 32px minmax(150px,1fr) 32px minmax(150px,1fr) 32px minmax(130px,1fr);grid-template-rows:auto 42px auto;align-items:center}
-.lane-tag{align-self:stretch;display:grid;place-items:center;background:var(--red);color:var(--flow-ink);font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;font-weight:800;padding:10px}
-.lane-tag.side{background:var(--bg);color:var(--dim);border:1px dashed var(--line-hi)}
-.control-map .side-link{height:42px;border-left:1px dashed var(--red);justify-self:center}
-.llm-sidecar{grid-column:2/9;display:grid;grid-template-columns:1fr 30px 1fr 30px 1fr;align-items:stretch}
-.llm-sidecar .flow-node{border-style:dashed}
-.ownership{display:grid;grid-template-columns:1fr auto 1fr;margin-top:20px;background:var(--line);gap:1px}
-.ownership > div{background:var(--panel);padding:16px;text-align:center}
-.ownership b{display:block;font-family:var(--cjk);font-size:var(--t-body)}
-.ownership small{display:block;font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);margin-top:5px}
-.ownership .not-equal{background:var(--red);color:var(--flow-ink);font-size:1.4rem;font-weight:900;display:grid;place-items:center}
+/* ── 表格（權限、LLM 界線、名詞）────────────────────────────────────── */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);margin-top:32px;border:1px solid var(--line)}
+.split > div{background:var(--panel);padding:clamp(20px,2.2vw,28px)}
+.split h3{font-family:var(--cjk);font-size:clamp(1.05rem,1.3vw,1.24rem);letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.split h3 .mk{font-family:var(--mono);font-size:1.1rem;font-weight:900;width:26px;height:26px;display:grid;place-items:center;flex:0 0 auto}
+.split .can .mk{background:var(--accent);color:var(--ink)}
+.split .cant .mk{background:var(--fg);color:var(--ink)}
+.split ul{list-style:none;margin-top:14px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line)}
+.split li{background:var(--panel-2);padding:11px 14px;font-family:var(--cjk);font-size:var(--s-body);line-height:1.7;color:var(--fg-2)}
+.split .cant li{background:var(--panel-3)}
+.split > div > p{font-family:var(--cjk);font-size:var(--s-meta);line-height:1.7;color:var(--dim);margin-top:14px}
 
-/* 圖四：安全決策樹，把三個 verdict 與驗證回路畫清楚。 */
-.tree-entry{max-width:260px;margin:0 auto}
-.tree-stem{width:1px;height:22px;background:var(--red);margin:0 auto}
-.tree-branches{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;position:relative;padding-top:22px}
-.tree-branches::before{content:"";position:absolute;top:0;left:16.66%;right:16.66%;border-top:1px solid var(--red)}
-.tree-branch{position:relative}
-.tree-branch::before{content:"";position:absolute;top:-22px;left:50%;height:22px;border-left:1px solid var(--red)}
-.verdict-head{padding:12px;text-align:center;background:var(--panel);border:1px solid var(--line-hi);font-size:var(--t-meta);letter-spacing:.08em;font-weight:800}
-.tree-branch.block .verdict-head{background:var(--red);border-color:var(--red);color:var(--flow-ink)}
-.branch-chain{margin-top:1px;display:grid;gap:1px;background:var(--line)}
-.branch-chain .flow-node{text-align:center;min-height:74px;display:flex;flex-direction:column;justify-content:center}
-.tree-converge{display:grid;grid-template-columns:1fr 40px 1fr;margin:22px auto 0;max-width:760px;align-items:center}
-.verify-loop{display:grid;grid-template-columns:minmax(150px,1fr) 32px minmax(150px,1fr) 32px minmax(150px,1fr);align-items:stretch;margin:22px auto 0;max-width:980px}
-.verify-fail{grid-column:1/-1;margin:12px auto 0;border:1px solid var(--red);padding:9px 18px;font-family:var(--cjk);font-size:var(--t-micro);color:var(--red);text-align:center}
+/* ── 案例時間軸 ─────────────────────────────────────────────────────── */
+.case{margin-top:34px;border:1px solid var(--line);background:var(--panel)}
+/* 「誰」欄多了圖示，欄寬跟著加寬，MAINTENANCE／VERIFICATION 才不會被擠出去。 */
+.case-row{display:grid;grid-template-columns:96px 156px minmax(0,1fr);border-top:1px solid var(--line)}
+.case-row:first-child{border-top:0}
+.case-row.head{background:var(--panel-3)}
+.case-row.head > div{font-family:var(--mono);font-size:var(--s-label);letter-spacing:.1em;text-transform:uppercase;color:var(--dimmer);font-weight:800;padding:11px 14px}
+.case-t{font-family:var(--mono);font-size:var(--s-body);font-weight:700;color:var(--accent);padding:15px 14px;border-right:1px solid var(--line);background:rgba(11,117,110,.045)}
+/* 「誰」欄掛同一組圖示：掃一眼就知道每一列是哪個 Agent 做的，而「現場主管」
+   那一列是實心人形，和上下的 Agent 列一眼分得開（「現場」是設備，不給圖示）。 */
+.case-who{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:var(--s-meta);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);padding:15px 14px;border-right:1px solid var(--line)}
+.case-who svg.ag{width:15px;height:15px}
+.case-what{padding:15px 16px;font-family:var(--cjk);font-size:var(--s-body);line-height:1.75;color:var(--fg-2);min-width:0}
+/* 只有開頭那一句是標題（區塊），句中的 <b> 仍是行內強調，不然會被切成好幾行。 */
+.case-what > b:first-child{display:block;font-size:var(--s-prose);color:var(--fg);margin-bottom:3px}
+.case-what b{color:var(--accent-deep)}
+.case-row.hot .case-what > b:first-child{color:var(--accent-deep)}
+.case-row.hot{background:var(--accent-soft)}
+.case-row.wait{background:var(--panel-2)}
+.case-row.pass{background:var(--fg)}
+.case-row.pass .case-t{color:var(--tint);background:transparent;border-color:rgba(248,250,249,.2)}
+.case-row.pass .case-who{color:var(--ink-3);border-color:rgba(248,250,249,.2)}
+.case-row.pass .case-what{color:var(--ink-2)}
+.case-row.pass .case-what b{color:var(--ink)}
+.note{font-family:var(--cjk);font-size:var(--s-meta);line-height:1.7;color:var(--dim);margin-top:14px}
 
-/* 圖五：同一案例的 swimlane 時序，不再用六張文字卡。 */
-.timeline-wrap{overflow-x:auto;border:1px solid var(--line-hi);margin-top:42px;background:var(--panel-3)}
-.timeline{min-width:980px;display:grid;grid-template-columns:132px repeat(6,1fr);gap:1px;background:var(--line)}
-.time-head{background:var(--bg);padding:11px;text-align:center;font-size:var(--t-micro);letter-spacing:.08em;color:var(--dimmer)}
-.lane-name{background:var(--panel);padding:14px;font-size:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center}
-.time-cell{background:var(--panel-2);min-height:76px;padding:9px}
-.event{height:100%;border-left:3px solid var(--line-hi);background:var(--panel-3);padding:10px;display:flex;flex-direction:column;justify-content:center}
-.event b{font-family:var(--cjk);font-size:var(--t-meta);line-height:1.4}
-.event small{font-family:var(--cjk);font-size:var(--t-micro);color:var(--dim);margin-top:4px;line-height:1.45}
-.event.hot{border-color:var(--red);background:#DCE9E8}
-.event.pass{background:var(--fg);color:var(--flow-ink);border-color:var(--red)}
-.event.pass small{color:#D9E2E5}
-.time-cell.empty{background:var(--panel)}
+/* ── 名詞對照 ───────────────────────────────────────────────────────── */
+.glossary{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);margin-top:32px;border:1px solid var(--line)}
+.term{background:var(--panel);padding:16px 18px}
+.term > b{display:block;font-family:var(--cjk);font-size:var(--s-prose);letter-spacing:-.01em}
+.term > b span{font-family:var(--mono);font-size:var(--s-meta);color:var(--dimmer);letter-spacing:.06em;margin-left:8px;text-transform:uppercase;font-weight:600}
+.term p{font-family:var(--cjk);font-size:var(--s-body);line-height:1.75;color:var(--fg-2);margin-top:6px}
+.term p b{color:var(--accent-deep)}
 
-.closing{background:var(--red);color:var(--flow-ink);padding:clamp(48px,7vw,92px) clamp(18px,5vw,72px)}
-.closing-inner{max-width:var(--page-max);margin:0 auto;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,.75fr);gap:50px;align-items:end}
-.closing h2{font-family:var(--cjk);font-size:clamp(2rem,4.5vw,4.8rem);line-height:1.05;letter-spacing:-.05em;max-width:13ch}
-.closing-side p{font-family:var(--cjk);font-size:var(--t-prose);line-height:1.7;max-width:35ch}
-.closing-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
-.closing-actions a{border-color:var(--flow-ink);color:var(--flow-ink)}
-.closing-actions a.primary{background:var(--flow-ink);color:var(--fg)}
-.closing-actions a:hover{background:var(--fg);color:var(--flow-ink)}
+/* ── Closing ────────────────────────────────────────────────────────── */
+.closing{background:var(--accent);color:var(--ink);padding:clamp(44px,6vw,80px) clamp(18px,5vw,64px)}
+.closing-inner{max-width:var(--page-max);margin:0 auto;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);gap:44px;align-items:end}
+.closing h2{font-family:var(--cjk);font-size:clamp(1.8rem,3.6vw,3.4rem);line-height:1.14;letter-spacing:-.045em;max-width:15ch}
+.closing-side p{font-family:var(--cjk);font-size:var(--s-prose);line-height:1.8;max-width:38ch}
+.closing-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.closing-actions a{border-color:var(--ink);color:var(--ink)}
+.closing-actions a.primary{background:var(--ink);color:var(--fg)}
+.closing-actions a:hover{background:var(--fg);color:var(--ink);border-color:var(--fg)}
 
-@media(max-width:1100px){
-  .hero{grid-template-columns:1fr;max-height:none}.hero-copy{min-height:510px}.hero-visual{min-height:52vw}
-  .hero-visual::after{background:linear-gradient(180deg,rgba(22,48,68,.14),transparent 35%)}
-  .gap-compare{grid-template-columns:1fr}.gap-label{justify-content:start}
-  .gap-lane{overflow-x:auto;grid-template-columns:160px 32px 160px 32px 190px 32px 160px}
-  .agent-loop{overflow-x:auto;grid-template-columns:170px 30px 170px 30px 170px 30px 170px 30px 170px 30px 170px}
-  .orchestrator-bar{grid-template-columns:1fr 1fr}
-  .control-map{overflow-x:auto;grid-template-columns:120px 160px 30px 180px 30px 180px 30px 160px}
-  .llm-sidecar{min-width:720px}
+@media(max-width:1080px){
+  .hero{grid-template-columns:1fr}.hero-visual{min-height:44vw}
+  .visual-caption{position:static;max-width:none;border-left:0;border-top:3px solid var(--accent)}
+  .points{grid-template-columns:1fr}
+  .io{grid-template-columns:1fr}
+  .split,.glossary{grid-template-columns:1fr}
+  .closing-inner{grid-template-columns:1fr;gap:28px}
 }
 @media(max-width:720px){
   html{scroll-behavior:auto}.top{position:static}.top .brand{width:100%;border-bottom:1px solid var(--line)}.top .fill{display:none}
-  .hero{min-height:auto}.hero-copy{min-height:480px;padding:40px 20px}.hero h2{font-size:clamp(2.35rem,12.5vw,3.8rem)}
-  .hero-visual{min-height:62vw}.visual-caption{position:static;border-left:0;border-top:3px solid var(--red);max-width:none}
-  .section{padding:48px 16px}.diagram{margin-top:32px;padding:12px}
-  .diagram-title{align-items:flex-start;flex-direction:column}.diagram-title span{max-width:35ch}
-  .sources{grid-template-columns:1fr 1fr}.sources .source:last-child{grid-column:1/-1}
-  .snapshot{grid-template-columns:1fr;gap:5px}.snapshot code{display:none}
-  .orchestrator-bar{grid-template-columns:1fr}.orchestrator-bar span{text-align:left}
-  .control-map{grid-template-columns:100px 150px 24px 170px 24px 170px 24px 150px}
-  .ownership{grid-template-columns:1fr}.ownership .not-equal{min-height:42px}
-  .tree-branches{grid-template-columns:1fr;padding-top:0}.tree-branches::before,.tree-branch::before{display:none}
-  .tree-converge{grid-template-columns:1fr}.tree-converge .flow-arrow{min-height:32px}
-  .verify-loop{grid-template-columns:1fr}.verify-loop .flow-arrow{min-height:32px}
-  .closing-inner{grid-template-columns:1fr}.closing-side{max-width:none}
+  .hero-copy{padding:36px 18px}
+  .section{padding:44px 16px}
+  .chain-band{padding:26px 16px}
+  .step{grid-template-columns:1fr}
+  .step-no{flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 18px;border-right:0;border-bottom:1px solid var(--line)}
+  .step-no i{display:none}
+  .step-body{padding:18px}
+  .agent-chip{margin-left:0}
+  .loopback{grid-template-columns:1fr;gap:10px}
+  .case-row{grid-template-columns:1fr}
+  .case-row.head{display:none}
+  .case-t{border-right:0;padding:11px 14px 2px}
+  .case-who{border-right:0;padding:0 14px 8px}
+  .case-what{padding:0 14px 15px}
+}
+/* 手機不把圖縮到看不清楚：給 SVG 一個可讀的最小寬度，讓它在 .fig 這個容器
+   裡橫向捲動。捲的是容器，不是頁面，document.scrollWidth 不會被撐開。 */
+@media(max-width:900px){
+  .fig{border:1px solid var(--line);padding:10px}
+  .fig svg{min-width:780px}
+  .fig-dark{border-color:rgba(248,250,249,.22)}
+  /* 提示與說明要跟著視窗，不要跟著圖捲走。 */
+  .fig::before{content:"← 左右捲動看完整張圖 →";display:block;position:sticky;left:0;
+    font-family:var(--cjk);font-size:var(--s-label);letter-spacing:.06em;color:var(--dimmer);margin-bottom:8px}
+  .fig-dark::before{color:var(--tint)}
+  .fig figcaption{position:sticky;left:0}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.hero-actions a,.closing-actions a{transition:none}}
 </style>
 </head>
 <body>
+<!-- ================= Agent 圖示（symbol 定義） =================
+     和戰情中心同一組造型：一次定義、全頁 <use> 引用，所以同一個 Agent 在
+     閉環總圖、七步驟的 chip 與案例時間軸上長得一樣。symbol 內不寫死顏色。 -->
+<svg class="ag-sprite" aria-hidden="true" focusable="false">
+  <!-- Monitoring：感測波形。看訊號本身，也看還沒破線但正在往上走的斜率。 -->
+  <symbol id="agi-monitor" viewBox="0 0 24 24"><path d="M2,15 H7 L10,4.5 L13.5,19.5 L16.5,15 H22"/></symbol>
+  <!-- Diagnosis：指紋。把觀測到的感測器指紋和故障指紋庫比餘弦相似度。 -->
+  <symbol id="agi-fingerprint" viewBox="0 0 24 24"><path d="M3,22 V13 L7,6 L12,3.2 L17,6 L21,13 V22"/><path d="M7.5,22 V14.5 L10,9.8 L12,8.8 L14,9.8 L16.5,14.5 V22"/><path d="M12,14 V22"/></symbol>
+  <!-- Production（影響）：知識圖節點。問題會往下游訂單與機台擴散。 -->
+  <symbol id="agi-impact" viewBox="0 0 24 24"><rect x="1.5" y="8.5" width="7" height="7"/><rect x="15.5" y="1.5" width="7" height="7"/><rect x="15.5" y="15.5" width="7" height="7"/><path d="M8.5,12 H12 V5 H15.5"/><path d="M12,12 V19 H15.5"/></symbol>
+  <!-- Production（規劃）：加權排名長條，最上面那條實心＝被選中的方案。 -->
+  <symbol id="agi-rank" viewBox="0 0 24 24"><rect x="2.5" y="3" width="18" height="4.6" fill="currentColor"/><rect x="2.5" y="9.7" width="12.5" height="4.6"/><rect x="2.5" y="16.4" width="7.5" height="4.6"/></symbol>
+  <!-- Safety + Policy：盾牌加一道橫槓。硬規則不是打分數，是直接擋。 -->
+  <symbol id="agi-shield" viewBox="0 0 24 24"><path d="M12,2 L21,5.5 V12 L12,22 L3,12 V5.5 Z"/><path d="M7,11.5 H17"/></symbol>
+  <!-- 人工核准：全套唯一的實心圖示，人形站在簽名底線上。這一格不是 Agent。 -->
+  <symbol id="agi-human" viewBox="0 0 24 24"><polygon points="12,1.5 16,4 16,8.5 12,11 8,8.5 8,4" fill="currentColor" stroke="none"/><polygon points="4.5,19 7,12.5 17,12.5 19.5,19" fill="currentColor" stroke="none"/><rect x="3" y="20.5" width="18" height="2" fill="currentColor" stroke="none"/></symbol>
+  <!-- Maintenance：扳手。真的動到設備、開維修工單的那一步。 -->
+  <symbol id="agi-wrench" viewBox="0 0 24 24"><path d="M8.5,2 H13.5 V12.5 H2.5 V7"/><path d="M13,12 L21.5,20.5" stroke-width="4"/></symbol>
+  <!-- Verification：量測標註。回頭量實際值，不是相信當初的預測。 -->
+  <symbol id="agi-measure" viewBox="0 0 24 24"><path d="M4,3 V21"/><path d="M20,3 V21"/><path d="M4,12 H20"/><polygon points="4,12 8.5,9.6 8.5,14.4" fill="currentColor" stroke="none"/><polygon points="20,12 15.5,9.6 15.5,14.4" fill="currentColor" stroke="none"/></symbol>
+</svg>
 <main class="system-page">
   <header class="top">
     <div class="brand"><h1 class="wordmark">FACTORY&nbsp;GUARDIAN<span class="reg">®</span></h1></div>
-    <div class="slot"><span class="k">Document</span><span class="v">AGENT SYSTEM</span></div>
+    <div class="slot"><span class="k">Document</span><span class="v">AGENT MECHANISM</span></div>
     <div class="fill"></div>
     <div class="slot"><span class="k">Console</span><span class="v"><a href="/">WAR ROOM</a></span></div>
     <div class="slot"><span class="k">Evidence</span><span class="v"><a href="/benchmark">BENCHMARK</a></span></div>
@@ -202,200 +346,427 @@ body::after{opacity:.012}
 
   <section class="hero" aria-labelledby="heroTitle">
     <div class="hero-copy">
-      <div>
-        <div class="hero-kicker">Agentic factory operations</div>
-        <h2 id="heroTitle">AI 不只回答問題，它要安全地完成處置</h2>
-        <p class="hero-lead">從異常到驗證，一張圖看懂多 Agent 如何把工廠帶回穩定。</p>
-      </div>
-      <div class="hero-actions"><a class="primary" href="#mechanism">看完整閉環</a><a href="/">執行互動 Demo</a></div>
+      <div class="hero-kicker">How it works</div>
+      <h2 id="heroTitle">機台出問題後，<br>系統會<em>自己把處置做完</em></h2>
+      <p class="hero-lead">但兩件事永遠不會省略：會動到設備的動作，一定先讓人簽名；做完之後，一定回頭量測有沒有真的變好。</p>
+      <div class="hero-actions"><a class="primary" href="#loop">看七個步驟</a><a href="/">執行互動 Demo</a></div>
     </div>
     <figure class="hero-visual">
       <img src="/static/agent-system-light.webp" width="1672" height="941" alt="明亮智慧工廠內的生產設備、青綠感測節點與安全作業區" fetchpriority="high">
-      <figcaption class="visual-caption">設備、訂單、拓撲、知識與現場影像，共同構成 Agent 看到的工廠。</figcaption>
+      <figcaption class="visual-caption">感測器、訂單、機台依賴、現場影像與維修手冊 —— 這五種資料合起來，就是 Agent 眼中的工廠。</figcaption>
     </figure>
   </section>
 
-  <section class="section" aria-labelledby="problemTitle">
+  <!-- 全站最重要的一張圖：七個步驟不是一條直線，是一個環。原本這裡是七個
+       文字方塊排成一列＋一段補述，直排讀起來像功能列表，看不出「驗證沒過會
+       退回重新規劃」這件事。 -->
+  <section class="chain-band" aria-label="整體流程圖">
+    <div class="chain-inner">
+      <div class="chain-title">整條流程，一張圖看完</div>
+      <figure class="fig fig-dark">
+        <svg viewBox="0 0 1180 424" preserveAspectRatio="xMidYMid meet" role="img"
+             aria-label="閉環流程圖：01 發現異常、02 確認原因、03 算出損失依序進入 04 模擬四種做法，接著 05 安全把關、人工核准、06 執行、07 量測驗證；驗證沒通過會退回 04 重新規劃，全部通過才結束。">
+          <g class="ed">
+            <path d="M256,54 H292"/><polygon points="288,49.4 296,54 288,58.6"/>
+            <path d="M526,54 H562"/><polygon points="558,49.4 566,54 558,58.6"/>
+            <path d="M681,82 V144"/><polygon points="676.4,140 681,148 685.6,140"/>
+            <path d="M796,180 H832"/><polygon points="828,175.4 836,180 828,184.6"/>
+            <path d="M951,208 V224"/><polygon points="946.4,220 951,228 955.6,220"/>
+            <path d="M951,268 V292"/><polygon points="946.4,288 951,296 955.6,288"/>
+            <path d="M836,324 H800"/><polygon points="804,319.4 796,324 804,328.6"/>
+          </g>
+          <g class="ed back">
+            <path d="M566,324 H116 V180 H562"/><polygon points="558,175.4 566,180 558,184.6"/>
+          </g>
+          <text class="lb" x="341" y="242" text-anchor="middle">07 沒通過 → 退回 04 重新規劃</text>
+          <text class="lb sub" x="341" y="266" text-anchor="middle">從當下狀態重新診斷、重估影響、重新排名；最多 2 次</text>
+          <g class="ed pass"><path d="M681,352 V370"/><polygon points="676.4,366 681,374 685.6,366"/></g>
+          <g class="term"><rect x="541.5" y="376.5" width="279" height="35"/>
+            <text x="681" y="399" text-anchor="middle">全部通過 → 閉環結束並寫入稽核</text></g>
+
+          <!-- 每一格右上角掛該 Agent 的職責圖示；閘門那一格是實心人形（人，不是 Agent）。 -->
+          <g class="nd"><rect x="26.5" y="26.5" width="229" height="55"/>
+            <text class="no" x="41" y="50">01</text><text class="ti" x="70" y="52">發現異常</text>
+            <use class="ic" href="#agi-monitor" x="219" y="35" width="22" height="22"/>
+            <text class="ag" x="41" y="72">MONITORING AGENT</text></g>
+          <g class="nd"><rect x="296.5" y="26.5" width="229" height="55"/>
+            <text class="no" x="311" y="50">02</text><text class="ti" x="340" y="52">確認原因</text>
+            <use class="ic" href="#agi-fingerprint" x="489" y="35" width="22" height="22"/>
+            <text class="ag" x="311" y="72">DIAGNOSIS AGENT</text></g>
+          <g class="nd"><rect x="566.5" y="26.5" width="229" height="55"/>
+            <text class="no" x="581" y="50">03</text><text class="ti" x="610" y="52">算出損失</text>
+            <use class="ic" href="#agi-impact" x="759" y="35" width="22" height="22"/>
+            <text class="ag" x="581" y="72">PRODUCTION AGENT</text></g>
+          <g class="nd"><rect x="566.5" y="152.5" width="229" height="55"/>
+            <text class="no" x="581" y="176">04</text><text class="ti" x="610" y="178">模擬四種做法</text>
+            <use class="ic" href="#agi-rank" x="759" y="161" width="22" height="22"/>
+            <text class="ag" x="581" y="198">PRODUCTION AGENT · DRY-RUN</text></g>
+          <g class="nd"><rect x="836.5" y="152.5" width="229" height="55"/>
+            <text class="no" x="851" y="176">05</text><text class="ti" x="880" y="178">安全把關</text>
+            <use class="ic" href="#agi-shield" x="1029" y="161" width="22" height="22"/>
+            <text class="ag" x="851" y="198">SAFETY AGENT · POLICY ENGINE</text></g>
+          <g class="nd gate"><rect x="841.5" y="228.5" width="219" height="39"/>
+            <use class="ic" href="#agi-human" x="854" y="238" width="20" height="20"/>
+            <text class="ti" x="957" y="253" text-anchor="middle">人工核准（具名簽核）</text></g>
+          <g class="nd"><rect x="836.5" y="296.5" width="229" height="55"/>
+            <text class="no" x="851" y="320">06</text><text class="ti" x="880" y="322">執行</text>
+            <use class="ic" href="#agi-wrench" x="1029" y="305" width="22" height="22"/>
+            <text class="ag" x="851" y="342">MAINTENANCE AGENT</text></g>
+          <g class="nd"><rect x="566.5" y="296.5" width="229" height="55"/>
+            <text class="no" x="581" y="320">07</text><text class="ti" x="610" y="322">量測驗證</text>
+            <use class="ic" href="#agi-measure" x="759" y="305" width="22" height="22"/>
+            <text class="ag" x="581" y="342">VERIFICATION AGENT</text></g>
+        </svg>
+        <figcaption>淡色實線是正常流向，青色虛線是<b>回饋路徑</b> —— 07 沒通過就退回 04，這條線才是這套系統和「會發告警的系統」真正的差別。六個 Agent 各守一段，中間那道實心方塊是唯一一定要人簽名的閘門。每一格右上角的圖示就是那一段的職責（波形＝監看訊號、指紋＝比對根因、節點圖＝下游影響、長條＝方案排名、盾牌＝安全阻擋、扳手＝執行、量測標註＝回頭量）；<b>實心人形只出現在人簽名那一格</b>。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="whyTitle">
     <div class="section-inner">
-      <div class="micro-label">The operating gap</div>
-      <h2 id="problemTitle">告警之後，決策鏈斷了</h2>
-      <p class="section-intro">傳統系統停在「哪裡有問題」。Factory Guardian 接手「原因、影響、方案、安全、結果」。</p>
-      <div class="diagram" role="img" aria-label="傳統告警流程與 Factory Guardian 閉環流程比較">
-        <div class="diagram-title"><b>Problem flow</b><span>相同異常，不同決策路徑</span></div>
-        <div class="gap-compare">
-          <div class="gap-label">傳統告警</div>
-          <div class="gap-lane">
-            <div class="flow-node"><b>設備異常</b><small>振動、溫度、電流</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node"><b>亮紅燈</b><small>只有門檻告警</small></div><div class="flow-arrow gap-break">×</div>
-            <div class="flow-node manual"><b>人工跨系統拼資料</b><small>手冊、MES、歷史、影像</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node danger"><b>反應慢或誤判</b><small>責任與結果難追蹤</small></div>
-          </div>
-          <div class="gap-label guardian">Guardian</div>
-          <div class="gap-lane guardian">
-            <div class="flow-node"><b>設備異常</b><small>多源觀測</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node"><b>Agent 協作</b><small>診斷、影響、規劃</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node red"><b>安全閘門</b><small>規則與人工核准</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node"><b>執行後驗證</b><small>失敗就重試或升級</small></div>
-          </div>
+      <div class="micro-label">Why it is different</div>
+      <h2 id="whyTitle">和「會發告警的系統」差在哪三件事</h2>
+      <p class="section-intro">傳統系統停在「哪裡有問題」，後面的原因、影響、方案、風險、結果，全部靠人跨系統拼。這裡把那段接起來，而且每一步都留下可稽核的紀錄。</p>
+      <div class="points">
+        <div class="point">
+          <div class="pn">POINT 01</div>
+          <h3>不是給建議，是把處置做完並負責</h3>
+          <p>從偵測到驗證是一條完整的閉環：找出根因、算出哪幾張訂單會遲、把可行做法一個一個在數位孿生裡試跑，再送進核准與執行。</p>
+          <div class="fact">一次事故產出 <b>4</b> 種候選方案，每種都先乾跑 <b>30</b> 分鐘看結果</div>
         </div>
-        <div class="gap-result"><b>要解決的問題</b><span>不是生成更多建議，而是把跨系統、跨角色的處置流程接成可驗證閉環。</span></div>
+        <div class="point">
+          <div class="pn">POINT 02</div>
+          <h3>會動到設備的事，一定要人簽名</h3>
+          <p>停機、降速、進維修屬於高風險動作，系統永遠只能「建議」，不能自己按下去。安全硬規則優先於方案分數 —— 分數再高，被擋就是出局。</p>
+          <div class="fact">「關閉安全保護」是 <b>forbidden</b>：沒有任何人或模型能核准</div>
+        </div>
+        <div class="point">
+          <div class="pn">POINT 03</div>
+          <h3>做完會量測，而不是相信自己的預測</h3>
+          <p>執行後在孿生體上再跑 30 分鐘，用實際量到的數字檢查兩件事：有沒有達到當初的預測，以及有沒有贏過「什麼都不做」。</p>
+          <div class="fact">全部檢查通過才算 <b>PASS</b>；失敗最多重試 <b>2</b> 次後升級人工</div>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="section alt" id="mechanism" aria-labelledby="mechanismTitle">
+  <section class="section alt" id="loop" aria-labelledby="loopTitle">
     <div class="section-inner">
-      <h2 id="mechanismTitle">六個 Agent，共用一個工廠世界</h2>
-      <p class="section-intro">所有角色讀取同一份 Snapshot。每一步輸出結構化結果，再交給下一個角色。</p>
-      <div class="diagram" role="img" aria-label="資料來源、Factory Snapshot、六個 Agent 與 Orchestrator 的完整閉環架構">
-        <div class="diagram-title"><b>Agent control loop</b><span>資料進來，決策出去，量測再回來</span></div>
-        <div class="sources">
-          <div class="source"><b>SENSORS</b><small>設備訊號</small></div>
-          <div class="source"><b>MES</b><small>訂單與產量</small></div>
-          <div class="source"><b>TOPOLOGY</b><small>機台依賴</small></div>
-          <div class="source"><b>VISION</b><small>人員與工安</small></div>
-          <div class="source"><b>KNOWLEDGE</b><small>手冊與歷史</small></div>
+      <div class="micro-label">The seven steps</div>
+      <h2 id="loopTitle">七個步驟，六個 Agent 各守一段</h2>
+      <p class="section-intro">每個 Agent 只做一件事，而且輸出是結構化的資料，不是一段話 —— 下一個 Agent 才接得住。以下每一步都寫明：它看到什麼、它怎麼判斷、它交出什麼。</p>
+
+      <ol class="steps">
+        <li class="step">
+          <div class="step-no"><b>01</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>發現異常</h3><span class="en">Detect</span><span class="agent-chip"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-monitor"/></svg>Monitoring Agent</span></div>
+            <p class="say">機台的振動、溫度、電流每分鐘都在被看。重點是<b>不只看有沒有超過紅線，也看它是不是正在往紅線走</b> —— 這是能提早處理的關鍵。</p>
+            <div class="io">
+              <div><b>看到什麼</b><span>每台機台的感測讀值，以及上下游機台的依賴關係</span></div>
+              <div><b>怎麼判斷</b><span>固定門檻、趨勢斜率、健康度衰減，三者任一成立就開事件</span></div>
+              <div class="out"><b>交出什麼</b><span>一筆異常事件：哪台機、哪個訊號、WARNING 還是 CRITICAL</span></div>
+            </div>
+            <p class="rule"><b>同時還有另一雙眼睛：</b>Safety Agent 在看現場影像。人員站進運轉中的危險區時，不必等設備先壞，直接觸發事件。</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>02</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>確認原因（證據不夠就先不動手）</h3><span class="en">Diagnose</span><span class="agent-chip"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-fingerprint"/></svg>Diagnosis Agent</span></div>
+            <p class="say">剛觸發告警時訊號還很微弱，這時候就去停機是不負責任的。所以系統會<b>先繼續看幾分鐘、累積證據</b>，等到有把握才往下走。</p>
+            <div class="io">
+              <div><b>看到什麼</b><span>各訊號的偏離量、維修手冊裡的故障指紋、該機台的歷史故障率</span></div>
+              <div><b>怎麼判斷</b><span>指紋相似度佔 75%（含聲音指紋）、歷史先驗 15%、文件檢索 10%</span></div>
+              <div class="out"><b>交出什麼</b><span>根因排名 + 信心度，每一項都附證據來源（哪個訊號、哪條 SOP）</span></div>
+            </div>
+            <p class="rule"><b>硬規則：</b>信心度低於 <code>65%</code> 就繼續觀察，最多等 <code>10 分鐘</code>；這段期間<b>不執行任何設備動作</b>，等待理由會寫進稽核軌跡。</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>03</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>算出這件事會賠多少</h3><span class="en">Impact</span><span class="agent-chip"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-impact"/></svg>Production Agent</span></div>
+            <p class="say">把「機台有問題」翻譯成廠長聽得懂的話：<b>哪幾張訂單會遲、遲多久、少做幾件</b>。沒有這一步，後面就沒辦法比較哪個方案划算。</p>
+            <div class="io">
+              <div><b>看到什麼</b><span>MES 訂單與交期、產線節拍、下游機台會不會因此斷料</span></div>
+              <div><b>怎麼判斷</b><span>以目前劣化速率往前推算，得到產能損失與訂單延遲</span></div>
+              <div class="out"><b>交出什麼</b><span>受影響訂單清單、最大交期延遲（分鐘）、預估產能損失（件）</span></div>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>04</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>把四種做法都先跑一次模擬</h3><span class="en">Plan / Dry-run</span><span class="agent-chip"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-rank"/></svg>Production Agent</span></div>
+            <p class="say">這裡<b>不是問 AI「你覺得該怎麼辦」</b>，而是把每個做法都丟進數位孿生跑 30 分鐘，看它實際會把產線帶到哪裡，再用固定公式排名。</p>
+            <div class="io">
+              <div><b>候選方案</b><span>A 維持全速｜B 降速延後維修｜C 立即停機維修｜D 轉單到備援機台</span></div>
+              <div><b>怎麼排名</b><span>六個準則加權：安全 30%、交期 22%、產能 20%、復原 12%、成本 8%、設備保全 8%</span></div>
+              <div class="out"><b>交出什麼</b><span>排名 + 每個準則各貢獻多少分，所以看得出「為什麼是這一案」</span></div>
+            </div>
+            <p class="rule"><b>紅線：</b>排名是純計算，<b>LLM 不參與</b>。所有輸入（產能、交期、復原時間、成本、殘餘風險）都來自模擬乾跑的結果，不是估的。</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>05</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>安全與權限把關</h3><span class="en">Safety &amp; Policy</span><span class="agent-chip solid"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-shield"/></svg>Safety Agent</span></div>
+            <p class="say">分數最高不代表可以做。方案要先過兩關：<b>安全硬規則</b>（這樣做會不會出事）和<b>權限規則</b>（這個動作誰有資格決定）。</p>
+            <div class="io">
+              <div><b>看到什麼</b><span>方案的模擬軌跡、現場影像、機台狀態、SOP 條文</span></div>
+              <div><b>怎麼判斷</b><span>規則逐條檢查，任一條觸發 BLOCK 就是硬限制，直接出局</span></div>
+              <div class="out"><b>交出什麼</b><span>裁決 ALLOW／APPROVAL／BLOCK ＋ 觸發的規則編號與 SOP 依據</span></div>
+            </div>
+            <p class="rule"><b>舉例：</b>影像判定人員還在危險區，而某方案讓機台繼續運轉 —— 不管它的產能分數多高，一律 <b>BLOCK</b>。</p>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>06</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>執行（下指令前再檢查一次）</h3><span class="en">Execute</span><span class="agent-chip"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-wrench"/></svg>Maintenance Agent</span></div>
+            <p class="say">取得核准之後，動作才真的下到設備，同時開出維修工單。<b>下指令的前一刻會重跑一次安全閘門</b> —— 因為從核准到執行之間，現場可能已經變了。</p>
+            <div class="io">
+              <div><b>看到什麼</b><span>核准紀錄（誰簽的、理由、逾時就不執行）＋ 執行當下的最新現場狀態</span></div>
+              <div><b>怎麼判斷</b><span>執行前安全閘門沒過就中止，不會硬做</span></div>
+              <div class="out"><b>交出什麼</b><span>每個動作的實際效果、維修工單編號、完整稽核紀錄</span></div>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <div class="step-no"><b>07</b><i></i></div>
+          <div class="step-body">
+            <div class="step-head"><h3>回頭量測，沒效就不算完</h3><span class="en">Verify</span><span class="agent-chip solid"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-measure"/></svg>Verification Agent</span></div>
+            <p class="say">執行後再跑 30 分鐘，用<b>實際量到的數字</b>檢查，而不是相信當初的預測。它同時回答兩個問題：預測準不準？以及，有做真的比沒做好嗎？</p>
+            <div class="io">
+              <div><b>比什麼（一）</b><span>實際產線達成率 ≥ 方案預測（容忍 12%）、實際延遲 ≤ 預測（容忍 15 分鐘）</span></div>
+              <div><b>比什麼（二）</b><span>贏過「什麼都不做」這個反事實基準；機台健康度沒有再往下掉</span></div>
+              <div class="out"><b>交出什麼</b><span>PASS／FAIL ＋ 每項檢查的預測值對實際值，全部通過才算 PASS</span></div>
+            </div>
+            <p class="rule"><b>為什麼不是跟「執行前」比：</b>設備劣化是進行式的，拿 30 分鐘後的結果去比事故剛發生的當下，任何方案都必然「變差」，那個比較沒有意義。</p>
+          </div>
+        </li>
+      </ol>
+
+      <!-- 「退回重新規劃」這件事本身已經畫在頁首那張閉環總圖上了；這裡只留
+           圖畫不出來的那一句：為什麼不能直接拿舊清單的第二名。 -->
+      <div class="loopback">
+        <div class="lb">FAIL → RETRY</div>
+        <p>回饋路徑<b>不是回到第 04 步拿舊清單的第二名</b> —— 第一個方案已經改變了工廠狀態，那份清單的預測全都過期了。所以是從<b>當下的狀態</b>重新診斷、重估影響、重新排名。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="authTitle">
+    <div class="section-inner">
+      <div class="micro-label">Who decides what</div>
+      <h2 id="authTitle">哪些動作系統可以自己做，哪些一定要人</h2>
+      <!-- 原本是一張七列四欄的表，讀者要自己在腦中把「風險」欄排序才看得出
+           分界。改畫成一條風險軸：越往右越危險，跨過那條線就一定要人簽名。 -->
+      <figure class="fig">
+        <svg viewBox="0 0 1140 392" preserveAspectRatio="xMidYMid meet" role="img"
+             aria-label="動作權限軸：左邊低風險動作（發出告警、開立維修工單、調整排程與訂單轉移）系統自動執行；跨過人類簽名線之後（降速運轉、停止機台、進入維修狀態）一定要人核准；最右邊的關閉安全保護沒有人能核准。">
+          <text class="gate-t" x="448" y="30" text-anchor="middle">↓ 這條線以右，一定要人簽名</text>
+          <text class="gate-t wall" x="890" y="30" text-anchor="middle">↓ 禁止線</text>
+          <path class="gate-l" d="M448,40 V336"/>
+          <path class="gate-l wall" d="M890,40 V336"/>
+
+          <g class="zn auto"><rect x="14" y="48" width="426" height="282"/></g>
+          <g class="zn appr"><rect x="456" y="48" width="426" height="282"/></g>
+          <g class="zn never"><rect x="898" y="48" width="228" height="282"/></g>
+
+          <g class="zt auto"><rect x="32" y="64" width="94" height="26"/>
+            <text x="42" y="82">系統自動</text></g>
+          <text class="zs" x="32" y="112">不改變設備狀態</text>
+          <g class="zt appr"><rect x="474" y="64" width="122" height="26"/>
+            <text x="484" y="82">一定要人核准</text></g>
+          <text class="zs" x="474" y="112">會改變機台控制狀態</text>
+          <g class="zt never"><rect x="916" y="64" width="122" height="26"/>
+            <text x="926" y="82">沒有人能核准</text></g>
+          <text class="zs ink" x="916" y="112">系統層級直接禁止</text>
+
+          <g class="ac"><rect x="32.5" y="128.5" width="389" height="41"/>
+            <text class="an" x="46" y="148">發出告警</text><text class="ae" x="46" y="163">RAISE ALERT</text></g>
+          <g class="ac"><rect x="32.5" y="176.5" width="389" height="41"/>
+            <text class="an" x="46" y="196">開立維修工單</text><text class="ae" x="46" y="211">CREATE WORK ORDER</text></g>
+          <g class="ac"><rect x="32.5" y="224.5" width="389" height="41"/>
+            <text class="an" x="46" y="244">調整排程 · 訂單轉移</text><text class="ae" x="46" y="259">UPDATE SCHEDULE · TRANSFER ORDER</text></g>
+          <text class="zf" x="32" y="294">只通知人或動排程，不動到機台；</text>
+          <text class="zf" x="32" y="314">實際維修還是人做。</text>
+
+          <g class="ac hot"><rect x="474.5" y="128.5" width="389" height="41"/>
+            <text class="an" x="488" y="148">降速運轉</text><text class="ae" x="488" y="163">DERATE MACHINE</text></g>
+          <g class="ac hot"><rect x="474.5" y="176.5" width="389" height="41"/>
+            <text class="an" x="488" y="196">停止機台</text><text class="ae" x="488" y="211">STOP MACHINE</text></g>
+          <g class="ac hot"><rect x="474.5" y="224.5" width="389" height="41"/>
+            <text class="an" x="488" y="244">進入維修狀態</text><text class="ae" x="488" y="259">START MAINTENANCE</text></g>
+          <text class="zf" x="474" y="294">必須有具名核准與理由，逾時不執行；</text>
+          <text class="zf" x="474" y="314">系統只能提出建議與依據，按下去的是人。</text>
+
+          <g class="ac stop"><rect x="916.5" y="128.5" width="191" height="41"/>
+            <text class="an" x="930" y="148">關閉安全保護</text><text class="ae" x="930" y="163">SAFETY OVERRIDE</text></g>
+          <text class="zf ink" x="916" y="294">沒有例外：不存在</text>
+          <text class="zf ink" x="916" y="314">「為了產量先關掉」。</text>
+
+          <g class="axis"><path d="M14,356 H1112"/><polygon points="1112,350.4 1126,356 1112,361.6"/>
+            <text x="14" y="380">風險低</text><text x="1126" y="380" text-anchor="end">風險高 → 禁止</text></g>
+        </svg>
+        <figcaption>這不是模型自己判斷的，而是一張寫死在 <b>Policy Engine</b> 裡的權限表。任何方案在執行前都要對照它，紀錄同樣寫進稽核軌跡。</figcaption>
+      </figure>
+
+      <div class="split">
+        <div class="can">
+          <h3><span class="mk">✓</span>LLM 可以做的事</h3>
+          <ul>
+            <li>把散在各處的證據整理成人看得懂的脈絡</li>
+            <li>解釋這個排名為什麼是這樣、風險在哪</li>
+            <li>寫交班摘要與稽核敘述</li>
+          </ul>
+          <p>用途是讓人快速看懂發生什麼事 —— 它是解釋者。</p>
         </div>
-        <div class="down-arrow">↓</div>
-        <div class="snapshot"><b>FACTORY SNAPSHOT</b><span>Agent 唯一看得到的共同世界，不含故障 Ground Truth</span><code>TICK / STATE / EVIDENCE</code></div>
-        <div class="down-arrow">↓</div>
-        <div class="agent-loop">
-          <div class="flow-node"><b>MONITOR</b><small>發現異常</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>DIAGNOSE</b><small>根因信心度</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>IMPACT</b><small>產量與交期</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>PLAN</b><small>乾跑與排名</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node red"><b>SAFETY</b><small>政策裁決</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>VERIFY</b><small>量測結果</small></div>
-        </div>
-        <div class="loop-back"><span>驗證失敗 → 替代方案 → 重新執行</span></div>
-        <div class="orchestrator-bar">
-          <b>ORCHESTRATOR</b>
-          <span>證據不足：繼續觀察</span>
-          <span>高風險：等待核准</span>
-          <span>驗證失敗：重試方案</span>
-          <span>超過上限：升級人工</span>
+        <div class="cant">
+          <h3><span class="mk">✕</span>LLM 不能做的事</h3>
+          <ul>
+            <li>更動任何一個分數或方案排名</li>
+            <li>決定 ALLOW / APPROVAL / BLOCK</li>
+            <li>直接對設備下指令，或覆寫 Safety 的判定</li>
+          </ul>
+          <p>就算 LLM 完全離線，控制路徑照樣跑得完；少的只有敘述。</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section" aria-labelledby="boundaryTitle">
+  <section class="section alt" aria-labelledby="guardTitle">
     <div class="section-inner">
-      <div class="micro-label">Decision boundary</div>
-      <h2 id="boundaryTitle">LLM 負責解釋，不握方向盤</h2>
-      <p class="section-intro">實線是設備控制路徑。虛線是 LLM 的敘述旁路，無法越過政策閘門。</p>
-      <div class="diagram" role="img" aria-label="確定性控制核心與 LLM 說明旁路的權責分流圖">
-        <div class="diagram-title"><b>Authority map</b><span>能說明，不等於能執行</span></div>
-        <div class="control-map">
-          <div class="lane-tag">控制主路徑</div>
-          <div class="flow-node"><b>觀測證據</b><small>Snapshot</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>數值核心</b><small>根因排名、方案分數</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node red"><b>Policy Engine</b><small>ALLOW / APPROVAL / BLOCK</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>設備動作</b><small>核准後才執行</small></div>
+      <div class="micro-label">Safety verdicts</div>
+      <h2 id="guardTitle">安全把關只有三種結果</h2>
+      <p class="section-intro">每個候選方案都會拿到其中一種裁決。這三種結果決定它能不能往下走，而且優先於方案分數。</p>
+      <!-- 三種裁決本來就是一棵決策樹，不是三張並列的卡。畫成分支圖之後，
+           「哪一問先問、哪一條路走到哪裡」不用再靠文字描述。 -->
+      <figure class="fig">
+        <svg viewBox="0 0 1140 404" preserveAspectRatio="xMidYMid meet" role="img"
+             aria-label="安全裁決決策圖：候選方案先問有沒有觸發安全硬規則，是就 BLOCK 直接出局；否則再問會不會改變機台控制狀態，是就 APPROVAL 等人具名核准，否則 ALLOW 直接放行。">
+          <g class="ed">
+            <path d="M150,184 H172"/><polygon points="168,179.4 176,184 168,188.6"/>
+            <path d="M285,158 V52 H712"/><polygon points="708,47.4 716,52 708,56.6"/>
+            <path d="M390,184 H422"/><polygon points="418,179.4 426,184 418,188.6"/>
+            <path d="M670,184 H712"/><polygon points="708,179.4 716,184 708,188.6"/>
+            <path d="M550,210 V316 H712"/><polygon points="708,311.4 716,316 708,320.6"/>
+          </g>
+          <text class="yn" x="295" y="122">是</text>
+          <text class="yn" x="398" y="176">否</text>
+          <text class="yn" x="678" y="176">是</text>
+          <text class="yn" x="560" y="248">否</text>
 
-          <div></div><div class="side-link"></div><div></div><div class="side-link"></div><div></div><div class="side-link"></div><div></div><div></div>
+          <g class="nd"><rect x="20.5" y="158.5" width="129" height="51"/>
+            <text class="ti" x="85" y="190" text-anchor="middle">候選方案</text></g>
+          <g class="nd ask"><rect x="176.5" y="158.5" width="209" height="51"/>
+            <text class="ti" x="281" y="190" text-anchor="middle">觸發安全硬規則？</text></g>
+          <g class="nd ask"><rect x="426.5" y="158.5" width="239" height="51"/>
+            <text class="ti" x="546" y="190" text-anchor="middle">會改變機台控制狀態？</text></g>
 
-          <div class="lane-tag side">LLM 旁路</div>
-          <div class="llm-sidecar">
-            <div class="flow-node"><b>整理證據</b><small>轉成人能讀的脈絡</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node"><b>解釋決策</b><small>說明排名與風險</small></div><div class="flow-arrow">→</div>
-            <div class="flow-node"><b>產生摘要</b><small>交班與稽核敘述</small></div>
-          </div>
-        </div>
-        <div class="ownership">
-          <div><b>LLM 輸出</b><small>文字，不改動分數與裁決</small></div>
-          <div class="not-equal">≠</div>
-          <div><b>設備權限</b><small>只屬於規則、核准與執行層</small></div>
-        </div>
-      </div>
-    </div>
-  </section>
+          <g class="vd block"><rect x="716.5" y="24.5" width="209" height="55"/>
+            <text class="vt" x="736" y="49">BLOCK</text><text class="vs" x="736" y="69">直接出局，不能討論</text></g>
+          <text class="cap" x="716" y="104">不進排名、不被核准、不被執行，LLM 無權覆寫。</text>
+          <text class="cap eg" x="716" y="126">例：人員仍在危險區，而方案讓機台繼續運轉。</text>
 
-  <section class="section alt" aria-labelledby="safetyTitle">
-    <div class="section-inner">
-      <h2 id="safetyTitle">每個方案都先過安全決策樹</h2>
-      <p class="section-intro">BLOCK 立即結束；APPROVAL 等人；只有通過的方案能進入執行與驗證。</p>
-      <div class="diagram" role="img" aria-label="方案通過 Safety Agent、Policy Engine、人工核准與 Verification Agent 的決策樹">
-        <div class="diagram-title"><b>Safety decision tree</b><span>執行之前治理，執行之後驗證</span></div>
-        <div class="tree-entry flow-node dark"><b>候選方案</b><small>動作、預測、風險、SOP</small></div>
-        <div class="tree-stem"></div>
-        <div class="tree-entry flow-node red"><b>SAFETY + POLICY</b><small>硬性規則優先於方案分數</small></div>
-        <div class="tree-stem"></div>
-        <div class="tree-branches">
-          <div class="tree-branch block">
-            <div class="verdict-head">BLOCK</div>
-            <div class="branch-chain"><div class="flow-node"><b>方案出局</b><small>LLM 無權覆寫</small></div></div>
-          </div>
-          <div class="tree-branch">
-            <div class="verdict-head">APPROVAL</div>
-            <div class="branch-chain"><div class="flow-node"><b>人工核准</b><small>具名、理由、逾時不執行</small></div><div class="flow-node"><b>核准後放行</b></div></div>
-          </div>
-          <div class="tree-branch">
-            <div class="verdict-head">ALLOW</div>
-            <div class="branch-chain"><div class="flow-node"><b>直接放行</b><small>低風險且符合 SOP</small></div></div>
-          </div>
-        </div>
-        <div class="tree-converge">
-          <div class="flow-node"><b>核准方案</b><small>保留政策與核准紀錄</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>EXECUTE</b><small>套用設備處置</small></div>
-        </div>
-        <div class="verify-loop">
-          <div class="flow-node"><b>實際量測</b><small>產量、延遲、健康度</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node red"><b>VERIFY</b><small>實際 vs 預測 vs 不處置</small></div><div class="flow-arrow">→</div>
-          <div class="flow-node"><b>PASS</b><small>閉環完成並寫入稽核</small></div>
-          <div class="verify-fail">FAIL → 停止自動處置 → 重試替代方案或升級人工</div>
-        </div>
-      </div>
+          <g class="vd appr"><rect x="716.5" y="156.5" width="209" height="55"/>
+            <text class="vt" x="736" y="181">APPROVAL</text><text class="vs" x="736" y="201">等人簽名才能走</text></g>
+          <text class="cap" x="716" y="236">要有具名核准與核准理由，逾時未核准就不執行。</text>
+          <text class="cap eg" x="716" y="258">例：降速運轉、停機維修、進入維修狀態。</text>
+
+          <g class="vd allow"><rect x="716.5" y="288.5" width="209" height="55"/>
+            <text class="vt" x="736" y="313">ALLOW</text><text class="vs" x="736" y="333">低風險，直接放行</text></g>
+          <text class="cap" x="716" y="368">符合 SOP 且不動到設備控制狀態，仍然完整記錄。</text>
+          <text class="cap eg" x="716" y="390">例：發告警、開工單、調整排程、訂單轉移。</text>
+        </svg>
+        <figcaption>順序是有意義的：<b>先問安全，再問權限</b>。第一問答「是」就結束了，方案連進入排名的機會都沒有。</figcaption>
+      </figure>
+      <p class="note">補充：需要人核准，代表的是「這件事該有人負責」這個治理程序，不代表這個方案比較危險。真正的危險由 BLOCK 表達，而 BLOCK 是硬限制。</p>
     </div>
   </section>
 
   <section class="section" aria-labelledby="caseTitle">
     <div class="section-inner">
-      <h2 id="caseTitle">軸承劣化案例，跨 Agent 時序</h2>
-      <p class="section-intro">同一事件沿時間向右推進。每一列只顯示該角色真正產生的輸出。</p>
-      <div class="timeline-wrap" role="img" aria-label="軸承劣化從感測訊號到驗證完成的 Agent 時序圖">
-        <div class="timeline">
-          <div class="time-head">ROLE / TIME</div><div class="time-head">T0 觀測</div><div class="time-head">T1 偵測</div><div class="time-head">T2 診斷</div><div class="time-head">T3 規劃</div><div class="time-head">T4 治理</div><div class="time-head">T5 驗證</div>
-
-          <div class="lane-name">Factory</div>
-          <div class="time-cell"><div class="event hot"><b>振動持續上升</b><small>健康度開始下降</small></div></div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event pass"><b>量測新狀態</b><small>產線恢復穩定</small></div></div>
-
-          <div class="lane-name">Monitoring</div>
-          <div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event hot"><b>建立 WARNING</b><small>門檻 + 趨勢 + 健康度</small></div></div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div>
-
-          <div class="lane-name">Diagnosis</div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event"><b>軸承劣化</b><small>不足 65% 就繼續觀察</small></div></div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div>
-
-          <div class="lane-name">Production</div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event"><b>追出訂單影響</b><small>產量與交期風險</small></div></div>
-          <div class="time-cell"><div class="event"><b>乾跑替代方案</b><small>降載、維修、轉單</small></div></div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div>
-
-          <div class="lane-name">Safety</div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event hot"><b>政策裁決</b><small>高風險動作等核准</small></div></div>
-          <div class="time-cell empty"></div>
-
-          <div class="lane-name">Verification</div>
-          <div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div><div class="time-cell empty"></div>
-          <div class="time-cell"><div class="event pass"><b>VERIFIED</b><small>實際結果符合預測</small></div></div>
+      <div class="micro-label">Walkthrough</div>
+      <h2 id="caseTitle">跑一次真的長這樣：M-01 軸承劣化</h2>
+      <p class="section-intro">同一個事件，從第一個異常讀值到驗證通過的完整時間軸。注意第 2～4 分鐘那段 —— 系統知道自己還不夠有把握，所以選擇繼續看，而不是急著動設備。</p>
+      <div class="case">
+        <div class="case-row head"><div>時間</div><div>誰</div><div>發生什麼</div></div>
+        <div class="case-row hot">
+          <div class="case-t">T+0</div><div class="case-who">現場</div>
+          <div class="case-what"><b>振動開始往上走</b>M-01 振動由 2.8 上升到 4.2 mm/s，健康度同步下滑 —— 還沒到危險門檻，但趨勢明確。</div>
         </div>
+        <div class="case-row">
+          <div class="case-t">T+1</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-monitor"/></svg>Monitoring</div>
+          <div class="case-what"><b>開出 WARNING 事件</b>不是靠單一門檻，是趨勢斜率與健康度衰減一起觸發。</div>
+        </div>
+        <div class="case-row wait">
+          <div class="case-t">T+2 – T+4</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-fingerprint"/></svg>Diagnosis</div>
+          <div class="case-what"><b>信心度只有 0.52，選擇繼續觀察</b>未達 0.65 門檻，這三分鐘內<b>沒有下任何設備動作</b>，等待理由逐筆寫進稽核軌跡。</div>
+        </div>
+        <div class="case-row hot">
+          <div class="case-t">T+5</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-fingerprint"/></svg>Diagnosis</div>
+          <div class="case-what"><b>信心度到 0.78：軸承劣化</b>證據三項齊備 —— 振動主頻符合故障指紋、聲學指紋吻合、手冊 SOP 對得上。</div>
+        </div>
+        <div class="case-row">
+          <div class="case-t">T+5</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-impact"/></svg>Production</div>
+          <div class="case-what"><b>算出影響：2 張訂單受衝擊</b>最大交期延遲約 96 分鐘，並推估維持現況 30 分鐘的產能損失。</div>
+        </div>
+        <div class="case-row">
+          <div class="case-t">T+6</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-rank"/></svg>Production</div>
+          <div class="case-what"><b>四個方案各乾跑 30 分鐘</b>加權後 PLAN-B（降速延後維修）分數最高：保住大部分產能，同時止住劣化。</div>
+        </div>
+        <div class="case-row hot">
+          <div class="case-t">T+6</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-shield"/></svg>Safety</div>
+          <div class="case-what"><b>裁決 APPROVAL_REQUIRED</b>降速屬於高風險動作 —— 系統把方案、預測與依據送出，停下來等人。</div>
+        </div>
+        <div class="case-row">
+          <div class="case-t">T+7</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-human"/></svg>現場主管</div>
+          <div class="case-what"><b>核准（具名 ＋ 理由）</b>核准紀錄進稽核軌跡；若逾時未回應，這個方案就不會執行。</div>
+        </div>
+        <div class="case-row">
+          <div class="case-t">T+7</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-wrench"/></svg>Maintenance</div>
+          <div class="case-what"><b>執行降速並派工</b>下指令前重跑一次安全閘門確認現場沒變，然後開出維修工單。</div>
+        </div>
+        <div class="case-row pass">
+          <div class="case-t">T+37</div><div class="case-who"><svg class="ag" aria-hidden="true" focusable="false"><use href="#agi-measure"/></svg>Verification</div>
+          <div class="case-what"><b>量測 30 分鐘後：PASS</b>實際產能達成率達到方案預測、訂單延遲沒有超標、贏過「什麼都不做」、健康度止跌 —— 全部通過，閉環完成並寫入稽核。</div>
+        </div>
+      </div>
+      <p class="note">上表為 Demo 情境的示意數值；門檻（0.65 信心度、30 分鐘乾跑與量測窗、12% / 15 分鐘容忍度）則是系統實際採用的設定。</p>
+    </div>
+  </section>
+
+  <section class="section alt" aria-labelledby="termTitle">
+    <div class="section-inner">
+      <div class="micro-label">Glossary</div>
+      <h2 id="termTitle">頁面上的名詞，一句話解釋</h2>
+      <div class="glossary">
+        <div class="term"><b>快照 <span>Snapshot</span></b><p>Agent 唯一看得到的工廠狀態。裡面<b>不含正確答案</b> —— 模擬器知道真正的故障是什麼，但不會告訴 Agent，否則診斷能力就是假的。</p></div>
+        <div class="term"><b>乾跑 <span>Dry-run</span></b><p>在數位孿生裡先把一個方案跑 30 分鐘，看它會把產線帶到什麼結果，再決定要不要真的執行。</p></div>
+        <div class="term"><b>信心度 <span>Confidence</span></b><p>觀測到的異常樣態和手冊裡故障指紋的吻合程度，0 到 1。低於 0.65 系統就不動設備。</p></div>
+        <div class="term"><b>故障指紋 <span>Fault signature</span></b><p>某種故障會在各個訊號上留下的特定形狀，例如軸承劣化＝振動先漲、溫度慢漲、電流微升。比對的就是這個形狀，不是單一數值。</p></div>
+        <div class="term"><b>政策引擎 <span>Policy Engine</span></b><p>寫死的權限規則表，決定一個動作可以自動、需要核准、還是永遠禁止。它是規則，不是模型。</p></div>
+        <div class="term"><b>反事實基準 <span>Counterfactual</span></b><p>「如果什麼都不做會怎樣」。用它來證明系統的介入真的有價值，而不只是「事後看起來還行」。</p></div>
+        <div class="term"><b>稽核軌跡 <span>Audit trail</span></b><p>每一次判斷、裁決、核准、執行與驗證的完整紀錄，包含依據與時間，事後可以逐筆追查。</p></div>
+        <div class="term"><b>數位孿生 <span>Digital Twin</span></b><p>工廠的模擬體，同時扮演兩個角色：讓方案先在裡面試跑，以及在執行後提供真實量測結果供驗證。</p></div>
       </div>
     </div>
   </section>
 
   <section class="closing" aria-labelledby="closingTitle">
     <div class="closing-inner">
-      <h2 id="closingTitle">看懂流程，再看它真的跑一次</h2>
+      <h2 id="closingTitle">看懂流程了，接著看它真的跑一次</h2>
       <div class="closing-side">
-        <p>前往戰情中心，逐步展開每個 Agent 的輸入、計算、裁決與結果。</p>
+        <p>戰情中心會逐步展開每個 Agent 的輸入、計算、裁決與驗證結果，包含核准那一刻停下來等人的畫面。</p>
         <div class="closing-actions"><a class="primary" href="/">執行 Demo</a><a href="/benchmark">查看 Benchmark</a></div>
       </div>
     </div>

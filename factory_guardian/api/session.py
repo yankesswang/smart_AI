@@ -173,6 +173,10 @@ class DemoSession:
             self.live["detect"] = payload
         self._push(stage, payload)
 
+    def publish(self, stage: str, payload: dict[str, Any]) -> None:
+        """讓 API 層推送非閉環事件到事件串流（例如雲端鏈路狀態變更）。"""
+        self._push(stage, payload)
+
     def _push(self, stage: str, payload: dict[str, Any]) -> None:
         with self._lock:
             self.seq += 1

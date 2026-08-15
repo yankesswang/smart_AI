@@ -15,6 +15,18 @@ from typing import Any, Iterable
 
 
 # --------------------------------------------------------------------------------------
+# 顯示名稱
+# --------------------------------------------------------------------------------------
+def plain_name(name: str) -> str:
+    """從 ``"Machine A｜CNC 主要加工機"`` 這種「代號｜白話」格式取出白話那一半。
+
+    白話名稱只在這一個地方推導。前端不切字串是刻意的：切字串的問題不在於難寫，
+    而在於每個渲染點都要記得切 —— 漏掉一處，畫面上就冒出一個沒人看得懂的代號。
+    """
+    return name.split("｜")[-1].strip() or name.strip()
+
+
+# --------------------------------------------------------------------------------------
 # 列舉
 # --------------------------------------------------------------------------------------
 class MachineKind(str, Enum):
@@ -150,6 +162,18 @@ class Machine:
     repair_min: float = 40.0
     # 每小時運轉成本（NTD）
     hourly_cost_ntd: float = 900.0
+    # 額定電力需求（kW）：機台在「訊號規格的額定電流」下的實際電力需求。
+    # 能源模型用它把感測器電流換算成功率（P = rated_power_kw × I / I_nominal），
+    # 所以它必須和 signals 裡 current 的 nominal 對應同一個工作點。
+    # 詳見 twin/energy.py —— 這是競賽用假設值，真實導入時由電表量測取代。
+    rated_power_kw: float = 0.0
+    # 白話短名（例：「主要加工機」）。Dashboard 以它當主標題、machine_id 退為輔助標籤：
+    # 第一次看畫面的人不必先背 M-A / M-B / M-C，追細節的人仍指得回代號。
+    short_name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.short_name or plain_name(self.name)
 
     def signal(self, name: str) -> SignalSpec | None:
         for spec in self.signals:
@@ -164,6 +188,12 @@ class Product:
     name: str
     # 需要經過的機台階段：每個階段是可互相替代的機台集合
     routing: tuple[tuple[str, ...], ...] = ()
+    # 白話短名（例：「精密軸承座」）。理由同 Machine.short_name。
+    short_name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.short_name or plain_name(self.name)
 
 
 @dataclass
@@ -200,6 +230,56 @@ class Order:
 # --------------------------------------------------------------------------------------
 # Simulator 快照（Agent 可見的世界）
 # --------------------------------------------------------------------------------------
+@dataclass(frozen=True)
+class AcousticObservation:
+    """機台麥克風的一格觀測（規格 §4.4 的「機器聲音」模態）。
+
+    ⚠️ **合成資料**：本平台的聲學指標由 Digital Twin 既有的振動／轉速／電流物理推導，
+    不是真實錄音，也不是用真實錄音生成的。``synthetic`` 欄位常駐為 ``True``，
+    與 Sensor / Orders / Manual / History 的標示方式一致。
+
+    偵測器本身的有效性另外用**外部真實工業錄音**驗證（DCASE2020 Task2 / MIMII pump），
+    那份驗證與本物件沒有任何資料流往來 —— 見 ``docs/acoustic_validation.md``。
+
+    四個指標的定義與物理意義見 ``acoustics/signatures.py``。
+    """
+
+    machine_id: str
+    sensor_id: str                  # 例如 "MIC-A"
+    sample_rate_hz: int
+    window_s: float
+    spl_db: float                   # 整體音壓級
+    high_band_ratio: float          # 2–8 kHz 能量佔比
+    tonal_ratio: float              # 純音（諧波）能量佔比
+    crest_factor_db: float          # 峰值 / RMS，衝擊性
+    synthetic: bool = True
+    provenance: str = "synthetic-derived-from-vibration-physics"
+
+    @property
+    def indicators(self) -> dict[str, float]:
+        return {
+            "spl_db": self.spl_db,
+            "high_band_ratio": self.high_band_ratio,
+            "tonal_ratio": self.tonal_ratio,
+            "crest_factor_db": self.crest_factor_db,
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "machine_id": self.machine_id,
+            "sensor_id": self.sensor_id,
+            "sample_rate_hz": self.sample_rate_hz,
+            "window_s": round(self.window_s, 2),
+            "spl_db": round(self.spl_db, 2),
+            "high_band_ratio": round(self.high_band_ratio, 4),
+            "tonal_ratio": round(self.tonal_ratio, 4),
+            "crest_factor_db": round(self.crest_factor_db, 2),
+            "synthetic": self.synthetic,
+            "provenance": self.provenance,
+            "note": "SYNTHETIC DEMO AUDIO — 由振動物理推導的合成音訊特徵，非真實錄音。",
+        }
+
+
 @dataclass
 class MachineSnapshot:
     machine_id: str
@@ -216,6 +296,15 @@ class MachineSnapshot:
     # 感測器讀值會掉到接近零，那不是異常，是「沒在跑」——
     # 拿運轉中的門檻去判讀它，會把一台正在被修的機器一直判成 CRITICAL。
     online: bool = True
+    # 麥克風觀測（合成）。只有裝了麥克風的機台才有，其餘為 None。
+    acoustics: AcousticObservation | None = None
+    # 白話短名。留空時由 name 推導，所以快照永遠帶得出一個可以直接顯示的名字，
+    # 前端不必自己切「Machine A｜CNC 主要加工機」這種字串。
+    short_name: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.short_name or plain_name(self.name)
 
     @property
     def worst_band(self) -> SignalBand:
@@ -234,6 +323,7 @@ class MachineSnapshot:
         return {
             "machine_id": self.machine_id,
             "name": self.name,
+            "short_name": self.display_name,
             "state": self.state.value,
             "online": self.online,
             "health": round(self.health, 1),
@@ -243,6 +333,7 @@ class MachineSnapshot:
             "worst_band": self.worst_band.value,
             "maintenance_remaining_min": round(self.maintenance_remaining_min, 1),
             "readings": {k: v.to_dict() for k, v in self.readings.items()},
+            "acoustics": self.acoustics.to_dict() if self.acoustics else None,
         }
 
 
@@ -373,6 +464,10 @@ class Diagnosis:
     weights: dict[str, float] = field(default_factory=dict)        # 三個訊號的權重
     thresholds: dict[str, float] = field(default_factory=dict)     # 訊號強度的兩個門檻
     observations: list[dict[str, Any]] = field(default_factory=list)  # 每個訊號的觀測值與偏離量
+    # 聲音模態的推理明細（指標、偏離量、閘門開度、實際生效的權重）。
+    # 刻意獨立於 observations：observations 是「指紋餘弦的輸入向量」，
+    # 混進聲學指標會讓 signal_strength 與畫面上列的東西對不起來。
+    acoustics: dict[str, Any] = field(default_factory=dict)
 
     @property
     def top(self) -> RootCauseCandidate | None:
@@ -391,6 +486,7 @@ class Diagnosis:
             "weights": self.weights,
             "thresholds": self.thresholds,
             "observations": self.observations,
+            "acoustics": self.acoustics,
         }
 
 

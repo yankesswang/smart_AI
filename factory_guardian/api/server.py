@@ -22,6 +22,7 @@ from .. import DATA_DISCLAIMER, __version__
 from ..audit import load_audit, summarize_audit
 from ..benchmark import MODE_LABELS, REPORT_COLUMNS, run_benchmark
 from ..config import get_settings
+from ..deployment import DEFAULT_SCALE_ID, deployment_report, set_cloud_link
 from ..knowledge.corpus import MAINTENANCE_HISTORY, MANUALS
 from ..knowledge.retriever import default_kb
 from ..policy.engine import PolicyEngine
@@ -62,6 +63,14 @@ class ApprovalRequest(BaseModel):
 
 class BenchmarkRequest(BaseModel):
     scenario_ids: list[str] | None = None
+
+
+class CloudLinkRequest(BaseModel):
+    """切換廠區對外鏈路（Demo 現場用來演示斷網）。"""
+
+    up: bool
+    reason: str = ""
+    actor: str = "operator"
 
 
 class PredictionRequest(BaseModel):
@@ -113,9 +122,12 @@ def create_app() -> FastAPI:
         topo = session.twin.topo
         return {
             "graph": topo.graph_json(),
+            # short_name 是畫面上的主標題（「主要加工機」），machine_id 退為輔助標籤。
+            # 由後端給，前端就不必在 46 個渲染點各自切一次 name 字串。
             "machines": [
                 {
-                    "machine_id": m.machine_id, "name": m.name, "kind": m.kind.value,
+                    "machine_id": m.machine_id, "name": m.name, "short_name": m.display_name,
+                    "kind": m.kind.value,
                     "rated_rate_uph": m.rated_rate_uph, "products": list(m.products),
                     "changeover_min": m.changeover_min, "repair_min": m.repair_min,
                     "signals": [
@@ -125,14 +137,40 @@ def create_app() -> FastAPI:
                 }
                 for m in topo.machines.values()
             ],
-            "lines": [{"line_id": l.line_id, "name": l.name, "stages": [list(s) for s in l.stages]}
+            "lines": [{"line_id": l.line_id, "name": l.name, "short_name": l.display_name,
+                       "stages": [list(s) for s in l.stages]}
                       for l in topo.lines.values()],
-            "products": [{"product_id": p.product_id, "name": p.name} for p in topo.products.values()],
+            "products": [{"product_id": p.product_id, "name": p.name, "short_name": p.display_name}
+                         for p in topo.products.values()],
         }
 
     @app.get("/api/policy")
     def policy() -> dict[str, Any]:
         return PolicyEngine(require_approval=settings.require_approval).describe()
+
+    # ---------------------------------------------------------------- 部署（Edge / Cloud）
+    @app.get("/api/deployment")
+    def deployment(scale: str = DEFAULT_SCALE_ID) -> dict[str, Any]:
+        """Edge / Cloud 分層對照表、目前鏈路狀態、延遲與頻寬預算。
+
+        延遲數字裡的 Safety 與 Policy 兩段是**這次請求當場量測**的，不是預錄值。
+        """
+        try:
+            return deployment_report(snapshot=session.twin.snapshot(), scale_id=scale)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/deployment/link")
+    def deployment_link(req: CloudLinkRequest) -> dict[str, Any]:
+        """切換廠區對外鏈路。斷網後閉環照跑，只有雲端敘述降級。
+
+        狀態變更會寫進 session 的稽核軌跡並推進事件串流 ——
+        「評審按下斷網」這件事本身也是可稽核的。
+        """
+        state = set_cloud_link(req.up, reason=req.reason, actor=req.actor, audit=session.audit)
+        payload = state.to_dict()
+        session.publish("cloud_link", payload)
+        return {"link": payload, "settings": settings.describe()}
 
     @app.get("/api/knowledge")
     def knowledge() -> dict[str, Any]:

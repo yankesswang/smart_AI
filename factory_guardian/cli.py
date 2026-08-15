@@ -1,10 +1,13 @@
 """Factory Guardian AI 命令列介面 —— 舞台 Demo 的主入口。
 
+    factory-guardian stage                         # 決賽舞台：文件 §5.1 的四分鐘八段劇本
+    factory-guardian stage-check --runs 30         # Demo 穩定度：連續 N 次的真實統計
     factory-guardian demo bearing-degradation      # 跑完整閉環（含互動核准）
     factory-guardian scenarios                     # 列出情境與故障模型
     factory-guardian topology                      # 印出工廠拓撲與 Knowledge Graph
     factory-guardian episode bearing-degradation --mode guardian
     factory-guardian benchmark                     # 三組對照組 KPI 比較
+    factory-guardian business-case                 # 由實測 KPI 推導年度 ROI 與回收期
     factory-guardian serve                         # 啟動 Dashboard
     factory-guardian audit runs/audit-*.jsonl      # 讀回稽核軌跡
     factory-guardian knowledge "振動上升 溫度上升"   # 測試 RAG 檢索
@@ -25,12 +28,15 @@ from rich.text import Text
 
 from . import DATA_DISCLAIMER, __version__
 from .audit import load_audit, summarize_audit
-from .benchmark import MODE_LABELS, REPORT_COLUMNS, format_cell, run_benchmark
+from .benchmark import MODE_LABELS, REPORT_COLUMNS, BenchmarkReport, format_cell, run_benchmark
+from .business import build_business_report, pilot_scope, plant_scope
+from .business.pricing import STREAM_LABELS
 from .config import get_settings
 from .domain import ApprovalDecision, RecoveryPlan, SafetyVerdictKind
 from .episode import MODES, run_episode
 from .knowledge.retriever import default_kb
 from .policy.engine import PolicyDecision
+from .stage import SPEEDS, StageDirector, StageRenderer, render_reliability, run_reliability, script_dict
 from .twin.faults import FAULTS
 from .twin.scenarios import SCENARIOS, get_scenario
 from .twin.topology import build_factory
@@ -333,6 +339,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     summary.add_column("最大延遲", justify="right")
     summary.add_column("危險曝露", justify="right")
     summary.add_column("二次損壞率", justify="right")
+    # 永續：浪費碳排是「劣化多耗的電」換算來的，單位能耗則同時反映多耗的電與少做的件。
+    summary.add_column("浪費碳排", justify="right")
+    summary.add_column("單位能耗", justify="right")
     for mode, agg in report.aggregate().items():
         summary.add_row(
             MODE_LABELS[mode],
@@ -341,6 +350,8 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             f"{agg['max_order_delay_min']:.0f}m",
             f"{agg['hazard_exposure_min']:.0f}m",
             f"{agg['secondary_damage'] * 100:.0f}%",
+            f"{agg['co2e_waste_kg']:.2f}kg",
+            f"{agg['energy_intensity_kwh_per_unit']:.2f}",
         )
     console.print(summary)
     console.print(f"[dim]{report.to_dict()['disclaimer']}[/dim]")
@@ -349,7 +360,351 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         with open(args.out, "w", encoding="utf-8") as fh:
             json.dump(report.to_dict(), fh, ensure_ascii=False, indent=2, default=str)
         console.print(f"[dim]報表已輸出：{args.out}[/dim]")
+
+    if getattr(args, "business", False):
+        console.print()
+        _render_business(build_business_report(report, scope=plant_scope()))
     return 0
+
+
+# --------------------------------------------------------------------------------------
+# 商業案例
+# --------------------------------------------------------------------------------------
+def _ntd(value: Any, digits: int = 0) -> str:
+    if value is None:
+        return "—"
+    return f"{float(value):,.{digits}f}"
+
+
+def _pct(value: Any, digits: int = 1) -> str:
+    return "—" if value is None else f"{float(value):,.{digits}f}%"
+
+
+def _assumption_value(value: float) -> str:
+    """假設值的顯示格式。
+
+    ``,.4g`` 會把 500000 印成 ``5e+05`` —— 評審在紙本上讀到科學記號會直接卡住，
+    所以大數走千分位，小數才保留有效位數。
+    """
+    magnitude = abs(float(value))
+    if magnitude >= 1000:
+        return f"{value:,.0f}"
+    if magnitude >= 1:
+        return f"{value:,.2f}".rstrip("0").rstrip(".")
+    return f"{value:,.4g}"
+
+
+def _render_business(data: dict[str, Any]) -> None:
+    """把商業案例報表印成評審看得懂的表格。"""
+    meta = data["meta"]
+    console.print(Panel(
+        Text.from_markup(
+            f"[bold]{meta['title']}[/bold]\n"
+            f"[dim]{meta['roi_formula']}\n來源：{meta['roi_source']}[/dim]\n\n"
+            f"效益來自：{meta['kpi_source']}\n"
+            f"情境：{'、'.join(meta['scenarios'])}\n\n"
+            f"[yellow]刻意不計入[/yellow]：{meta['not_counted']}"
+        ),
+        border_style="cyan",
+    ))
+
+    # --- 假設表 ------------------------------------------------------------------------
+    table = Table(title="假設參數（每一個都有名字、單位與依據）", header_style="bold")
+    table.add_column("參數", width=26, overflow="ellipsis")
+    table.add_column("值", justify="right", width=11, no_wrap=True)
+    table.add_column("單位", width=13, no_wrap=True)
+    table.add_column("依據", width=4, no_wrap=True)
+    table.add_column("來源／推估過程", overflow="fold")
+    for item in data["assumptions"]:
+        style = {"實測": "cyan", "推導": "", "假設": "yellow"}.get(item["basis_label"], "")
+        table.add_row(
+            item["label"], _assumption_value(item["value"]), item["unit"],
+            Text(item["basis_label"], style=style), item["source"],
+        )
+    console.print(table)
+
+    cases = {c["case"]["key"]: c for c in data["cases"]}
+    base = cases.get("base") or data["cases"][0]
+
+    # --- 效益拆解（基準情境）------------------------------------------------------------
+    rollup = base["benefit_rollup"]
+    table = Table(
+        title=f"年度效益拆解｜{base['case']['label']}情境｜{base['scope']['label']}"
+              f"（{base['scope']['lines']} 線 × {base['scope']['machines_per_line']} 台）",
+        header_style="bold",
+    )
+    table.add_column("效益項", width=26)
+    table.add_column("追溯的實測 KPI 欄位", width=42, overflow="fold")
+    table.add_column("年度金額 NTD", justify="right", width=13)
+    line_index = {ln["key"]: ln for s in base["scenarios"] for ln in s["lines"]}
+    for key, amount in rollup.items():
+        if key == "basis" or not key.endswith("_ntd"):
+            continue
+        benefit_key = key[: -len("_ntd")]
+        line = line_index.get(benefit_key, {})
+        table.add_row(
+            line.get("label", benefit_key),
+            "、".join(line.get("kpi_fields", [])) or "—",
+            Text(_ntd(amount), style="red" if amount < 0 else ""),
+        )
+    total = sum(v for k, v in rollup.items() if k != "basis" and k.endswith("_ntd"))
+    table.add_row(Text("合計", style="bold"), "", Text(_ntd(total), style="bold cyan"))
+    console.print(table)
+
+    # --- 每情境 -------------------------------------------------------------------------
+    table = Table(title="各情境的年度事件數與效益（每條產線）", header_style="bold")
+    table.add_column("情境", width=24)
+    table.add_column("故障", width=22)
+    table.add_column("次/年", justify="right", width=6)
+    table.add_column("視野縮放", justify="right", width=8)
+    table.add_column("每次 NTD", justify="right", width=11)
+    table.add_column("年度 NTD", justify="right", width=12)
+    for scenario in base["scenarios"]:
+        amount = scenario["annual_ntd"]
+        table.add_row(
+            scenario["scenario_id"], scenario["fault_id"],
+            f"{scenario['annual_events']:.2f}", f"{scenario['duration_scale']:.3f}",
+            _ntd(scenario["per_event_ntd"]),
+            Text(_ntd(amount), style="red" if amount < 0 else ""),
+        )
+    console.print(table)
+
+    # --- 成本結構 -----------------------------------------------------------------------
+    table = Table(title="方案成本結構（提案 §12.1 四種收費方式 ＋ 中華電信網路與邊緣）", header_style="bold")
+    table.add_column("收費方式", width=34)
+    table.add_column("一次性 NTD", justify="right", width=12)
+    table.add_column("年度 NTD", justify="right", width=12)
+    for stream, amounts in base["cost"]["by_stream"].items():
+        table.add_row(
+            STREAM_LABELS.get(stream, stream),
+            _ntd(amounts["one_time_ntd"]) if amounts["one_time_ntd"] else "—",
+            _ntd(amounts["annual_ntd"]) if amounts["annual_ntd"] else "—",
+        )
+    totals = base["cost"]["totals"]
+    table.add_row(
+        Text("合計", style="bold"),
+        Text(_ntd(totals["one_time_ntd"]), style="bold"),
+        Text(_ntd(totals["annual_recurring_ntd"]), style="bold"),
+    )
+    console.print(table)
+
+    # --- 三情境 -------------------------------------------------------------------------
+    table = Table(title="敏感度分析：保守／基準／樂觀（基準情境刻意偏保守）", header_style="bold")
+    table.add_column("項目", width=22)
+    for case in data["cases"]:
+        table.add_column(case["case"]["label"], justify="right", width=14)
+    rows: list[tuple[str, Any]] = [
+        ("現況告警逃逸率", lambda c: f"{c['case']['escalation_rate']:.0%}"),
+        ("效益實現率", lambda c: f"{c['case']['realization']:.0%}"),
+        ("事件頻率倍率", lambda c: f"{c['case']['frequency_multiplier']:.2f}x"),
+        ("方案成本倍率", lambda c: f"{c['case']['cost_multiplier']:.2f}x"),
+        ("年度效益 NTD", lambda c: _ntd(c["result"]["annual_benefit_ntd"])),
+        ("年度成本 NTD", lambda c: _ntd(c["result"]["annual_cost_ntd"])),
+        ("一次性投入 NTD", lambda c: _ntd(c["result"]["one_time_cost_ntd"])),
+        ("第一年 ROI", lambda c: _pct(c["result"]["year_one_roi_pct"])),
+        ("穩態年度 ROI", lambda c: _pct(c["result"]["steady_roi_pct"])),
+        ("回收期（月）", lambda c: "不回本" if c["result"]["payback_months"] is None
+         else f"{c['result']['payback_months']:.1f}"),
+        ("三年 NPV NTD", lambda c: _ntd(c["result"]["npv_3y_ntd"])),
+    ]
+    for label, fn in rows:
+        cells = []
+        for case in data["cases"]:
+            text = fn(case)
+            style = "red" if text.startswith("-") or text == "不回本" else ""
+            if case["case"]["key"] == "base" and not style:
+                style = "bold cyan"
+            cells.append(Text(text, style=style))
+        table.add_row(label, *cells)
+    console.print(table)
+
+    # --- 導入起點 -----------------------------------------------------------------------
+    entry = data["entry_deployment"]
+    console.print(Panel(
+        Text.from_markup(
+            f"[bold]{entry['scope']['label']}[/bold]（基準情境）"
+            f"｜年度效益 {_ntd(entry['result']['annual_benefit_ntd'])}"
+            f"｜年度成本 {_ntd(entry['result']['annual_cost_ntd'])}"
+            f"｜穩態 ROI [bold]{_pct(entry['result']['steady_roi_pct'])}[/bold]\n"
+            f"[dim]{entry['scope']['note']}[/dim]"
+        ),
+        border_style="yellow",
+    ))
+
+    # --- 破口分析 -----------------------------------------------------------------------
+    table = Table(title="破口分析：在什麼假設下 ROI 不成立（基準情境、穩態）", header_style="bold")
+    table.add_column("參數", width=22)
+    table.add_column("基準值", justify="right", width=9)
+    table.add_column("臨界值", justify="right", width=9)
+    table.add_column("結論", overflow="fold")
+    for point in data["breakeven"]:
+        table.add_row(
+            point["label"], _assumption_value(point["base_value"]),
+            "—" if point["breakeven_value"] is None else _assumption_value(point["breakeven_value"]),
+            point["verdict"],
+        )
+    console.print(table)
+
+    # --- 工安取捨 -----------------------------------------------------------------------
+    safety = data.get("safety_tradeoff")
+    if safety:
+        console.print(Panel(
+            Text.from_markup(
+                f"[bold]工安取捨（{safety['scenario_id']}，對照 Baseline A）[/bold]\n"
+                f"移除 [bold]{safety['exposure_avoided_min']:.0f} 分鐘[/bold]人員危險曝露，"
+                f"放棄 [bold]{_ntd(safety['production_cost_ntd'])} NTD[/bold] 邊際貢獻"
+                f"　→　每分鐘曝露 [bold]{safety['ntd_per_exposure_minute']:.1f} NTD[/bold]\n"
+                f"在假設的致傷機率下期望損失只有 {_ntd(safety['expected_loss_avoided_ntd'])} NTD，"
+                f"淨額 [red]{_ntd(safety['net_ntd'])} NTD[/red]。\n"
+                f"要打平需致傷機率 ≥ [bold]{safety['breakeven_injury_probability_per_hour']:.2%}/曝露小時[/bold]"
+                f"，或單次事故成本 ≥ [bold]{_ntd(safety['breakeven_incident_cost_ntd'])} NTD[/bold]。\n"
+                f"[yellow]{safety['stance']}[/yellow]"
+            ),
+            border_style="red",
+        ))
+
+    # --- 現況假設敏感度 ------------------------------------------------------------------
+    table = Table(title="最敏感的一根軸：拿什麼當「現況」（其餘參數固定為基準情境）", header_style="bold")
+    table.add_column("現況假設", width=36)
+    table.add_column("年度效益 NTD", justify="right", width=13)
+    table.add_column("穩態 ROI", justify="right", width=10)
+    table.add_column("回收期", justify="right", width=8)
+    for row in data["incumbent_sensitivity"]:
+        table.add_row(
+            row["label"], _ntd(row["annual_benefit_ntd"]), _pct(row["steady_roi_pct"]),
+            "不回本" if row["payback_months"] is None else f"{row['payback_months']:.1f} 月",
+        )
+    console.print(table)
+
+    # --- 競品 ---------------------------------------------------------------------------
+    competitors = data["competitors"]
+    table = Table(title="競品差異化（對手皆為同一評審體系選出的歷屆得獎作品）", header_style="bold")
+    table.add_column("作品", width=20)
+    table.add_column("年／獎項", width=13, no_wrap=True)
+    table.add_column("重疊", width=30, overflow="fold")
+    table.add_column("我們的避讓", overflow="fold")
+    for item in competitors["competitors"]:
+        table.add_row(item["name"], f"{item['year']}｜{item['award']}", item["overlap"], item["avoidance"])
+    console.print(table)
+
+    table = Table(title="比較軸（我們這一欄都指得到 repo 裡的位置）", header_style="bold")
+    table.add_column("軸", width=18)
+    table.add_column("歷屆作品（依公開資料）", width=34, overflow="fold")
+    table.add_column("Factory Guardian", width=44, overflow="fold")
+    table.add_column("可驗證位置", width=34, overflow="fold")
+    for axis in competitors["axes"]:
+        table.add_row(axis["axis"], axis["them"], axis["ours"], axis["evidence"])
+    console.print(table)
+    console.print(f"[bold]定位[/bold]：{competitors['positioning']}")
+    console.print(f"[yellow]{competitors['risk']}[/yellow]")
+    console.print(f"\n[dim]{meta['disclaimer']}[/dim]")
+
+
+def cmd_business_case(args: argparse.Namespace) -> int:
+    _banner()
+    if args.from_json:
+        with open(args.from_json, encoding="utf-8") as fh:
+            report = BenchmarkReport.from_dict(json.load(fh))
+        console.print(f"[dim]沿用既有 Benchmark 結果：{args.from_json}[/dim]\n")
+    else:
+        console.print("[dim]先跑三組對照組取得實測 KPI（相同 seed、相同情境、相同總時長）…[/dim]\n")
+        report = run_benchmark(scenario_ids=args.scenarios or None, persist_audit=not args.no_audit)
+
+    scope = pilot_scope() if args.scope == "pilot" else plant_scope(args.lines)
+    data = build_business_report(report, scope=scope)
+
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    _render_business(data)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2, default=str)
+        console.print(f"[dim]商業案例報表已輸出：{args.out}[/dim]")
+    return 0
+
+
+# --------------------------------------------------------------------------------------
+# 舞台 Demo（研究文件 §5.1 的四分鐘八段劇本）
+# --------------------------------------------------------------------------------------
+def cmd_stage(args: argparse.Namespace) -> int:
+    """決賽現場那四分鐘。``--speed fast`` 則是同一齣戲的快速驗證。"""
+    if args.script:
+        data = script_dict()
+        if args.json:
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+            return 0
+        # 刻意不用表格：口白是整段文字，塞進欄位只會被壓成一行八個字，背稿的人讀不了。
+        _banner()
+        console.print(f"[bold]{data['source']}[/bold]　[dim]共 {data['total_seconds']:.0f} 秒 / "
+                      f"{len(data['acts'])} 段[/dim]\n")
+        for act in data["acts"]:
+            console.rule(f"[bold]{act['window']}　{act['act_id']}　{act['screen']}[/bold]")
+            console.print(f"  [dim]§5.1 要證明：[/dim]{act['doc_claim']}")
+            console.print(f"  [dim]實作證明：[/dim][cyan]{act['proves']}[/cyan]")
+            console.print(f"  [dim]台上口白：[/dim]{act['cue']}")
+            console.print(f"  [dim]念這些欄位：{'、'.join(act['metrics']) or '—'}[/dim]")
+            console.print()
+        return 0
+
+    scenario = get_scenario(args.scenario)
+    renderer = StageRenderer(console=console, show_cue=not args.no_cue, quiet=args.json)
+    if not args.json:
+        _banner()
+
+    director = StageDirector(
+        scenario_id=args.scenario,
+        speed=args.speed,
+        offline=args.offline,
+        approval=_interactive_approval if args.manual_approval else None,
+        observer=renderer.act,
+        persist_audit=not args.no_audit,
+        counterfactual=not args.no_counterfactual,
+    )
+    renderer.opening(scenario.title, director.speed, director.offline, director.settings.describe())
+    run = director.run()
+    renderer.closing(run)
+
+    if args.json:
+        print(json.dumps(run.to_dict(), ensure_ascii=False, indent=2, default=str))
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(run.to_dict(), fh, ensure_ascii=False, indent=2, default=str)
+        if not args.json:
+            console.print(f"[dim]舞台記錄已輸出：{args.out}[/dim]")
+    return 0 if run.ok else 1
+
+
+def cmd_stage_check(args: argparse.Namespace) -> int:
+    """連續跑 N 次，回答評審的「你的 Demo 穩定嗎」（研究文件 §5.3）。"""
+    _banner()
+    mode = "最壞情況：無金鑰 ＋ 廠區對外鏈路中斷" if args.offline else "一般情況"
+    console.print(f"[dim]連續執行 {args.runs} 次完整劇本（{args.scenario}｜{mode}）…[/dim]")
+
+    with console.status("[dim]執行中…[/dim]") as status:
+        def progress(outcome: Any) -> None:
+            mark = "✔" if outcome.ok else "✘"
+            status.update(f"[dim]{mark} 第 {outcome.index}/{args.runs} 次｜{outcome.seconds:.3f}s"
+                          f"｜指紋 {outcome.fingerprint_hash}[/dim]")
+
+        report = run_reliability(
+            runs=args.runs,
+            scenario_id=args.scenario,
+            offline=args.offline,
+            on_run=progress,
+        )
+
+    render_reliability(report, console=console)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            json.dump(report.to_dict(), fh, ensure_ascii=False, indent=2, default=str)
+        console.print(f"[dim]穩定度報表已輸出：{args.out}[/dim]")
+    if args.json:
+        console.print_json(json.dumps(report.to_dict(), ensure_ascii=False, default=str))
+
+    ok = report.failures == 0 and report.decisions_consistent
+    return 0 if ok else 1
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -408,6 +763,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"factory-guardian {__version__}")
     sub = parser.add_subparsers(dest="command")
 
+    p = sub.add_parser("stage", help="決賽舞台：研究文件 §5.1 的四分鐘八段閉環劇本")
+    p.add_argument("--scenario", default="bearing-degradation", choices=list(SCENARIOS))
+    p.add_argument("--speed", default="live",
+                   help=f"節奏：{'、'.join(SPEEDS)}，或直接給倍率（例如 0.5）。live=照劇本四分鐘，fast=不等待")
+    p.add_argument("--offline", action="store_true",
+                   help="最壞情況：不用金鑰且模擬廠區對外鏈路中斷，並量測離線備援時間")
+    p.add_argument("--manual-approval", action="store_true", help="A6 停下來真的等人按（預設為腳本化核准）")
+    p.add_argument("--no-cue", action="store_true", help="不印台上口白提示（正式演出時畫面更乾淨）")
+    p.add_argument("--no-counterfactual", action="store_true", help="不跑 Baseline A 對照組（A8 的避免損失會留白）")
+    p.add_argument("--no-audit", action="store_true", help="不寫稽核檔")
+    p.add_argument("--script", action="store_true", help="只印劇本本身，不執行")
+    p.add_argument("--out", help="輸出舞台記錄 JSON 路徑")
+    p.add_argument("--json", action="store_true", help="只輸出 JSON")
+    p.set_defaults(func=cmd_stage)
+
+    p = sub.add_parser("stage-check", help="Demo 穩定度：連續 N 次的成功率、耗時分佈與決策一致性")
+    p.add_argument("--runs", type=int, default=30, help="連續執行次數（預設 30）")
+    p.add_argument("--scenario", default="bearing-degradation", choices=list(SCENARIOS))
+    p.add_argument("--offline", action="store_true", help="在最壞情況下量（無金鑰＋斷網），並統計離線備援時間")
+    p.add_argument("--out", help="輸出穩定度報表 JSON 路徑")
+    p.add_argument("--json", action="store_true", help="附帶輸出完整 JSON")
+    p.set_defaults(func=cmd_stage_check)
+
     p = sub.add_parser("demo", help="跑完整 Agent 閉環（舞台 Demo）")
     p.add_argument("scenario", nargs="?", default="bearing-degradation", choices=list(SCENARIOS))
     p.add_argument("--mode", default="guardian", choices=list(MODES))
@@ -431,7 +809,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("scenarios", nargs="*", choices=list(SCENARIOS) + [[]], default=[])
     p.add_argument("--out", help="輸出 JSON 報表路徑")
     p.add_argument("--no-audit", action="store_true", help="不寫稽核檔")
+    p.add_argument("--business", action="store_true", help="接著輸出商業案例（年度效益、ROI、回收期）")
     p.set_defaults(func=cmd_benchmark)
+
+    p = sub.add_parser("business-case", help="由實測 KPI 推導年度效益、ROI、回收期與競品比較")
+    p.add_argument("scenarios", nargs="*", choices=list(SCENARIOS) + [[]], default=[])
+    p.add_argument("--scope", default="plant", choices=("plant", "pilot"), help="部署規模（預設全廠）")
+    p.add_argument("--lines", type=int, default=6, help="全廠規模的產線數（--scope plant 時生效）")
+    p.add_argument("--from-json", help="沿用既有 benchmark --out 的 JSON，不重跑模擬")
+    p.add_argument("--out", help="輸出商業案例 JSON 路徑")
+    p.add_argument("--json", action="store_true", help="只輸出 JSON")
+    p.add_argument("--no-audit", action="store_true", help="不寫稽核檔")
+    p.set_defaults(func=cmd_business_case)
 
     p = sub.add_parser("serve", help="啟動 Dashboard 與 API")
     p.add_argument("--host", default="127.0.0.1")

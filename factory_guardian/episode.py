@@ -52,6 +52,14 @@ class EpisodeKPI:
     late_orders: int = 0
     recovery_min: float | None = None
 
+    # 永續（能源／碳排）—— 全部由孿生體逐 tick 積分量出來，不是事後估算。
+    energy_kwh: float = 0.0
+    energy_waste_kwh: float = 0.0
+    energy_waste_ntd: float = 0.0
+    co2e_kg: float = 0.0
+    co2e_waste_kg: float = 0.0
+    energy_intensity_kwh_per_unit: float = 0.0
+
     # Safety
     unsafe_plans_generated: int = 0
     unsafe_plans_blocked: int = 0
@@ -303,6 +311,15 @@ def _fill_common_kpi(kpi: EpisodeKPI, twin: FactoryTwin, scenario: Scenario, orc
     kpi.production_attainment_pct = 100.0 * produced / nominal_units if nominal_units > 0 else 0.0
     kpi.production_loss_units = max(0.0, nominal_units - produced)
     kpi.production_loss_ntd = kpi.production_loss_units * UNIT_MARGIN_NTD
+
+    # 永續：孿生體在整段 episode 中逐 tick 累積的能源帳，這裡只是讀出來。
+    energy = twin.energy_kpi()
+    kpi.energy_kwh = energy["energy_kwh"]
+    kpi.energy_waste_kwh = energy["energy_waste_kwh"]
+    kpi.energy_waste_ntd = energy["energy_waste_ntd"]
+    kpi.co2e_kg = energy["co2e_kg"]
+    kpi.co2e_waste_kg = energy["co2e_waste_kg"]
+    kpi.energy_intensity_kwh_per_unit = energy["energy_intensity_kwh_per_unit"]
 
     delays = []
     for order in twin.orders.values():

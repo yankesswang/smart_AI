@@ -20,7 +20,10 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from ..acoustics.signatures import INDICATOR_NAMES
+from ..acoustics.synthetic import clamp_indicator, target_indicators
 from ..domain import (
+    AcousticObservation,
     Action,
     ActionKind,
     CameraObservation,
@@ -35,6 +38,7 @@ from ..domain import (
     SignalBand,
     SignalSpec,
 )
+from .energy import EnergyLedger
 from .faults import FAULTS, HAZARD_EVENT_ID, FaultModel
 from .topology import (
     FactoryTopology,
@@ -63,6 +67,24 @@ DERATE_RPM_PCT = 63.0
 DERATE_FAULT_RELIEF = 0.55
 
 THROUGHPUT_EMA_ALPHA = 0.45
+
+# --- 麥克風（合成聲學觀測）-------------------------------------------------------------
+# ⚠️ 這裡產生的是**合成音訊特徵**，由既有的振動／轉速／電流物理推導，不是真實錄音。
+#    真實工業錄音（DCASE2020 / MIMII）只用來驗證偵測器，不參與本迴圈。
+#    完整的邊界說明見 acoustics/synthetic.py 與 docs/acoustic_validation.md。
+# 只有加工機台裝麥克風：本 Demo 的三個故障模型都發生在主軸／冷卻／馬達上，
+# 包裝機沒有 vibration 訊號，也就沒有對應的聲學故障模型可以誠實地渲染。
+MIC_SAMPLE_RATE_HZ = 16_000
+MIC_WINDOW_S = 10.0
+# 一階遲滯：聲音對狀態變化的反應比溫度快得多，和 vibration 同一個量級。
+ACOUSTIC_ALPHA = 0.75
+# 量測雜訊標準差（麥克風本底 + 現場環境）。
+ACOUSTIC_NOISE: dict[str, float] = {
+    "spl_db": 0.35,
+    "high_band_ratio": 0.006,
+    "tonal_ratio": 0.008,
+    "crest_factor_db": 0.30,
+}
 
 # 產線達成率回到這個水準以上，視為已從事故中復原。
 # 80% 的理由：主力機台 M-A 停機時，替代機台 M-B 的滿載產出約為名目產能的 85%，
@@ -107,6 +129,13 @@ class _MachineRuntime:
     # signals：感測器實際回報的值（clean + 量測雜訊），這才是 Agent 看得到的東西。
     clean_signals: dict[str, float] = field(default_factory=dict)
     signals: dict[str, float] = field(default_factory=dict)
+    # --- 麥克風（合成）---
+    # 與 clean_signals / signals 完全相同的兩層結構，理由也相同。
+    # 刻意不併進 signals：那會讓聲學指標流進 MachineSnapshot.readings，
+    # 進而改變 worst_band、健康度與感測器指紋向量 —— 那些都是既有設計的一部分，
+    # 不該因為多裝一支麥克風而被動搖。
+    clean_acoustics: dict[str, float] = field(default_factory=dict)
+    acoustics: dict[str, float] = field(default_factory=dict)
     health: float = 100.0
     last_rate_uph: float = 0.0
     repairs_done: int = 0
@@ -154,6 +183,10 @@ class FactoryTwin:
         # 人員實際暴露在「運轉中危險區」的分鐘數 —— 工安 KPI 的核心指標，
         # 它量的是實際風險曝露，而不是「系統有沒有發出告警」。
         self.hazard_exposure_min: float = 0.0
+        # 能源／碳排帳：逐 tick 由感測器電流積分出來（見 twin/energy.py）。
+        self.energy = EnergyLedger.for_machines(
+            {mid: m.rated_power_kw for mid, m in self.topo.machines.items()}
+        )
         self.event_log: list[dict[str, Any]] = []
         self.label = "live"
         self.reset()
@@ -169,6 +202,9 @@ class FactoryTwin:
         self.hazard_from_tick = None
         self.hazard_machine_id = None
         self.hazard_exposure_min = 0.0
+        self.energy = EnergyLedger.for_machines(
+            {mid: m.rated_power_kw for mid, m in self.topo.machines.items()}
+        )
         self.event_log = []
         self.runtime = {}
         for mid, machine in self.topo.machines.items():
@@ -184,6 +220,11 @@ class FactoryTwin:
             )
             rt.clean_signals = {spec.name: spec.nominal for spec in machine.signals}
             rt.signals = dict(rt.clean_signals)
+            if self._has_microphone(machine):
+                # 健康機台的名目聲學狀態。與 clean_signals 從 spec.nominal 起跳同一個道理：
+                # 期初不該有假的暫態。
+                rt.clean_acoustics = target_indicators(None, 0.0)
+                rt.acoustics = dict(rt.clean_acoustics)
             rt.health = 100.0
             self.runtime[mid] = rt
         self.nominal_output_uph = self._nominal_output()
@@ -221,6 +262,9 @@ class FactoryTwin:
         clone.orders = copy.deepcopy(self.orders)
         clone.queue = dict(self.queue)
         clone.pending_injections = list(self.pending_injections)
+        # 能源帳必須跟著複製一份 —— 少了這行，方案乾跑（一個情境會跑好幾個）
+        # 累積的電就會被記到真實孿生體上，KPI 直接失真。
+        clone.energy = copy.deepcopy(self.energy)
         clone.event_log = []
         clone.label = label
         return clone
@@ -404,6 +448,8 @@ class FactoryTwin:
         self._dispatch_orders()
         self._produce()
         self._age_orders()
+        # 派工／生產都結束後，機台這一 tick 的最終狀態才確定，這時才結算電。
+        self._accumulate_energy()
         snapshot = self.snapshot()
         if any(c.person_in_hazard_zone for c in snapshot.cameras):
             self.hazard_exposure_min += self.tick_minutes
@@ -467,7 +513,13 @@ class FactoryTwin:
             self.hazard_machine_id = None
 
     # ------------------------------------------------------------------ 感測器
-    def _target_signal(self, rt: _MachineRuntime, spec: SignalSpec) -> float:
+    def _target_signal(self, rt: _MachineRuntime, spec: SignalSpec, ignore_fault: bool = False) -> float:
+        """這個訊號在目前狀態下的穩態目標值。
+
+        ``ignore_fault=True`` 回傳「同一台機器、同一個控制狀態、但設備健康」時的目標值。
+        能源模型用它當名目基線 —— 注意它只讀控制狀態與訊號規格（設備銘牌），
+        不讀故障標籤，所以基線本身不含任何 Ground Truth。
+        """
         offline = rt.state in (MachineState.STOPPED, MachineState.MAINTENANCE)
         if offline:
             if spec.name == "temperature":
@@ -489,7 +541,7 @@ class FactoryTwin:
             elif spec.name == "temperature":
                 base = spec.nominal - 4.0
 
-        if rt.fault:
+        if rt.fault and not ignore_fault:
             model: FaultModel = FAULTS[rt.fault]
             delta = model.deltas.get(spec.name, 0.0)
             relief = DERATE_FAULT_RELIEF if rt.state is MachineState.DERATED else 1.0
@@ -514,7 +566,54 @@ class FactoryTwin:
                 sigma = SIGNAL_NOISE.get(spec.name, 0.1)
                 noise = _stable_gauss(self.seed, mid, spec.name, self.tick) * sigma * (noise_gain if active else 0.2)
                 rt.signals[spec.name] = max(0.0, clean + noise)
+            if self._has_microphone(machine):
+                self._refresh_acoustics(mid, rt, noise_gain=noise_gain, active=active)
             rt.health = self._health_of(machine, rt)
+
+    @staticmethod
+    def _has_microphone(machine: Machine) -> bool:
+        """哪些機台裝了麥克風。
+
+        只有加工機台。理由不是「包裝機不會壞」，而是**誠實**：本 Demo 的三個故障模型
+        （軸承／冷卻／馬達）都發生在主軸系統上，包裝機連 vibration 訊號都沒有，
+        也就沒有任何可以據以推導的聲學物理。硬給它一支麥克風，等於憑空編一組數字。
+        """
+        return machine.signal("vibration") is not None
+
+    def _refresh_acoustics(
+        self, machine_id: str, rt: _MachineRuntime, *, noise_gain: float, active: bool
+    ) -> None:
+        """更新麥克風觀測。
+
+        ⚠️ **合成音訊特徵**：目標值由 `acoustics/synthetic.py` 從既有的故障物理推導，
+        不是真實錄音。真實工業錄音（DCASE2020 / MIMII）只用來驗證偵測器本身有效，
+        不參與這個迴圈 —— 見 `docs/acoustic_validation.md`。
+
+        流程與 `_refresh_signals` 的感測器路徑逐字對應，這是刻意的：
+        目標值 → 一階遲滯 → 量測雜訊。聲音是「多一個感測器」，不是「另一套規則」。
+        Ground Truth 的處理也一樣 —— `rt.fault` 只在這裡（Simulator 內部）被讀到，
+        送出去的 `AcousticObservation` 只有四個數字。
+        """
+        derated = rt.state is MachineState.DERATED
+        target = target_indicators(
+            rt.fault,
+            rt.fault_progress,
+            online=active,
+            derated=derated,
+            # 降速運轉會減輕故障的表現，聲音也一樣 —— 沿用感測器路徑的同一個係數，
+            # 否則同一個動作在振動上有效、在聲音上無效，兩個模態會自相矛盾。
+            fault_relief=DERATE_FAULT_RELIEF if derated else 1.0,
+        )
+        for name in INDICATOR_NAMES:
+            current = rt.clean_acoustics.get(name, target[name])
+            clean = current + (target[name] - current) * ACOUSTIC_ALPHA
+            rt.clean_acoustics[name] = clamp_indicator(name, clean)
+            sigma = ACOUSTIC_NOISE.get(name, 0.0)
+            # 雜訊種子多一個 "mic" 維度，避免和同名感測器訊號抽到同一個亂數。
+            noise = _stable_gauss(self.seed, machine_id, "mic", name, self.tick) * sigma * (
+                noise_gain if active else 0.4
+            )
+            rt.acoustics[name] = clamp_indicator(name, rt.clean_acoustics[name] + noise)
 
     def _health_of(self, machine: Machine, rt: _MachineRuntime) -> float:
         """真實健康度：由未加雜訊的物理狀態算出。
@@ -538,6 +637,36 @@ class FactoryTwin:
     def _scale(machine: Machine, signal: str) -> float:
         spec = machine.signal(signal)
         return spec.scale if spec else 1.0
+
+    # ------------------------------------------------------------------ 能源／碳排
+    def _accumulate_energy(self) -> None:
+        """把這一 tick 的用電積分進能源帳。
+
+        沒有新的物理假設：功率直接由**既有的** current 訊號推導，
+        名目基線則是同一個狀態下把故障偏移拿掉後的電流（``ignore_fault=True``）。
+        設備劣化造成的電流上升本來就在模擬裡，這裡只是把它積出來。
+        """
+        alpha = SIGNAL_ALPHA.get("current", 0.8)
+        for mid, rt in self.runtime.items():
+            machine = self.topo.machines[mid]
+            spec = machine.signal("current")
+            if spec is None:
+                continue
+            self.energy.accumulate(
+                mid,
+                # 用 clean_signals 而非帶雜訊的讀值：量測雜訊不該讓機台真的多耗電
+                # （與 effective_rate() 用 clean rpm 的理由一致）。
+                actual_current_a=rt.clean_signals.get(spec.name, spec.nominal),
+                healthy_target_current_a=self._target_signal(rt, spec, ignore_fault=True),
+                nominal_current_a=spec.nominal,
+                minutes=self.tick_minutes,
+                online=rt.state not in (MachineState.STOPPED, MachineState.MAINTENANCE),
+                alpha=alpha,
+            )
+
+    def energy_kpi(self) -> dict[str, float]:
+        """能源／碳排 KPI（永續發展性）。數字是逐 tick 量出來的，不是事後估算。"""
+        return self.energy.summary(produced_units=self.completed_units_total)
 
     # ------------------------------------------------------------------ 生產
     def effective_rate(self, machine_id: str) -> float:
@@ -720,6 +849,28 @@ class FactoryTwin:
             queue=queue,
             maintenance_remaining_min=rt.maintenance_remaining_min,
             online=online,
+            acoustics=self._acoustic_observation(machine_id, rt),
+        )
+
+    def _acoustic_observation(self, machine_id: str, rt: _MachineRuntime) -> AcousticObservation | None:
+        """把麥克風的內部狀態包成 Agent 看得到的觀測。
+
+        只送四個數字出去。刻意**不**附任何 per-fault 的相似度或分數 ——
+        那等於把 Ground Truth 用另一個名字送給 Agent。要比對哪一個故障最像，
+        是 Diagnosis Agent 拿手冊知識（`acoustics/signatures.py`）自己算的事。
+        """
+        if not rt.acoustics:
+            return None
+        return AcousticObservation(
+            machine_id=machine_id,
+            sensor_id=f"MIC-{machine_id.split('-')[-1]}",
+            sample_rate_hz=MIC_SAMPLE_RATE_HZ,
+            window_s=MIC_WINDOW_S,
+            spl_db=rt.acoustics["spl_db"],
+            high_band_ratio=rt.acoustics["high_band_ratio"],
+            tonal_ratio=rt.acoustics["tonal_ratio"],
+            crest_factor_db=rt.acoustics["crest_factor_db"],
+            synthetic=True,
         )
 
     def factory_health(self) -> float:
@@ -780,6 +931,8 @@ class FactoryTwin:
             "scheduled_orders": float(scheduled),
             "backlog_orders": float(backlog),
             "completed_units": self.completed_units_total,
+            # 能源／碳排：由感測器電流積分而來，Agent 與 Dashboard 都可以安全讀取。
+            **self.energy_kpi(),
         }
 
     def estimate_finish_min(self, order_id: str) -> float:
@@ -955,6 +1108,7 @@ class FactoryTwin:
             },
             "orders": {oid: o.to_dict() for oid, o in self.orders.items()},
             "queue": {k: round(v, 1) for k, v in self.queue.items()},
+            "energy": self.energy.to_dict(produced_units=self.completed_units_total),
         }
 
 
