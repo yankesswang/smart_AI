@@ -34,13 +34,15 @@ acoustics = [
 
 [project.scripts]
 factory-guardian = "factory_guardian.cli:main"
+agentgate = "agentgate.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["factory_guardian*"]
+include = ["factory_guardian*", "agentgate*"]
 
 [tool.setuptools.package-data]
 "factory_guardian.api" = ["static/*"]
 "factory_guardian.knowledge" = ["data/*"]
+"agentgate.api" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

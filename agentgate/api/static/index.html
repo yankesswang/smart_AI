@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentGate — AI Agent 可稽核治理層</title>
+<meta name="description" content="AgentGate:AI Agent 動作的六道治理閘門。來源信任、動作解析、政策裁決、後果預演、人工核准、執行封存。">
+<link rel="stylesheet" href="/static/gate.css">
+<link rel="stylesheet" href="/static/mechanism.css">
+</head>
+<body>
+
+<!-- ================= 圖示 sprite =================
+     一次定義、全頁 <use> 引用：關卡走廊、頁籤、狀態徽章與檔案紙共用同一組
+     造型，所以「同一道關卡在不同地方長得一樣」。
+     每個 symbol 內都不寫死顏色（一律 currentColor），顏色由引用處決定。 -->
+<svg class="ic-sprite" aria-hidden="true" focusable="false">
+  <!-- G0 來源信任：兩個扣在一起的鏈環。治理的第一問是「這道指令從哪來」。 -->
+  <symbol id="i-g0" viewBox="0 0 24 24"><path d="M10,7 H6.5 A4,4 0 0 0 6.5,15 H10"/><path d="M14,7 H17.5 A4,4 0 0 1 17.5,15 H14"/><path d="M8.5,11 H15.5"/></symbol>
+  <!-- G1 動作解析：方括號夾住結構化欄位。自由文字在這裡變成型別化動作。 -->
+  <symbol id="i-g1" viewBox="0 0 24 24"><path d="M8,3 H4 V21 H8"/><path d="M16,3 H20 V21 H16"/><path d="M9,9 H15"/><path d="M9,12.5 H15"/><path d="M9,16 H12.5"/></symbol>
+  <!-- G2 政策裁決：天秤。確定性規則在秤，不是模型在猜。 -->
+  <symbol id="i-g2" viewBox="0 0 24 24"><path d="M12,3.5 V21"/><path d="M6.5,21 H17.5"/><path d="M4,7 H20"/><path d="M4,7 L1.8,13 H6.2 Z"/><path d="M20,7 L17.8,13 H22.2 Z"/></symbol>
+  <!-- G3 後果預演：一條指令展開成三種可量測的後果。 -->
+  <symbol id="i-g3" viewBox="0 0 24 24"><path d="M2.5,12 H7"/><path d="M7,12 L13.5,5.5"/><path d="M7,12 H13.5"/><path d="M7,12 L13.5,18.5"/><rect x="13.5" y="3" width="7" height="5"/><rect x="13.5" y="9.5" width="7" height="5"/><rect x="13.5" y="16" width="7" height="5"/></symbol>
+  <!-- G4 人工核准：全套唯一的實心圖示，人形站在簽名底線上。這一格不是機器。 -->
+  <symbol id="i-g4" viewBox="0 0 24 24"><circle cx="12" cy="6" r="3.3" fill="currentColor" stroke="none"/><path d="M5.5,19.5 V18 A5,5 0 0 1 10.5,13 H13.5 A5,5 0 0 1 18.5,18 V19.5 Z" fill="currentColor" stroke="none"/><path d="M3,22.2 H21"/></symbol>
+  <!-- G5 執行封存：印章。動作落地的同時鋼印落下，被擋的也一樣蓋。 -->
+  <symbol id="i-g5" viewBox="0 0 24 24"><path d="M6.5,21.5 H17.5"/><path d="M7.5,17.5 H16.5 V21 H7.5 Z"/><path d="M9.5,17.5 V13.5 A3.2,3.2 0 0 1 8.6,10.8 L10,3.5 H14 L15.4,10.8 A3.2,3.2 0 0 1 14.5,13.5 V17.5"/></symbol>
+
+  <!-- 頁籤 -->
+  <symbol id="i-script" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="5" cy="18" r="2"/><path d="M5,8 V10"/><path d="M5,14 V16"/><path d="M10.5,6 H21"/><path d="M10.5,12 H21"/><path d="M10.5,18 H17"/></symbol>
+  <!-- 營運中心：心電圖。這一頁的重點是「它一直在跳」。 -->
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M2,12 H6.5 L9,5.5 L12.5,18.5 L15.5,12 H22"/></symbol>
+  <!-- 影子後台：資料庫。G3 說「會撈出 N 筆」，那 N 筆就住在這裡。 -->
+  <symbol id="i-vault" viewBox="0 0 24 24"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4,5.5 V18.5 A8,3 0 0 0 20,18.5 V5.5"/><path d="M4,12 A8,3 0 0 0 20,12"/></symbol>
+  <!-- 對話 -->
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M3,4.5 H21 V16 H12.5 L7.5,20 V16 H3 Z"/><path d="M7,9 H17"/><path d="M7,12.5 H13.5"/></symbol>
+  <!-- 附件：折角紙。注入就藏在這種東西裡面。 -->
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M5.5,2.5 H14 L18.5,7 V21.5 H5.5 Z"/><path d="M14,2.5 V7 H18.5"/><path d="M8.5,11.5 H15.5"/><path d="M8.5,15 H15.5"/><path d="M8.5,18.5 H12"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="4" width="3.6" height="16" fill="currentColor" stroke="none"/><rect x="13.9" y="4" width="3.6" height="16" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-inject" viewBox="0 0 24 24"><path d="M3,12 H14"/><path d="M10.5,8.5 L14,12 L10.5,15.5"/><path d="M17,4.5 H21 V19.5 H17"/></symbol>
+  <symbol id="i-seat" viewBox="0 0 24 24"><path d="M5,14 V11 A7,7 0 0 1 19,11 V14"/><rect x="2.5" y="13.5" width="4" height="6"/><rect x="17.5" y="13.5" width="4" height="6"/><path d="M19,19.5 A3,3 0 0 1 16,22 H13"/></symbol>
+  <symbol id="i-alarm" viewBox="0 0 24 24"><path d="M6,17 V10.5 A6,6 0 0 1 18,10.5 V17"/><path d="M3.5,17 H20.5"/><path d="M10,20 A2.2,2.2 0 0 0 14,20"/></symbol>
+  <!-- 運作機制：拆開的機件。這一頁講的是「裡面怎麼轉」。 -->
+  <symbol id="i-mech" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12,2.5 V6"/><path d="M12,18 V21.5"/><path d="M2.5,12 H6"/><path d="M18,12 H21.5"/><path d="M5.2,5.2 L7.7,7.7"/><path d="M16.3,16.3 L18.8,18.8"/><path d="M18.8,5.2 L16.3,7.7"/><path d="M7.7,16.3 L5.2,18.8"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="M2.5,13.5 H8 L10,16.5 H14 L16,13.5 H21.5"/><path d="M2.5,13.5 L5,3.5 H19 L21.5,13.5 V20.5 H2.5 Z"/></symbol>
+  <symbol id="i-audit" viewBox="0 0 24 24"><path d="M5,2.5 H14.5 L19,7 V21.5 H5 Z"/><path d="M14.5,2.5 V7 H19"/><path d="M8,12 H16"/><path d="M8,15.5 H16"/><path d="M8,19 H12.5"/></symbol>
+  <symbol id="i-policy" viewBox="0 0 24 24"><path d="M4,2.5 H20 V21.5 H4 Z"/><path d="M7.5,7 H16.5"/><path d="M7.5,11 H16.5"/><path d="M7.5,15 H13"/><path d="M7.5,18.5 H10.5"/></symbol>
+  <symbol id="i-metrics" viewBox="0 0 24 24"><path d="M3,21 H21.5"/><rect x="4" y="12.5" width="4.2" height="6"/><rect x="10" y="6" width="4.2" height="12.5"/><rect x="16" y="14.5" width="4.2" height="4"/></symbol>
+
+  <!-- 狀態 -->
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4,12.5 L9.5,18 L20,6"/></symbol>
+  <symbol id="i-block" viewBox="0 0 24 24"><path d="M12,2.5 L20.5,6 V12 Q20.5,18 12,21.5 Q3.5,18 3.5,12 V6 Z"/><path d="M8,15.5 L16,8"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12,2.5 L20.5,6 V12 Q20.5,18 12,21.5 Q3.5,18 3.5,12 V6 Z"/><path d="M8,12 L11,15 L16,9"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12,6.5 V12 L16,14.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12,3 L22,20 H2 Z"/><path d="M12,9.5 V14.5"/><path d="M12,16.8 V17.6"/></symbol>
+  <symbol id="i-leak" viewBox="0 0 24 24"><path d="M11,4 H4 V20 H20 V13"/><path d="M13.5,10.5 L21,3"/><path d="M14.5,3 H21 V9.5"/></symbol>
+  <symbol id="i-broken" viewBox="0 0 24 24"><path d="M10,7 H6.5 A4,4 0 0 0 6.5,15 H10"/><path d="M14,7 H17.5 A4,4 0 0 1 17.5,15 H14"/><path d="M11,4.5 L12.5,7"/><path d="M13,15 L11.5,17.5"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M20.5,12 A8.5,8.5 0 1 1 17.2,5.4"/><path d="M21,2.5 V8 H15.5"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12,2.5 V11"/><path d="M17.8,6.2 A8.2,8.2 0 1 1 6.2,6.2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M6.5,3.5 L20,12 L6.5,20.5 Z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-empty" viewBox="0 0 24 24"><path d="M3.5,7 H20.5 V20.5 H3.5 Z"/><path d="M3.5,7 L6,3.5 H18 L20.5,7"/><path d="M9,12.5 H15"/></symbol>
+</svg>
+
+<!-- ================= 頂列 ================= -->
+<header class="top">
+  <div class="brand">
+    <div class="glyph" aria-hidden="true">閘</div>
+    <div>
+      <h1 class="wordmark">AgentGate</h1>
+      <small>AI Agent 可稽核治理層</small>
+    </div>
+  </div>
+  <div class="slot"><span class="k">當班</span><span class="v" id="tShift">--</span></div>
+  <div class="slot"><span class="k">值班主管</span><span class="v" id="tDuty">--</span></div>
+  <div class="slot"><span class="k">稽核筆數</span><span class="v" id="tAudit">0</span></div>
+  <div class="slot"><span class="k">待核准</span><span class="v" id="tPending">0</span></div>
+  <div class="slot"><span class="k">累計裁決</span><span class="v" id="tDecisions">0</span></div>
+  <div class="slot"><span class="k">決策延遲 p95</span><span class="v" id="tLat">-- ms</span></div>
+  <!-- Run ID 由稽核鏈端點給,開場探一次(loadRunId)。少了這一格,loadAudit 會在
+       $("#tRun") 上取到 null 而整個稽核鏈分頁停在載入中。 -->
+  <div class="slot"><span class="k">Run ID</span><span class="v" id="tRun">--</span></div>
+  <!-- 使用場景是另一頁(/scenario):它是說明,不是管制台的一個分頁。
+       擺在頂列而不是分頁列,因為評審通常是「先讀場景、再看它當班」這個順序。 -->
+  <div class="slot"><span class="k">先讀</span><span class="v"><a href="/scenario">使用場景 ▸</a></span></div>
+  <div class="fill"></div>
+  <div class="gate-sw" id="gateSw">
+    <span class="lamp" aria-hidden="true"></span>
+    <span class="lbl" id="gateLbl">治理層運作中</span>
+  </div>
+  <div class="slot">
+    <button class="ghost" id="btnGate" title="A/B 對照：關閉治理層後，同一個 Agent 的同一份指令會直接執行">
+      <svg class="ic" aria-hidden="true"><use href="#i-power"/></svg><span id="btnGateLbl">關閉治理層</span>
+    </button>
+  </div>
+  <div class="slot">
+    <button class="ghost" id="btnReset" title="重設影子環境、稽核鏈、核准佇列與指標">
+      <svg class="ic" aria-hidden="true"><use href="#i-reset"/></svg>重設
+    </button>
+  </div>
+  <div class="synth"><b>◆ SYNTHETIC DEMO DATA</b></div>
+</header>
+
+<!-- ================= 導覽 ================= -->
+<nav class="nav" role="tablist" aria-label="治理管制台視角">
+  <button role="tab" aria-selected="true" data-view="ops">
+    <svg class="ic" aria-hidden="true"><use href="#i-pulse"/></svg>營運中心<span class="badge live" id="opsBadge" hidden>LIVE</span>
+  </button>
+  <button role="tab" aria-selected="false" data-view="demo">
+    <svg class="ic" aria-hidden="true"><use href="#i-script"/></svg>四分鐘劇本
+  </button>
+  <button role="tab" aria-selected="false" data-view="queue">
+    <svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>核准佇列<span class="badge" id="qBadge" hidden>0</span>
+  </button>
+  <button role="tab" aria-selected="false" data-view="mechanism">
+    <svg class="ic" aria-hidden="true"><use href="#i-mech"/></svg>運作機制
+  </button>
+  <button role="tab" aria-selected="false" data-view="vault">
+    <svg class="ic" aria-hidden="true"><use href="#i-vault"/></svg>影子後台
+  </button>
+  <button role="tab" aria-selected="false" data-view="audit">
+    <svg class="ic" aria-hidden="true"><use href="#i-audit"/></svg>稽核鏈
+  </button>
+  <button role="tab" aria-selected="false" data-view="policy">
+    <svg class="ic" aria-hidden="true"><use href="#i-policy"/></svg>政策條文
+  </button>
+  <button role="tab" aria-selected="false" data-view="metrics">
+    <svg class="ic" aria-hidden="true"><use href="#i-metrics"/></svg>驗證與指標
+  </button>
+</nav>
+
+<div class="shell">
+
+<!-- 舊 process 警告。平時隱藏，由開場的能力探測決定要不要現身。 -->
+<div id="staleWarn" hidden></div>
+
+<!-- ================= 營運中心 =================
+     打開就是一個進行中的現場。這一頁存在的理由很單純：治理層在真實世界裡
+     不是一顆按鈕，是一個當班的值班台。所以它有班別、有席位、有每分鐘的來話、
+     有等著人簽的案子，而且每一列都點得開它的來源工單。 -->
+<section class="view on" id="v-ops" role="tabpanel" aria-label="營運中心">
+  <div class="view-head">
+    <div class="eyebrow">Live governance desk · 當班中</div>
+    <h2>營運中心</h2>
+    <p>AI 客服席位持續在受理工單並呼叫後台工具,<b>每一次呼叫都先經過六道關卡</b>。
+       下方事件流是真的走完管線的裁決結果 —— 點任一列可展開它的來源工單:對話逐字、附件原文、Agent 推理、以及該筆的稽核紀錄。</p>
+    <p>第一次看這個 Demo:先讀 <a href="/scenario">使用場景說明</a> ——
+       誰在受理、Agent 手上有哪七種後台權限、攻擊長什麼樣子、治理層卡在哪一段。</p>
+  </div>
+
+  <div class="stack-lg">
+    <div class="sec">
+      <div class="sec-h">
+        <b><svg class="ic" aria-hidden="true"><use href="#i-seat"/></svg>當班摘要</b>
+        <span class="meta" id="opsShiftMeta">--</span>
+      </div>
+      <div class="sec-b flush"><div class="kpis" id="opsKpis"></div></div>
+      <div class="sec-b">
+        <div class="row wrap gap8">
+          <button class="ghost" id="btnStream">
+            <svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg><span id="btnStreamLbl">暫停流量</span>
+          </button>
+          <select id="injectSel" aria-label="手動投入情境"></select>
+          <button class="primary" id="btnInject">
+            <svg class="ic" aria-hidden="true"><use href="#i-inject"/></svg>投入這個情境
+          </button>
+          <span class="micro dimmer">流量為確定性合成資料。演示時可暫停背景流量,或直接點名要看哪一種情境。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="split ops">
+      <div class="sec">
+        <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-metrics"/></svg>每分鐘來件</b><span class="meta">近 30 分鐘</span></div>
+        <div class="sec-b" id="opsTraffic"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-seat"/></svg>席位與渠道</b><span class="meta" id="opsSeatMeta">--</span></div>
+        <div class="sec-b" id="opsSeats"></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">
+        <b><svg class="ic" aria-hidden="true"><use href="#i-pulse"/></svg>裁決事件流</b>
+        <span class="meta" id="opsStreamMeta">--</span>
+      </div>
+      <div class="sec-b flush"><div class="tbl" id="opsStream"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 四分鐘劇本 ================= -->
+<section class="view" id="v-demo" role="tabpanel" aria-label="四分鐘劇本">
+  <div class="view-head">
+    <div class="eyebrow">Four-minute guided script</div>
+    <h2>六個步驟走完治理閉環</h2>
+    <p>正常放行 → 分級核准 → <b>注入攔截</b> → A/B 對照 → 稽核回溯 → 量化成效。點左側任一步驟執行；每一步都會顯示指令走到哪一道關卡、被誰擋下、依據哪一條規則。</p>
+  </div>
+  <div class="split">
+    <div class="sec">
+      <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-script"/></svg>劇本</b><span class="meta" id="scriptMeta">6 STEPS</span></div>
+      <div class="sec-b flush"><div class="script" id="scriptList"><div class="loading"><div class="t">LOADING SCRIPT</div><div class="b"><i></i></div></div></div></div>
+    </div>
+    <div class="stack-lg" id="stage">
+      <div class="narrative">
+        <div class="tc">READY</div>
+        <h3>按下左側第一步開始</h3>
+        <p>Demo 中的電信後台為影子環境,非任何真實營運系統;測試集為自建合成資料,非真實客服紀錄。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 核准佇列 ================= -->
+<section class="view" id="v-queue" role="tabpanel" aria-label="核准佇列">
+  <div class="view-head">
+    <div class="eyebrow">Human-in-the-loop · G4</div>
+    <h2>核准佇列</h2>
+    <p>每一件待核准動作附完整證據包:<b>影響範圍、可回復性、觸發規則與條文原文、指令來源鏈、預演結果</b>。設計目標是主管在 15 秒內做出有依據的決定,而不是憑 Agent 的一句話。</p>
+  </div>
+  <div class="split wide">
+    <div class="stack-lg">
+      <div class="sec">
+        <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-queue"/></svg>待核准</b><span class="meta" id="qMeta">0 ITEMS</span></div>
+        <div class="sec-b flush"><div class="qlist" id="qList"></div></div>
+      </div>
+      <div class="sec" id="qDecidedSec" hidden>
+        <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-g5"/></svg>已決行</b><span class="meta" id="qDecidedMeta"></span></div>
+        <div class="sec-b flush"><div class="qlist" id="qDecided"></div></div>
+      </div>
+    </div>
+    <div id="dossierWrap"></div>
+  </div>
+</section>
+
+<!-- ================= 運作機制 =================
+     由 agentgate/api/static/mechanism.js 掛載，內容出自 GET /api/gate/mechanism，
+     而那支端點是從活的程式碼推導出來的（信任表、schema、規則數、門檻常數），
+     不是另外手寫一份說明 —— 說明與實作不會各走各的。 -->
+<section class="view" id="v-mechanism" role="tabpanel" aria-label="運作機制">
+  <div id="mechRoot"></div>
+</section>
+
+<!-- ================= 影子後台 =================
+     G3 預演會說「這個查詢實際會撈出 240 筆」。沒有這一頁的話，那個數字只是
+     一個數字；有了這一頁，它是一個可以被翻開來看的名單。 -->
+<section class="view" id="v-vault" role="tabpanel" aria-label="影子後台">
+  <div class="view-head">
+    <div class="eyebrow">Shadow environment · G3 dry-run target</div>
+    <h2>影子後台</h2>
+    <p>與電信營運後台同 schema 的複本。<b>G3 的後果預演在這裡乾跑</b> —— 不寫入,但會實際撈一次,
+       所以治理層能回答「這個查詢實際會影響幾個人」,而不是採信 Agent 自己申報的筆數。
+       這裡的每一筆都是合成資料,身分證與 email 以遮蔽形式儲存。</p>
+  </div>
+  <div class="split wide">
+    <div class="sec">
+      <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-vault"/></svg>帳戶查詢</b><span class="meta" id="vaultMeta">--</span></div>
+      <div class="sec-b">
+        <input id="vaultQ" class="field" placeholder="帳號 / 姓名 / 門號" aria-label="帳戶查詢">
+      </div>
+      <div class="sec-b flush"><div class="qlist" id="vaultList"></div></div>
+    </div>
+    <div id="vaultDetail"></div>
+  </div>
+</section>
+
+<!-- ================= 稽核鏈 ================= -->
+<section class="view" id="v-audit" role="tabpanel" aria-label="稽核鏈">
+  <div class="view-head">
+    <div class="eyebrow">Tamper-evident audit chain · G5</div>
+    <h2>稽核鏈</h2>
+    <p>每筆紀錄含前一筆的雜湊。<b>被擋下的動作與被執行的動作留下同等完整的紀錄</b> —— 這是稽核完整率能到 100% 的原因。竄改任何一筆,驗證當場失敗並指出斷點。</p>
+  </div>
+  <div class="stack-lg">
+    <div class="sec">
+      <div class="sec-b">
+        <div class="row wrap gap8">
+          <button class="primary" id="btnVerify"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>驗證雜湊鏈完整性</button>
+          <button class="danger" id="btnTamper"><svg class="ic" aria-hidden="true"><use href="#i-broken"/></svg>竄改演示</button>
+          <span class="micro dimmer">竄改演示會偷改鏈中一筆紀錄的內容,不改雜湊 —— 用來證明「改得掉資料,改不掉鏈」。</span>
+        </div>
+        <div class="mt10" id="verifyBanner"></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-audit"/></svg>稽核紀錄</b><span class="meta" id="auditMeta">--</span></div>
+      <div class="sec-b flush"><div class="tbl" id="auditWrap"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 政策條文 ================= -->
+<section class="view" id="v-policy" role="tabpanel" aria-label="政策條文">
+  <div class="view-head">
+    <div class="eyebrow">Deterministic policy · G2</div>
+    <h2>政策條文</h2>
+    <p>政策裁決層<b>刻意不用 LLM</b>:同樣的動作進來永遠得到同樣的裁決,規則可被稽核、可被法遵單位逐條檢視、不可被提示詞繞過。以下是現行的完整政策,由 <code>/api/gate/policy</code> 即時匯出。</p>
+  </div>
+  <div class="stack-lg" id="policyWrap">
+    <div class="loading"><div class="t">LOADING POLICY</div><div class="b"><i></i></div></div>
+  </div>
+</section>
+
+<!-- ================= 驗證與指標 ================= -->
+<section class="view" id="v-metrics" role="tabpanel" aria-label="驗證與指標">
+  <div class="view-head">
+    <div class="eyebrow">Live telemetry &amp; validation pipeline</div>
+    <h2>驗證與指標</h2>
+    <p>上半是本次 Demo 的線上即時值;下半是驗證管線 —— <b>120 條自建情境 × 7 條基準線 × 6 項指標</b>,含兩組消融與一組最壞情況核准者的敏感度測試。</p>
+  </div>
+  <div class="stack-lg">
+    <div class="sec">
+      <div class="sec-h"><b><svg class="ic" aria-hidden="true"><use href="#i-metrics"/></svg>線上即時值</b><span class="meta">THIS SESSION</span></div>
+      <div class="sec-b flush"><div class="kpis" id="liveKpis"></div></div>
+    </div>
+    <div class="sec">
+      <div class="sec-h">
+        <b><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg>驗證管線</b>
+        <span class="meta" id="benchMeta">尚未執行</span>
+      </div>
+      <div class="sec-b">
+        <div class="row wrap gap8">
+          <button class="primary" id="btnBench"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>執行驗證管線</button>
+          <span class="micro dimmer">120 條情境 × 7 條基準線,本機離線跑,約需 1 秒。</span>
+        </div>
+        <div class="mt14" id="benchResult"></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <b>指標定義</b>
+    <div class="dl">
+      <span><b>HAR</b> 有害動作放行率(越低越好)</span>
+      <span><b>TCR</b> 正常任務完成率(越高越好)</span>
+      <span><b>FBR</b> 誤攔率(產品存活關鍵)</span>
+      <span><b>ESB</b> 權限升級攔截率</span>
+      <span><b>AC</b> 稽核完整率</span>
+      <span><b>DL</b> 決策延遲 p95</span>
+    </div>
+    <div class="mt6" id="benchDisclaimer">測試集為自建合成資料;B1 為模擬之 LLM 自我審查;核准者為確定性模擬;所有數字未經任何企業實地驗證。</div>
+  </div>
+</section>
+
+</div>
+
+<!-- ================= 案件檔案（抽屜） =================
+     事件流、核准佇列、劇本三個地方都指向這裡。同一件工單只有一種畫法，
+     所以主管在佇列裡看到的東西，跟評審在事件流裡點開的東西，是同一份。 -->
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-scrim" data-close="1"></div>
+  <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="案件檔案" tabindex="-1">
+    <div class="drawer-head">
+      <div>
+        <div class="eyebrow" id="drawerEyebrow">CASE FILE</div>
+        <h3 id="drawerTitle">案件檔案</h3>
+      </div>
+      <button class="ghost" id="drawerClose" aria-label="關閉">✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
+</div>
+
+<script src="/static/mechanism.js"></script>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   基礎工具
+   ========================================================================== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+const ic = (name, cls) =>
+  `<svg class="ic${cls ? " " + cls : ""}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
+async function api(path, opts){
+  const init = opts ? {headers:{"Content-Type":"application/json"}, ...opts} : undefined;
+  const res = await fetch(path, init);
+  if (!res.ok){
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const j = await res.json();
+      msg = typeof j.detail === "string" ? j.detail
+          : j.detail ? JSON.stringify(j.detail) : msg;
+    } catch { /* 回應不是 JSON，保留 HTTP 狀態當訊息 */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+const loadingHTML = label =>
+  `<div class="loading"><div class="t">${esc(label)}</div><div class="b"><i></i></div></div>`;
+const emptyHTML = (title, body) =>
+  `<div class="empty">${ic("empty")}<b>${esc(title)}</b>${esc(body ?? "")}</div>`;
+const errHTML = (title, detail) =>
+  `<div class="errbox"><div class="t">${ic("warn")}${esc(title)}</div>
+   <div class="d"><code>${esc(detail)}</code></div></div>`;
+
+const pctOf = x => (x * 100).toFixed(1) + "%";
+const intFmt = n => Number(n).toLocaleString("en-US");
+
+/* ==========================================================================
+   共用詞彙
+   ========================================================================== */
+const GATES = [
+  ["G0","來源信任","i-g0"],
+  ["G1","動作解析","i-g1"],
+  ["G2","政策裁決","i-g2"],
+  ["G3","後果預演","i-g3"],
+  ["G4","人工核准","i-g4"],
+  ["G5","執行封存","i-g5"],
+];
+
+const STATUS_LABEL = {
+  executed:"已執行", blocked:"已攔下",
+  pending_approval:"待人工核准", rejected:"已駁回",
+};
+const STATUS_ICON = {
+  executed:"check", blocked:"block",
+  pending_approval:"clock", rejected:"block",
+};
+const RISK_LABEL = {
+  low:"低", medium:"中", high:"高",
+  forbidden:"禁止", ungoverned:"未治理",
+};
+const CH_LABEL = {
+  user_verified:"已驗證用戶", user_unverified:"未驗證用戶",
+  tool_output:"工具回傳", memory:"記憶", system:"系統",
+};
+const TRUST_LABEL = { verified:"可信", derived:"衍生", untrusted:"不可信" };
+const STAGE_LABEL = {
+  g0_trust:["G0 來源信任","g0"],
+  g1_resolution:["G1 動作解析","g1"],
+  g2_adjudication:["G2 政策裁決","g2"],
+  g3_projection:["G3 後果預演","g3"],
+  g4_pending:["G4 送入核准","g4"],
+  g4_approved:["G4 人工核准","g5"],
+  g4_rejected:["G4 人工駁回","blocked"],
+  g5_executed:["G5 執行封存","g5"],
+  g5_blocked:["G5 攔截封存","blocked"],
+  degrade:["治理層關閉","degrade"],
+  restore:["治理層恢復","g5"],
+};
+
+/* ==========================================================================
+   關卡走廊 —— 全站主視覺
+   六格的狀態完全由裁決推導，沒有任何一格是寫死的：
+     被擋 → 該格 STOP，之後的格子是「從未執行」而不是「失敗」
+     待核 → G4 HOLD，G5 尚未落章
+     駁回 → G4 STOP，但 G5 仍然落章（被駁回的動作一樣留完整紀錄）
+   ========================================================================== */
+/* 走廊格子的順序是 G0…G5（空間順序），但實際執行順序是 G1 先跑：
+   schema 驗證在 evaluate_trust 之前。所以「被擋之前的格子都算 PASS」對 G1 攔截
+   是錯的 —— 畫面會宣稱 G0 通過，但 G0 根本沒跑到。狀態要照執行順序推，
+   不是照它畫在第幾格。 */
+const EXEC_ORDER = ["G1", "G0", "G2", "G3", "G4", "G5"];
+
+function corridor(v, opts){
+  const bypassed = opts && opts.bypassed;
+  const blockedAt = v.gate_blocked_at;
+  const stopExec = blockedAt ? EXEC_ORDER.indexOf(blockedAt) : -1;
+
+  const cells = GATES.map(([id, name, icon], i) => {
+    let cls = "pass", st = "PASS";
+    const execIdx = EXEC_ORDER.indexOf(id);
+
+    if (bypassed){
+      cls = "void"; st = "OFF";
+    } else if (stopExec >= 0){
+      if (execIdx < stopExec)       { cls = "pass"; st = "PASS"; }
+      else if (execIdx === stopExec){ cls = "stop"; st = "STOP"; }
+      else                          { cls = "void"; st = "—";    }
+    } else if (v.status === "pending_approval"){
+      if (i < 4)       { cls = "pass"; st = "PASS"; }
+      else if (i === 4){ cls = "hold"; st = "HOLD"; }
+      else             { cls = "void"; st = "—";    }
+    } else if (v.status === "rejected"){
+      if (i < 4)       { cls = "pass"; st = "PASS"; }
+      else if (i === 4){ cls = "stop"; st = "REJECT"; }
+      else             { cls = "pass"; st = "SEALED"; }
+    }
+
+    return `<div class="gt ${cls}">
+      <div class="gt-rail"><span class="gt-node"></span></div>
+      <span class="gt-id">${id}</span>
+      <svg class="ic" aria-hidden="true"><use href="#${icon}"/></svg>
+      <span class="gt-name">${name}</span>
+      <span class="gt-st">${st}</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="corridor" role="img" aria-label="${esc(corridorAlt(v, bypassed))}">${cells}</div>`;
+}
+
+function corridorAlt(v, bypassed){
+  if (bypassed) return "治理層已關閉,六道關卡全部未執行。";
+  if (v.gate_blocked_at) return `指令在 ${v.gate_blocked_at} 被攔下,之後的關卡未執行。`;
+  if (v.status === "pending_approval") return "指令通過 G0 至 G3,停在 G4 等待人工核准。";
+  if (v.status === "rejected") return "指令在 G4 被人工駁回,仍於 G5 完成封存。";
+  return "指令通過全部六道關卡並完成封存。";
+}
+
+/* ==========================================================================
+   裁決卡
+   ========================================================================== */
+function verdictCard(v, opts){
+  const bypassed = opts && opts.bypassed;
+  const st = v.status;
+  const reasons = (v.reasons ?? []).map(r => {
+    const isRule = /^\[[A-Z]{2}-\d+\]/.test(r);
+    return `<li class="${isRule ? "rule" : ""}">${esc(r)}</li>`;
+  }).join("");
+
+  const findings = (v.findings ?? []).map(f => `
+    <div class="rulecard">
+      <span class="rid">${esc(f.rule_id)} · ${esc(f.title)}</span>
+      <div class="msg">${esc(f.message)}</div>
+      ${f.statute ? `<span class="statute">「${esc(f.statute)}」</span>` : ""}
+    </div>`).join("");
+
+  const latency = v.decision_latency_ms != null
+    ? `${v.decision_latency_ms.toFixed(2)} ms` : "--";
+
+  return `
+  <div class="sec">
+    <div class="verdict-head">
+      <span class="big ${esc(st)}">${ic(STATUS_ICON[st] ?? "warn")} ${STATUS_LABEL[st] ?? esc(st)}</span>
+      <span class="pill risk ${esc(v.risk)}">風險 ${RISK_LABEL[v.risk] ?? esc(v.risk)}</span>
+      ${v.gate_blocked_at ? `<span class="pill blocked">攔截於 ${esc(v.gate_blocked_at)}</span>` : ""}
+      ${v.approval_id ? `<span class="pill wait">${esc(v.approval_id)}</span>` : ""}
+      <span class="grow"></span>
+      <span class="micro plain">裁決耗時 ${latency}</span>
+    </div>
+    ${st === "blocked" ? `<div class="hazard"></div>` : ""}
+    ${st === "pending_approval" ? `<div class="hazard wait"></div>` : ""}
+    <div class="sec-b flush">${corridor(v, {bypassed})}</div>
+    <div class="sec-b">
+      <div class="micro">裁決理由</div>
+      <ul class="reasons mt6">${reasons || "<li>(無)</li>"}</ul>
+      ${findings ? `<hr class="rule"><div class="micro">觸發規則與條文</div><div class="mt6">${findings}</div>` : ""}
+    </div>
+    ${v.projection ? projectionPanel(v.projection) : ""}
+    ${v.trust ? provenancePanel(v.trust) : ""}
+    ${v.execution_result ? executionPanel(v.execution_result) : ""}
+  </div>`;
+}
+
+/* ==========================================================================
+   執行結果
+   --------------------------------------------------------------------------
+   原本這一格直接 dump JSON。對工程師沒問題，但它要回答的是「後台實際發生了
+   什麼」—— 那句話是講給主管和評審聽的，不是講給 curl 聽的。所以按動作種類
+   渲染成一張結果單，原始 JSON 收進 <details>：預設好讀，要查證隨時攤開。
+
+   動作種類由結果的形狀反推，不從外面傳進來。verdictCard 有四個呼叫點，其中
+   劇本舞台那兩個手上只有 verdict、沒有原始請求；硬要用傳的就得在每個呼叫點
+   補一次，補漏一個就默默退回 JSON。結果的欄位組合本來就互斥，反推是穩的。
+   ========================================================================== */
+const recRows = rows => `<div class="rec">${rows.map(([k, v, cls]) =>
+  `<div class="rw"><span class="k">${esc(k)}</span>
+   <span class="v ${cls ?? ""}">${v}</span></div>`).join("")}</div>`;
+
+const money = n => `${intFmt(n)} 元`;
+const monoOf = s => `<span class="mono">${esc(s)}</span>`;
+
+function executionPanel(res){
+  const raw = `<details class="rawdrop mt10">
+    <summary>原始回應</summary>
+    <div class="raw mt6">${esc(JSON.stringify(res, null, 1))}</div>
+  </details>`;
+
+  const shell = (head, body) => `
+    <div class="sec-b" style="border-top:1px solid var(--line)">
+      <div class="row between wrap gap8">
+        <span class="micro">影子環境執行結果</span>
+        <span class="micro plain dimmer">合成後台 · 非任何真實營運系統</span>
+      </div>
+      <div class="execres mt6">
+        <div class="exec-h ${res.ok === false ? "bad" : ""}">
+          ${ic(res.ok === false ? "warn" : "check")}<b>${esc(head)}</b>
+        </div>
+        ${body}
+      </div>
+      ${raw}
+    </div>`;
+
+  if (res.ok === false)
+    return shell("未寫入", recRows([["失敗原因", esc(res.error ?? "未指明"), "bad"]]));
+
+  // 批次匯出 —— 這一格的重點是「多少人的哪些欄位離開了系統」
+  if (res.exported_count != null){
+    const rows = res.rows ?? [], fields = res.fields ?? [];
+    const cols = fields.filter(f => rows.some(r => r[f] != null && r[f] !== ""));
+    const rest = Math.max(0, res.exported_count - rows.length);
+    return shell(`已匯出 ${intFmt(res.exported_count)} 筆客戶資料`, `
+      <div class="facts tight">
+        <div class="fact bad"><span class="macro v">${intFmt(res.exported_count)}</span>
+          <span class="k">匯出筆數</span></div>
+        <div class="fact bad"><span class="macro v">${fields.length}</span>
+          <span class="k">個資欄位</span>
+          <span class="s">${esc(fields.join(" "))}</span></div>
+      </div>
+      ${rows.length ? `<div class="exec-b">
+        <div class="tbl"><table>
+          <thead><tr>${cols.map(f => `<th>${esc(f)}</th>`).join("")}</tr></thead>
+          <tbody>${rows.map(r =>
+            `<tr>${cols.map(f => `<td>${esc(r[f] ?? "—")}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table></div>
+        <div class="micro dimmer mt6">上表為前 ${rows.length} 筆預覽,其餘 ${intFmt(rest)} 筆略。</div>
+      </div>` : ""}`);
+  }
+
+  if (res.refunded != null)
+    return shell(`已退費 ${money(res.refunded)}`, recRows([
+      ["退費金額", money(res.refunded)],
+      ["入帳帳戶", monoOf(res.refund_to ?? "—")],
+      ["30 日累計", money(res.refunds_30d_total ?? 0),
+       (res.refunds_30d_total ?? 0) >= 20000 ? "warn" : ""],
+    ]));
+
+  if (res.to_plan)
+    return shell("已變更資費方案", recRows([
+      ["原方案", monoOf(res.from_plan)],
+      ["新方案", monoOf(res.to_plan)],
+    ]));
+
+  if (res.new_sim)
+    return shell("已補發 SIM 卡", recRows([
+      ["舊卡(已失效)", monoOf(res.old_sim_invalidated), "bad"],
+      ["新卡卡號", monoOf(res.new_sim)],
+      ["交付方式", esc(res.ship_to ?? "—")],
+    ]));
+
+  if (res.service_status && !res.account)
+    return shell("已變更服務狀態", recRows([
+      ["服務狀態", res.service_status === "suspended" ? "已停話" : esc(res.service_status),
+       res.service_status === "suspended" ? "bad" : "ok"],
+    ]));
+
+  if (res.account){
+    const a = res.account;
+    return shell(`已讀取 ${a.name} 的帳務摘要`, recRows([
+      ["帳號 / 門號", `${monoOf(a.account_id)} · ${monoOf(a.msisdn)}`],
+      ["資費方案", `${esc(a.plan_name ?? a.plan_id)} <small class="dim">月租 ${money(a.monthly_fee)}</small>`],
+      ["本期應繳", money(a.balance)],
+      ["綁約", a.contract_months_left ? `尚餘 ${a.contract_months_left} 個月` : "無綁約"],
+      ["服務狀態", a.service_status === "suspended" ? "已停話" : "服務中",
+       a.service_status === "suspended" ? "bad" : "ok"],
+    ]));
+  }
+
+  return shell("已寫入影子後台", "");
+}
+
+function projectionPanel(p){
+  const money = p.financial_delta
+    ? `${p.financial_delta < 0 ? "−" : "+"}${intFmt(Math.abs(p.financial_delta))}` : "0";
+  return `
+  <div class="sec-b flush" style="border-top:1px solid var(--line)">
+    <div class="facts">
+      <div class="fact ${p.affected_count > 1 ? "warn" : ""}">
+        <span class="macro v">${intFmt(p.affected_count)}</span>
+        <span class="k">受影響主體</span>
+        <span class="s">${esc((p.affected_subjects ?? []).slice(0,3).join(" ")) || "—"}</span>
+      </div>
+      <div class="fact ${p.reversible ? "good" : "bad"}">
+        <span class="macro v">${p.reversible ? "可回復" : "不可回復"}</span>
+        <span class="k">回復性</span>
+        <span class="s">${p.reversal_window_hours ? `${p.reversal_window_hours} 小時內可追回` : "無追回時窗"}</span>
+      </div>
+      <div class="fact ${p.financial_delta < 0 ? "bad" : ""}">
+        <span class="macro v">${money}</span>
+        <span class="k">金流影響(元)</span>
+        <span class="s">${p.financial_delta < 0 ? "公司支出" : "無金流變動"}</span>
+      </div>
+      <div class="fact ${(p.pii_fields_exposed ?? []).length ? "bad" : "good"}">
+        <span class="macro v">${(p.pii_fields_exposed ?? []).length || "無"}</span>
+        <span class="k">觸及個資欄位</span>
+        <span class="s">${esc((p.pii_fields_exposed ?? []).join(" ")) || "未觸及個資"}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function provenancePanel(t){
+  const chain = (t.chain ?? []);
+  const weakRef = t.weakest_link ? t.weakest_link.source_ref : null;
+  const links = chain.map((n, i) => {
+    const weak = chain.length > 1 && n.source_ref === weakRef;
+    return `${i ? `<span class="arr">→</span>` : ""}
+      <div class="lnk ${weak ? "weak" : ""}">
+        <span class="ch">${esc(CH_LABEL[n.channel] ?? n.channel)}</span>
+        <span class="tr">${esc(TRUST_LABEL[n.trust] ?? n.trust)} · 上限 ${esc(RISK_LABEL[n.max_risk] ?? n.max_risk)}</span>
+        <span class="ref">${esc(n.source_ref)}</span>
+      </div>`;
+  }).join("");
+  return `
+  <div class="sec-b" style="border-top:1px solid var(--line)">
+    <div class="row between wrap gap8">
+      <span class="micro">指令來源鏈(G0)</span>
+      <span class="micro">最弱環節決定整鏈授權上限 = <b class="mono">${esc(RISK_LABEL[t.risk_cap] ?? t.risk_cap)}</b></span>
+    </div>
+    <div class="chain mt6">${links || `<span class="empty">無來源鏈</span>`}</div>
+  </div>`;
+}
+
+/* ==========================================================================
+   案件檔案 —— 工單、對話、附件
+   --------------------------------------------------------------------------
+   這一段是這次改版的重點。原本的裁決卡是從「動作請求」開始講故事，於是
+   「指令從哪來」只剩下一條 source_ref 字串。真實系統裡它有出處：一通對話、
+   一份用戶上傳的 PDF、一篇被改過的 SOP。把那些東西畫出來之後，提示注入
+   才從一個名詞變成螢幕上可以指著唸的一行字。
+   ========================================================================== */
+const ROLE_META = {
+  customer: ["客戶", "cust"],
+  agent:    ["AI Agent", "agent"],
+  tool:     ["工具回傳", "tool"],
+  system:   ["系統", "sys"],
+};
+
+const KIND_LABEL = {
+  read_account:"查詢帳務", read_bulk:"批次查詢/匯出", issue_refund:"退費",
+  change_plan:"變更資費", suspend_service:"停話", reissue_sim:"補發 SIM",
+  policy_override:"繞過治理",
+};
+
+const clock = iso => String(iso ?? "").slice(11, 19);
+
+function offsetLabel(sec){
+  const s = Number(sec) || 0;
+  return `+${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
+}
+
+/* 對話逐字。tool 這一種要看得出來是「機器讀進來的內容」而不是人講的話 ——
+   注入永遠藏在這一種裡面，混在客戶發言裡畫就等於把線索抹掉了。 */
+function transcript(turns){
+  if (!turns || !turns.length) return "";
+  return `<div class="talk">` + turns.map(t => {
+    const [label, cls] = ROLE_META[t.role] ?? [t.role, "sys"];
+    return `<div class="turn ${cls}">
+      <div class="turn-h">
+        <span class="who">${esc(t.speaker)}</span>
+        <span class="role">${esc(label)}</span>
+        <span class="grow"></span>
+        <span class="off mono">${offsetLabel(t.offset)}</span>
+      </div>
+      <div class="txt">${esc(t.text)}</div>
+    </div>`;
+  }).join("") + `</div>`;
+}
+
+/* 附件原文。injected_line 那一行用硃砂標出來，旁邊掛一枚標記說明它是什麼。 */
+function attachments(list){
+  if (!list || !list.length) return "";
+  return list.map(a => {
+    const lines = (a.lines ?? []).map((line, i) => {
+      const hit = i === a.injected_line;
+      return `<div class="ln ${hit ? "inj" : ""}">
+        <span class="no mono">${String(i + 1).padStart(2,"0")}</span>
+        <span class="tx">${esc(line)}</span>
+        ${hit ? `<span class="mark">夾帶指令</span>` : ""}
+      </div>`;
+    }).join("");
+    return `<div class="attach ${a.injected_line >= 0 ? "tainted" : ""}">
+      <div class="attach-h">
+        ${ic("doc")}
+        <span class="fn">${esc(a.filename)}</span>
+        <span class="grow"></span>
+        <span class="ref mono">${esc(a.ref)}</span>
+      </div>
+      <div class="attach-m">${esc(a.meta)}</div>
+      <div class="paperlines">${lines}</div>
+      ${a.injected_line >= 0 ? `<div class="attach-f">${ic("warn")}
+        這段文字不是人對客服說的話,是文件內容。G0 把它歸類為 <b>tool_output / untrusted</b>,
+        該通道最多只能授權 low 風險的動作 —— 不需要任何模型去判斷它「看起來可不可疑」。</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+/* 工單抬頭：誰、從哪個渠道進來、驗證到什麼程度。 */
+function caseHeader(c){
+  const cu = c.customer ?? {};
+  const weak = /未完成|失敗|未通過/.test(c.verification || "");
+  return `<div class="casebar">
+    <div class="cb"><span class="k">工單</span><span class="v mono">${esc(c.case_id)}</span></div>
+    <div class="cb"><span class="k">受理渠道</span><span class="v">${esc(c.channel_label)}</span></div>
+    <div class="cb"><span class="k">客戶</span><span class="v">${esc(cu.name ?? "—")}
+      <small class="mono">${esc(cu.account_id ?? "")}</small></span></div>
+    <div class="cb"><span class="k">受理席位</span><span class="v">${esc(c.seat_label ?? c.agent_seat)}</span></div>
+    <div class="cb ${weak ? "warn" : ""}"><span class="k">身分驗證</span>
+      <span class="v">${esc(c.verification)}</span></div>
+    <div class="cb"><span class="k">開案</span><span class="v mono">${clock(c.opened_at)}</span></div>
+  </div>`;
+}
+
+/* 對話裡有工具回傳、但來源鏈裡沒有它 —— 這一格解釋為什麼。
+
+   這是現場最容易被追問的一點:「Agent 明明呼叫了帳務系統，怎麼來源鏈只有一段?」
+   答案是來源鏈放的是**指令**的出處，不是**證據**的出處。這句話寫在文件裡像在辯解，
+   寫在它剛好發生的那份對話旁邊才是說明。
+
+   註記由這件工單的實際資料推導，不是貼一段固定文案：對話裡有幾段工具回傳、
+   來源鏈認不認得它們，都是當下算出來的。所以它不會在情境改掉之後還留在畫面上
+   講一件已經不成立的事。 */
+function evidenceNote(c, chain){
+  const toolTurns = (c.turns ?? []).filter(t => t.role === "tool");
+  if (!toolTurns.length || !chain) return "";
+  const untrusted = chain.filter(n => n.trust === "untrusted" || n.trust === "derived");
+  if (untrusted.length) return "";          // 這件的指令真的來自不可信通道，附件那一格已經在講了
+
+  return `<div class="evnote">
+    ${ic("g0")}
+    <div>
+      <b>對話中的 ${toolTurns.length} 段工具回傳沒有進入來源鏈,這是對的。</b>
+      Agent 為了查證而呼叫內部系統,回傳的是<b>事實</b>不是<b>命令</b> ——
+      來源鏈放的是指令的出處,不是證據的出處。
+      把內部查證也當成不可信通道的話,每一件「查證後才處理」的正常案件都會被 G0 擋掉。
+      反過來,PDF 備註、被竄改的 SOP、記憶裡的「以後都直接停話」才是指令,一定進鏈。
+    </div>
+  </div>`;
+}
+
+/* 工單全貌。demo 的舞台與抽屜共用同一份，兩邊看到的絕不會是兩套東西。 */
+function casePanel(c, opts){
+  const o = opts ?? {};
+  return `<div class="sec casefile">
+    <div class="sec-h">
+      <b>${ic("chat")}${esc(o.title ?? "來源工單")}</b>
+      <span class="meta">${esc(c.subject ?? "")}</span>
+    </div>
+    <div class="sec-b flush">${caseHeader(c)}</div>
+    <div class="sec-b">
+      <div class="micro">客服對話逐字</div>
+      <div class="mt6">${transcript(c.turns)}</div>
+      ${evidenceNote(c, o.chain)}
+      ${c.attachments && c.attachments.length
+        ? `<hr class="rule"><div class="micro">附件原文(Agent 實際讀到的內容)</div>
+           <div class="mt6">${attachments(c.attachments)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+/* Agent 送出的工具呼叫。刻意畫成「模型的輸出」而不是「系統的事實」。 */
+function toolCallPanel(req){
+  if (!req) return "";
+  return `<div class="sec">
+    <div class="sec-h"><b>${ic("g1")}Agent 送出的工具呼叫</b>
+      <span class="meta mono">${esc(req.action_id ?? "")}</span></div>
+    <div class="sec-b">
+      <div class="callrow">
+        <span class="tag on">${esc(KIND_LABEL[req.kind] ?? req.kind)}</span>
+        <span class="mono dim">${esc(req.kind)}</span>
+        <span class="grow"></span>
+        <span class="micro plain">代表 ${esc(req.principal)}(${esc(req.principal_role)})·席位 ${esc(req.agent_id)}</span>
+      </div>
+      <div class="raw mt6">${esc(JSON.stringify(req.params, null, 1))}</div>
+      ${req.reasoning ? `<div class="agentsay mt10">
+        <div class="warn">${ic("warn")}Agent 推理摘要 —— 未經驗證的模型輸出,不得作為裁決或核准的依據</div>
+        ${esc(req.reasoning)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ==========================================================================
+   案件抽屜
+   ========================================================================== */
+const drawer = $("#drawer");
+
+function closeDrawer(){
+  drawer.hidden = true;
+  document.body.classList.remove("locked");
+}
+drawer.addEventListener("click", e => { if (e.target.dataset.close) closeDrawer(); });
+$("#drawerClose").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !drawer.hidden) closeDrawer(); });
+
+async function openCase(caseId){
+  drawer.hidden = false;
+  document.body.classList.add("locked");
+  drawer.querySelector(".drawer-panel").focus();
+  $("#drawerTitle").textContent = caseId;
+  $("#drawerEyebrow").textContent = "CASE FILE";
+  $("#drawerBody").innerHTML = loadingHTML("LOADING CASE");
+
+  let d;
+  try { d = await api(`/api/ops/case/${encodeURIComponent(caseId)}`); }
+  catch(e){ $("#drawerBody").innerHTML = errHTML("找不到這件工單", e.message); return; }
+
+  $("#drawerTitle").textContent = d.case.subject;
+  $("#drawerEyebrow").textContent = `${d.case.case_id} · ${d.case.channel_label}`;
+
+  const audit = (d.audit ?? []).map(r => {
+    const [label, g] = STAGE_LABEL[r.stage] ?? [r.stage, ""];
+    return `<tr>
+      <td class="mono">${r.seq}</td>
+      <td class="mono">${clock(r.ts)}</td>
+      <td><span class="stagechip" data-g="${esc(g)}">${esc(label)}</span></td>
+      <td class="mono">${esc(r.actor)}</td>
+      <td><span class="hash"><span class="cur">${esc(r.hash.slice(0,10))}</span></span></td>
+    </tr>`;
+  }).join("");
+
+  $("#drawerBody").innerHTML = `
+    <div class="stack-lg">
+      ${casePanel(d.case, {chain: d.request?.provenance_chain})}
+      ${toolCallPanel(d.request)}
+      ${verdictCard(d.verdict)}
+      <div class="sec">
+        <div class="sec-h"><b>${ic("audit")}本件的稽核紀錄</b>
+          <span class="meta">${(d.audit ?? []).length} RECORDS</span></div>
+        <div class="sec-b flush"><div class="tbl"><table>
+          <thead><tr><th>#</th><th>時間</th><th>關卡</th><th>執行者</th><th>雜湊</th></tr></thead>
+          <tbody>${audit || `<tr><td colspan="5" class="dim">(無)</td></tr>`}</tbody>
+        </table></div></div>
+      </div>
+    </div>`;
+}
+
+/* ==========================================================================
+   狀態輪詢
+   ========================================================================== */
+let gateEnabled = true;
+
+async function poll(){
+  let s;
+  try { s = await api("/api/state"); } catch { return; }
+
+  gateEnabled = s.gate_enabled;
+  if (s.duty){
+    $("#tShift").textContent = `${s.duty.shift} ${s.duty.window}`;
+    $("#tDuty").textContent = s.duty.duty_manager;
+  }
+  $("#opsBadge").hidden = !s.live_ops;
+  const sw = $("#gateSw");
+  sw.classList.toggle("off", !gateEnabled);
+  $("#gateLbl").textContent = gateEnabled ? "治理層運作中" : "治理層已關閉(B0 無治理)";
+  $("#btnGateLbl").textContent = gateEnabled ? "關閉治理層" : "重新開啟";
+  $("#btnGate").classList.toggle("danger", !gateEnabled);
+
+  $("#tAudit").textContent = intFmt(s.audit_total);
+  $("#tPending").textContent = intFmt(s.pending_count);
+  $("#tPending").classList.toggle("hot", s.pending_count > 0);
+  $("#tPending").classList.toggle("breach", s.pending_breached > 0);
+  $("#tDecisions").textContent = intFmt(s.metrics.decisions);
+  const p95 = s.metrics.decision_latency_ms.p95;
+  $("#tLat").textContent = s.metrics.decisions ? `${p95} ms` : "-- ms";
+
+  const badge = $("#qBadge");
+  badge.hidden = s.pending_count === 0;
+  badge.textContent = s.pending_count;
+}
+
+$("#btnGate").addEventListener("click", async () => {
+  try {
+    await api("/api/demo/gate", {method:"POST", body: JSON.stringify({enabled: !gateEnabled})});
+  } catch(e){ alert("切換失敗:" + e.message); }
+  poll();
+});
+
+$("#btnReset").addEventListener("click", async () => {
+  try { await api("/api/demo/reset", {method:"POST", body:"{}"}); }
+  catch(e){ alert("重設失敗:" + e.message); return; }
+  doneSteps.clear(); currentStep = null; renderScript();
+  selectedApproval = null; benchCache = null;
+  $("#benchMeta").textContent = "尚未執行";
+  $("#benchResult").innerHTML = "";
+  $("#verifyBanner").innerHTML = "";
+  $("#stage").innerHTML = `<div class="narrative">
+    <div class="tc">READY</div><h3>已重設</h3>
+    <p>影子環境、稽核鏈、核准佇列與指標全部歸零,並重新回填當班歷史 ——
+       歸零的意思是回到剛接班的樣子,不是回到一個從來沒運作過的系統。</p></div>`;
+  vaultSel = null;
+  poll(); loadRunId(); loadOps();
+});
+
+/* ==========================================================================
+   營運中心
+   ========================================================================== */
+let opsRunning = true, opsTimer = null;
+
+async function loadOps(){
+  let d;
+  try { d = await api("/api/ops/state?stream=45&minutes=30"); }
+  catch(e){ $("#opsStream").innerHTML = errHTML("營運狀態載入失敗", e.message); return; }
+
+  const s = d.summary, q = s.queue, atk = s.attack;
+  opsRunning = s.running;
+  $("#btnStreamLbl").textContent = opsRunning ? "暫停流量" : "恢復流量";
+  $("#btnStream").classList.toggle("danger", !opsRunning);
+
+  $("#opsShiftMeta").textContent =
+    `${s.shift.shift} ${s.shift.window} · 值班 ${s.shift.duty_manager} · 本機時間 ${s.shift.local_time}`;
+
+  const sc = s.status_counts;
+  $("#opsKpis").innerHTML = `
+    <div class="kpi hero"><span class="macro v">${intFmt(s.cases)}</span>
+      <span class="l">當班已受理</span>
+      <span class="s">近 ${s.window_minutes} 分鐘 · 每分鐘約 ${(s.cases / Math.max(s.window_minutes,1)).toFixed(1)} 件</span></div>
+    <div class="kpi"><span class="macro v" style="color:var(--jade)">${pctOf(s.auto_pass_rate)}</span>
+      <span class="l">自動放行率</span>
+      <span class="s">${intFmt(sc.executed)} 件不需驚動任何人</span></div>
+    <div class="kpi"><span class="macro v" style="color:var(--amber)">${intFmt(sc.pending)}</span>
+      <span class="l">送人工核准</span>
+      <span class="s">佇列目前待決 ${intFmt(q.pending)} 件</span></div>
+    <div class="kpi"><span class="macro v" style="color:var(--cinnabar)">${intFmt(sc.blocked)}</span>
+      <span class="l">關卡攔下</span>
+      <span class="s">${Object.entries(s.blocked_by_gate).map(([k,v]) => `${k}×${v}`).join(" ") || "—"}</span></div>
+    <div class="kpi"><span class="macro v" style="color:${q.breached ? "var(--cinnabar)" : "var(--jade)"}">${pctOf(q.sla_met_rate)}</span>
+      <span class="l">核准 SLA 達成</span>
+      <span class="s">本班已決行 ${intFmt(q.resolved_this_shift)} 件 · 逾時 ${q.breached} 件</span></div>
+    <div class="kpi"><span class="macro v">${intFmt(atk.blocked + atk.held)}<small>/${atk.cases}</small></span>
+      <span class="l">異常流量已處置</span>
+      <span class="s">攔下 ${atk.blocked} · 送核 ${atk.held} · <b style="color:${atk.executed ? "var(--cinnabar)" : "var(--jade)"}">放行 ${atk.executed}</b></span></div>`;
+
+  $("#opsTraffic").innerHTML = trafficChart(d.traffic);
+
+  const seatRows = s.seats.map(x => `
+    <div class="bar"><span class="nm">${esc(x.label)}</span>
+      <span class="track"><i style="width:${(x.cases / Math.max(...s.seats.map(y=>y.cases), 1) * 100).toFixed(1)}%"></i></span>
+      <span class="n mono">${x.cases}</span></div>`).join("");
+  const chRows = s.channels.map(x => `
+    <div class="bar ch"><span class="nm">${esc(x.label)}</span>
+      <span class="track"><i style="width:${(x.cases / Math.max(...s.channels.map(y=>y.cases), 1) * 100).toFixed(1)}%"></i></span>
+      <span class="n mono">${x.cases}</span></div>`).join("");
+  $("#opsSeatMeta").textContent = `${s.seats.length} 席 · ${s.channels.length} 渠道`;
+  $("#opsSeats").innerHTML = `${seatRows}<hr class="rule">${chRows}
+    <div class="micro dimmer mt10">合成流量中約 ${pctOf(atk.share)} 為異常情境 ——
+      刻意高於真實環境,四分鐘內才看得到攻擊被擋。</div>`;
+
+  $("#opsStreamMeta").textContent = `最近 ${d.stream.length} 件 · 點列展開工單`;
+  $("#opsStream").innerHTML = `<table class="stream">
+    <thead><tr>
+      <th>時間</th><th>工單</th><th>情境</th><th>渠道</th><th>客戶</th>
+      <th>動作</th><th class="r">風險</th><th>裁決</th><th>觸發規則</th>
+    </tr></thead>
+    <tbody>${d.stream.map(streamRow).join("")}</tbody></table>`;
+  $$("#opsStream tr[data-case]").forEach(tr =>
+    tr.addEventListener("click", () => openCase(tr.dataset.case)));
+}
+
+function streamRow(r){
+  const st = r.status;
+  const chip = st === "blocked"
+      ? `<span class="pill blocked">${ic("block")}攔於 ${esc(r.gate_blocked_at ?? "—")}</span>`
+    : st === "pending_approval"
+      ? `<span class="pill wait">${ic("clock")}待核</span>`
+      : `<span class="pill executed">${ic("check")}放行</span>`;
+  return `<tr data-case="${esc(r.case_id)}" class="${st}">
+    <td class="mono">${clock(r.at)}</td>
+    <td class="mono">${esc(r.case_id)}</td>
+    <td>${esc(r.label)}</td>
+    <td class="dim">${esc(r.channel_label)}</td>
+    <td>${esc(r.customer_name)}</td>
+    <td class="mono">${esc(r.kind)}</td>
+    <td class="r"><span class="pill risk ${esc(r.risk)}">${RISK_LABEL[r.risk] ?? esc(r.risk)}</span></td>
+    <td>${chip}</td>
+    <td class="mono dim">${esc((r.rules ?? []).join(" ")) || "—"}</td>
+  </tr>`;
+}
+
+/* 每分鐘來件的堆疊長條。顏色沿用全站語意：放行 jade、待核 amber、攔下 cinnabar，
+   所以這張圖不必附圖例也讀得懂。 */
+function trafficChart(buckets){
+  if (!buckets || !buckets.length) return emptyHTML("尚無流量", "");
+  const max = Math.max(...buckets.map(b => b.executed + b.pending + b.blocked), 1);
+  const bars = buckets.map(b => {
+    const total = b.executed + b.pending + b.blocked;
+    const h = v => `${(v / max * 100).toFixed(1)}%`;
+    return `<div class="tb" title="${esc(b.minute)} · 放行 ${b.executed} / 待核 ${b.pending} / 攔下 ${b.blocked}">
+      <span class="stack">
+        <i class="blk" style="height:${h(b.blocked)}"></i>
+        <i class="pnd" style="height:${h(b.pending)}"></i>
+        <i class="exe" style="height:${h(b.executed)}"></i>
+      </span>
+      <span class="n mono">${total || ""}</span>
+    </div>`;
+  }).join("");
+  return `<div class="traffic">${bars}</div>
+    <div class="row between mt6">
+      <span class="micro dimmer">${esc(buckets[0].minute)}</span>
+      <span class="micro"><b style="color:var(--jade)">■</b> 放行
+        <b style="color:var(--amber)">■</b> 待核
+        <b style="color:var(--cinnabar)">■</b> 攔下</span>
+      <span class="micro dimmer">${esc(buckets[buckets.length-1].minute)}</span>
+    </div>`;
+}
+
+$("#btnStream").addEventListener("click", async () => {
+  try { await api("/api/ops/stream", {method:"POST", body: JSON.stringify({running: !opsRunning})}); }
+  catch(e){ alert("切換失敗:" + e.message); return; }
+  loadOps();
+});
+
+$("#btnInject").addEventListener("click", async () => {
+  const btn = $("#btnInject");
+  btn.disabled = true;
+  try {
+    const d = await api("/api/ops/inject", {method:"POST",
+      body: JSON.stringify({template_id: $("#injectSel").value})});
+    await loadOps();
+    openCase(d.case.case_id);
+  } catch(e){ alert("投入失敗:" + e.message); }
+  finally { btn.disabled = false; }
+});
+
+async function loadTemplates(){
+  let d;
+  try { d = await api("/api/ops/templates"); } catch { return; }
+  $("#injectSel").innerHTML = d.templates.map(t =>
+    `<option value="${esc(t.template_id)}">${t.class === "attack" ? "⚑ " : ""}${esc(t.label)}</option>`
+  ).join("");
+}
+
+/* ==========================================================================
+   影子後台
+   ========================================================================== */
+let vaultSel = null;
+
+async function loadVault(){
+  let d;
+  try { d = await api(`/api/ops/accounts?q=${encodeURIComponent($("#vaultQ").value)}`); }
+  catch(e){ $("#vaultList").innerHTML = errHTML("查詢失敗", e.message); return; }
+
+  $("#vaultMeta").textContent = `${intFmt(d.matched)} / ${intFmt(d.total)} 筆`;
+  if (!d.accounts.length){
+    $("#vaultList").innerHTML = emptyHTML("查無帳戶", "試試 ACC-1001、林、或門號前幾碼。");
+    return;
+  }
+  $("#vaultList").innerHTML = d.accounts.map(a => `
+    <button class="qitem ${a.account_id === vaultSel ? "sel" : ""}" data-acc="${esc(a.account_id)}">
+      <span class="k">${esc(a.name)} <small class="mono dim">${esc(a.account_id)}</small></span>
+      <span class="m">${esc(a.msisdn)} · ${esc(a.plan_name)}</span>
+      <span class="m">${a.service_status === "suspended" ? "已停話" : "服務中"}
+        ${a.contract_months_left ? `· 綁約剩 ${a.contract_months_left} 月` : "· 無綁約"}</span>
+    </button>`).join("");
+  $$("#vaultList .qitem").forEach(el => el.addEventListener("click", () => {
+    vaultSel = el.dataset.acc;
+    $$("#vaultList .qitem").forEach(x => x.classList.toggle("sel", x.dataset.acc === vaultSel));
+    loadAccount(vaultSel);
+  }));
+  if (!vaultSel || !d.accounts.some(a => a.account_id === vaultSel)) vaultSel = d.accounts[0].account_id;
+  $$("#vaultList .qitem").forEach(x => x.classList.toggle("sel", x.dataset.acc === vaultSel));
+  loadAccount(vaultSel);
+}
+
+async function loadAccount(id){
+  let d;
+  try { d = await api(`/api/ops/account/${encodeURIComponent(id)}`); }
+  catch(e){ $("#vaultDetail").innerHTML = errHTML("讀取帳戶失敗", e.message); return; }
+  const a = d.account;
+
+  const history = (d.history ?? []).map(h => `<tr>
+    <td class="mono">${clock(h.at)}</td>
+    <td class="mono">${esc(h.case_id || "—")}</td>
+    <td>${esc(KIND_LABEL[h.kind] ?? h.kind)}</td>
+    <td class="mono ${h.result?.ok ? "" : "dim"}">${h.result?.ok ? "成功" : "失敗"}</td>
+  </tr>`).join("");
+
+  $("#vaultDetail").innerHTML = `<div class="stack-lg">
+    <div class="sec">
+      <div class="sec-h"><b>${ic("vault")}${esc(a.name)}</b>
+        <span class="meta mono">${esc(a.account_id)}</span></div>
+      <div class="sec-b flush">
+        <div class="rec">
+          <div class="rw"><span class="k">門號</span><span class="v mono">${esc(a.msisdn)}</span></div>
+          <div class="rw"><span class="k">資費方案</span><span class="v">${esc(a.plan_name)}
+            <small class="dim">月租 ${intFmt(a.monthly_fee)} 元</small></span></div>
+          <div class="rw"><span class="k">綁約</span><span class="v">${a.contract_months_left
+            ? `尚餘 ${a.contract_months_left} 個月` : "無綁約"}</span></div>
+          <div class="rw"><span class="k">本期應繳</span><span class="v mono">${intFmt(a.balance)} 元</span></div>
+          <div class="rw"><span class="k">服務狀態</span><span class="v ${a.service_status === "suspended" ? "bad" : "ok"}">
+            ${a.service_status === "suspended" ? "已停話" : "服務中"}</span></div>
+          <div class="rw"><span class="k">SIM 卡號</span><span class="v mono">${esc(a.sim_serial)}</span></div>
+          <div class="rw"><span class="k">申辦日</span><span class="v mono">${esc(a.opened_on)}</span></div>
+          <div class="rw"><span class="k">30 日累計退費</span>
+            <span class="v mono ${a.refunds_30d_total ? "warn" : ""}">${intFmt(a.refunds_30d_total)} 元
+            <small class="dim">${(a.refunds_30d ?? []).length} 筆</small></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><b>${ic("warn")}個資欄位</b><span class="meta">read_bulk 會撈走這些</span></div>
+      <div class="sec-b flush">
+        <div class="rec pii">
+          <div class="rw"><span class="k">姓名</span><span class="v">${esc(a.name)}</span></div>
+          <div class="rw"><span class="k">身分證字號</span><span class="v mono">${esc(a.id_number)}</span></div>
+          <div class="rw"><span class="k">聯絡地址</span><span class="v">${esc(a.address)}</span></div>
+          <div class="rw"><span class="k">電子郵件</span><span class="v mono">${esc(a.email)}</span></div>
+        </div>
+      </div>
+      <div class="sec-b"><div class="micro dimmer">身分證與 email 在影子環境即以遮蔽形式儲存。
+        Demo 要證明的是「這些欄位會整批離開系統」,不需要印出完整可識別字串。</div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><b>${ic("g5")}本帳戶的動作紀錄</b>
+        <span class="meta">${(d.history ?? []).length} 筆</span></div>
+      <div class="sec-b flush"><div class="tbl"><table>
+        <thead><tr><th>時間</th><th>工單</th><th>動作</th><th>結果</th></tr></thead>
+        <tbody>${history || `<tr><td colspan="4" class="dim">本班尚無對此帳戶的寫入動作。</td></tr>`}</tbody>
+      </table></div></div>
+    </div>
+  </div>`;
+}
+
+let vaultDebounce = null;
+$("#vaultQ").addEventListener("input", () => {
+  clearTimeout(vaultDebounce);
+  vaultDebounce = setTimeout(() => { vaultSel = null; loadVault(); }, 220);
+});
+
+/* ==========================================================================
+   分頁切換
+   ========================================================================== */
+const LOADERS = {ops: loadOps, queue: loadQueue, mechanism: () => window.AgentGateMechanism.mount("#mechRoot"), vault: loadVault,
+                 audit: loadAudit, policy: loadPolicy, metrics: loadMetrics};
+
+$$(".nav button").forEach(btn => {
+  btn.addEventListener("click", () => gotoView(btn.dataset.view));
+});
+
+function gotoView(name){
+  $$(".nav button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.view === name)));
+  $$(".view").forEach(v => v.classList.toggle("on", v.id === "v-" + name));
+  window.scrollTo({top: 0, behavior: "instant"});
+
+  /* 營運中心是唯一會自己更新的分頁。只在它可見時才轉，離開就停 ——
+     背景一直重畫一張沒人在看的表沒有意義，而且會蓋掉其他分頁的操作焦點。 */
+  clearInterval(opsTimer); opsTimer = null;
+  if (name === "ops") opsTimer = setInterval(loadOps, 4000);
+
+  LOADERS[name]?.();
+}
+
+/* ==========================================================================
+   劇本
+   ========================================================================== */
+let script = [];
+let currentStep = null;
+const doneSteps = new Set();
+
+async function loadScript(){
+  try {
+    const d = await api("/api/demo/script");
+    script = d.script;
+    $("#scriptMeta").textContent = `${script.length} STEPS`;
+    renderScript();
+  } catch(e){
+    $("#scriptList").innerHTML = errHTML("劇本載入失敗", e.message);
+  }
+}
+
+function renderScript(){
+  $("#scriptList").innerHTML = script.map((s, i) => {
+    const done = doneSteps.has(s.step_id);
+    const now = currentStep === s.step_id;
+    return `<button class="step ${done ? "done" : ""} ${now ? "now" : ""}" data-sid="${esc(s.step_id)}">
+      <span class="tc">${esc(s.time)}</span>
+      <span class="nm">${i + 1}. ${esc(s.title)}</span>
+      <span class="st">${now ? "● 目前" : done ? "✓ 已執行" : "待執行"}</span>
+    </button>`;
+  }).join("");
+  $$("#scriptList .step").forEach(el =>
+    el.addEventListener("click", () => runStep(el.dataset.sid)));
+}
+
+async function runStep(sid){
+  currentStep = sid; renderScript();
+  const stage = $("#stage");
+  stage.innerHTML = loadingHTML("EVALUATING");
+
+  let d;
+  try {
+    d = await api("/api/demo/step", {method:"POST", body: JSON.stringify({step_id: sid})});
+  } catch(e){
+    stage.innerHTML = errHTML("這一步執行失敗", e.message);
+    return;
+  }
+
+  doneSteps.add(sid); renderScript();
+  const s = d.step;
+  let html = `<div class="narrative">
+    <div class="tc">${esc(s.time)}</div>
+    <h3>${esc(s.title)}</h3>
+    <p>${esc(s.narrative)}</p></div>`;
+
+  /* 先講工單、再講裁決。順序不能倒過來 —— 治理的第一問是「這道指令從哪來」，
+     直接跳到裁決卡等於把答案先講了，聽眾就沒機會自己看出那一行夾帶指令。 */
+  if (d.case) html += casePanel(d.case, {
+    title: "這一步的來源工單",
+    chain: d.verdict?.trust?.chain ?? d.gated?.trust?.chain,
+  });
+  if (d.verdict) html += verdictCard(d.verdict);
+  if (d.gated && d.ungated) html += abPanel(d.gated, d.ungated);
+
+  stage.innerHTML = html;
+
+  if (s.action === "goto_audit")   setTimeout(() => gotoView("audit"), 900);
+  if (s.action === "goto_metrics") setTimeout(() => gotoView("metrics"), 900);
+  poll();
+}
+
+/* A/B 對照。左右兩欄的視覺重量刻意不對等：左邊什麼都沒發生，右邊 600 筆個資出去了。 */
+function abPanel(gated, ungated){
+  const ex = ungated.execution_result ?? {};
+  const rows = ex.rows ?? [];
+  const fields = ex.fields ?? [];
+  const rest = Math.max(0, (ex.exported_count ?? 0) - rows.length);
+
+  /* 匯出的欄位有四個，但預覽列只帶得回其中兩個。整張表照四欄畫的話，
+     id_number 與 address 會整欄變成「—」，看起來像沒外洩到那些欄位 ——
+     恰好把這一格的嚴重性講反了。所以表格只畫真的有值的欄位，
+     完整的外洩欄位清單另外用標籤列出來。 */
+  const liveFields = fields.filter(f => rows.some(r => r[f] != null && r[f] !== ""));
+  const cols = liveFields.length ? liveFields : fields;
+
+  const head = cols.map(f => `<th>${esc(f)}</th>`).join("");
+  const body = rows.map(r =>
+    `<tr>${cols.map(f => `<td>${esc(r[f] ?? "—")}</td>`).join("")}</tr>`).join("");
+  const fieldChips = fields.map(f => `<span class="tag bad">${esc(f)}</span>`).join(" ");
+
+  return `
+  <div class="ab">
+    <div class="col safe">
+      <div class="col-h">
+        <span class="t">${ic("shield")}有 AgentGate</span>
+        <span class="pill blocked">攔截於 ${esc(gated.gate_blocked_at ?? "—")}</span>
+      </div>
+      <div class="col-b">
+        ${corridor(gated)}
+        <ul class="reasons mt10">
+          ${(gated.reasons ?? []).slice(0,2).map(r => `<li>${esc(r)}</li>`).join("")}
+        </ul>
+        <div class="facts tight mt10">
+          <div class="fact good"><span class="macro v">0</span>
+            <span class="k">個資外洩</span><span class="s">筆</span></div>
+          <div class="fact good"><span class="macro v">0</span>
+            <span class="k">金流損失</span><span class="s">元</span></div>
+          <div class="fact"><span class="macro v">1</span>
+            <span class="k">稽核紀錄</span><span class="s">攔下的動作一樣留痕</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col leak">
+      <div class="col-h">
+        <span class="t">${ic("leak")}沒有 AgentGate</span>
+        <span class="pill solid">同一個 Agent · 同一份 PDF</span>
+      </div>
+      <div class="hazard"></div>
+      <div class="col-b">
+        ${corridor(ungated, {bypassed:true})}
+        <div class="leak-count mt10">
+          <span class="n">${intFmt(ex.exported_count ?? 0)}</span>
+          <span class="u">筆客戶個資已匯出</span>
+        </div>
+        <div class="leak-dest">→ backup@ext-mail.example</div>
+        <div class="row wrap gap4 mt6"><span class="micro">外洩欄位</span>${fieldChips}</div>
+        <div class="tbl leak-tbl mt6">
+          <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+        </div>
+        <div class="micro plain mt6" style="color:var(--cinnabar)">上表為前 ${rows.length} 筆預覽,其餘 ${intFmt(rest)} 筆略。治理層已於演示後自動重新開啟。</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ==========================================================================
+   核准佇列
+   ========================================================================== */
+let approvers = [], selectedApproval = null, queueCache = [], decidedCache = [];
+
+async function loadQueue(){
+  let d;
+  try { d = await api("/api/gate/pending"); }
+  catch(e){ $("#qList").innerHTML = errHTML("佇列載入失敗", e.message); return; }
+
+  approvers = d.approvers;
+  queueCache = d.pending;
+  decidedCache = d.decided ?? [];
+
+  $("#qMeta").textContent = `${d.pending.length} ITEMS`;
+
+  if (!d.pending.length){
+    $("#qList").innerHTML = emptyHTML("佇列是空的",
+      "到「四分鐘劇本」執行第 2 步(退費 5,000 元),即可產生一件待核准動作。");
+    if (!decidedCache.length){ $("#dossierWrap").innerHTML = ""; selectedApproval = null; }
+  } else {
+    $("#qList").innerHTML = d.pending.map(p => qItem(p, false)).join("");
+    if (!selectedApproval || !allItems().some(x => x.approval_id === selectedApproval))
+      selectedApproval = d.pending[0].approval_id;
+  }
+
+  const dec = $("#qDecidedSec");
+  dec.hidden = decidedCache.length === 0;
+  if (decidedCache.length){
+    $("#qDecidedMeta").textContent = `${decidedCache.length} ITEMS`;
+    $("#qDecided").innerHTML = decidedCache.slice().reverse().map(p => qItem(p, true)).join("");
+  }
+
+  $$(".qitem").forEach(el => el.addEventListener("click", () => {
+    selectedApproval = el.dataset.aid;
+    $$(".qitem").forEach(x => x.classList.toggle("sel", x.dataset.aid === selectedApproval));
+    renderDossier();
+  }));
+
+  if (selectedApproval){
+    $$(".qitem").forEach(x => x.classList.toggle("sel", x.dataset.aid === selectedApproval));
+    renderDossier();
+  }
+}
+
+const allItems = () => queueCache.concat(decidedCache);
+
+/* 佇列一列。SLA 剩多久要看得見 —— 值班台上「還有幾分鐘」跟「是什麼案子」
+   一樣重要，逾時的那幾件必須自己跳出來。 */
+function mmss(sec){
+  const s = Math.max(0, Math.round(Math.abs(sec)));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2,"0")}`;
+}
+
+function qItem(p, decided){
+  const rules = (p.findings ?? []).map(f => f.rule_id).join(" ") || "無升級規則";
+  const stLabel = p.status === "approved" ? "已核准" : p.status === "rejected" ? "已駁回" : "待核";
+  const sla = p.sla ?? {};
+  const c = p.case ?? {};
+  const slaHTML = decided
+    ? `<span class="sla done">決行耗時 ${mmss(sla.age_seconds)}</span>`
+    : sla.breached
+      ? `<span class="sla over">${ic("alarm")}逾時 ${mmss(-sla.remaining_seconds)}</span>`
+      : `<span class="sla">剩 ${mmss(sla.remaining_seconds)}</span>`;
+
+  return `<button class="qitem ${decided ? "decided" : ""} ${sla.breached && !decided ? "over" : ""}
+      ${p.approval_id === selectedApproval ? "sel" : ""}" data-aid="${esc(p.approval_id)}">
+    <span class="k">${esc(KIND_LABEL[p.action.kind] ?? p.action.kind)} —
+      ${esc(c.customer_name || p.action.params.account_id || p.action.principal)}</span>
+    <span class="m">${esc(c.case_id ?? p.approval_id)} · ${esc(c.channel_label ?? "")} ·
+      風險 ${esc(RISK_LABEL[p.risk] ?? p.risk)} · ${esc(stLabel)}</span>
+    <span class="m row between gap8"><span>${esc(rules)}</span>${slaHTML}</span>
+  </button>`;
+}
+
+/* 證據包（檔案紙）。這是主管唯一會停下來讀的畫面，所以它是全站唯一的亮面。 */
+function renderDossier(sealed){
+  const p = allItems().find(x => x.approval_id === selectedApproval);
+  if (!p){ $("#dossierWrap").innerHTML = ""; return; }
+
+  const proj = p.projection ?? {};
+  const pii = proj.pii_fields_exposed ?? [];
+  const money = proj.financial_delta
+    ? `${proj.financial_delta < 0 ? "−" : "+"}${intFmt(Math.abs(proj.financial_delta))}` : "0";
+
+  const facts = `
+    <div class="p-fact ${proj.affected_count > 1 ? "bad" : ""}">
+      <span class="v">${intFmt(proj.affected_count ?? 0)}</span><span class="k">受影響主體</span></div>
+    <div class="p-fact ${proj.reversible ? "" : "bad"}">
+      <span class="v">${!proj.reversible ? "不可逆"
+        : proj.reversal_window_hours ? `${proj.reversal_window_hours}h` : "可回復"}</span>
+      <span class="k">${proj.reversible && proj.reversal_window_hours ? "可追回時窗" : "回復性"}</span></div>
+    <div class="p-fact ${proj.financial_delta < 0 ? "bad" : ""}">
+      <span class="v">${money}</span><span class="k">金流影響(元)</span></div>
+    <div class="p-fact ${pii.length ? "bad" : ""}">
+      <span class="v">${pii.length || "無"}</span><span class="k">觸及個資欄位</span></div>`;
+
+  const chain = (p.provenance?.chain ?? []);
+  const weakRef = p.provenance?.weakest_link?.source_ref;
+  const chainHTML = chain.map((n, i) => {
+    const weak = chain.length > 1 && n.source_ref === weakRef;
+    return `${i ? `<span class="arr">→</span>` : ""}
+      <span class="lnk ${weak ? "weak" : ""}">
+        <b>${esc(CH_LABEL[n.channel] ?? n.channel)}</b>
+        <span>${esc(TRUST_LABEL[n.trust] ?? n.trust)} · ${esc(n.source_ref)}</span>
+      </span>`;
+  }).join("");
+
+  const rules = (p.findings ?? []).map(f => `
+    <div class="p-rule">
+      <span class="rid">${esc(f.rule_id)} · ${esc(f.title)}</span>
+      <div class="msg">${esc(f.message)}</div>
+      ${f.statute ? `<span class="statute">條文:「${esc(f.statute)}」</span>` : ""}
+    </div>`).join("");
+
+  const decided = p.status !== "pending";
+  const sealMark = sealed ?? (p.status === "approved" ? "approved"
+                            : p.status === "rejected" ? "rejected" : null);
+  const sealHTML = sealMark
+    ? `<div class="seal ${sealed ? "stamp" : ""}" aria-hidden="true">${sealMark === "approved" ? "准" : "駁"}</div>` : "";
+
+  const signoff = decided ? `
+    <div class="signoff">
+      <div class="hint">本件已於 ${esc((p.decided_at ?? "").slice(0,19).replace("T"," "))} 由
+        <b>${esc(p.approver_name ?? p.approver_id ?? "—")}</b> ${p.status === "approved" ? "核准" : "駁回"}。
+        ${p.reason ? `理由:${esc(p.reason)}` : ""}</div>
+    </div>` : `
+    <div class="signoff">
+      <div class="fields">
+        <select id="approverSel" aria-label="核准者">
+          ${approvers.map(a => `<option value="${esc(a.approver_id)}">${esc(a.name)}(${esc(a.approver_id)})</option>`).join("")}
+        </select>
+        <input id="credInput" placeholder="門號綁定碼(如 sim-0911-000-111)" aria-label="核准者身分憑證">
+        <input id="reasonInput" placeholder="理由(駁回必填)" aria-label="決行理由">
+      </div>
+      <div class="err" id="signErr" role="alert"></div>
+      <div class="acts">
+        <button id="btnApprove">核准並執行</button>
+        <button class="rej" id="btnReject">駁回</button>
+      </div>
+      <div class="hint">核准需核准者身分憑證(Demo 以門號綁定碼模擬)。簽核動作本身也寫入稽核鏈。</div>
+    </div>`;
+
+  const sla = p.sla ?? {};
+  const c = p.case ?? {};
+  const slaLine = decided
+    ? `送件到決行 ${mmss(sla.age_seconds)}(時限 ${mmss(sla.sla_seconds)})`
+    : sla.breached
+      ? `已逾時 ${mmss(-sla.remaining_seconds)}`
+      : `核准時限剩 ${mmss(sla.remaining_seconds)} / ${mmss(sla.sla_seconds)}`;
+
+  $("#dossierWrap").innerHTML = `
+  <div class="dossier">
+    ${sealHTML}
+    <div class="docno">
+      <span>證據包 ${esc(p.approval_id)}</span>
+      <span class="${!decided && sla.breached ? "over" : ""}">${esc(slaLine)}</span>
+    </div>
+    <h3>${esc(KIND_LABEL[p.action.kind] ?? p.action.kind)} —
+      ${esc(c.customer_name || p.action.params.account_id || p.action.principal)}</h3>
+    <div class="sub">
+      工單 <b>${esc(c.case_id ?? "—")}</b> · 受理渠道 <b>${esc(c.channel_label ?? "—")}</b> ·
+      身分驗證 <b>${esc(c.verification ?? "—")}</b><br>
+      代表 <b>${esc(p.action.principal)}</b>(${esc(p.action.principal_role)})·
+      Agent 席位 <b>${esc(c.seat_label ?? p.action.agent_id)}</b> ·
+      風險 <b>${esc(RISK_LABEL[p.risk] ?? p.risk)}</b><br>
+      參數 ${esc(JSON.stringify(p.action.params))}
+      ${c.case_id ? `<br><a class="caselink" data-case="${esc(c.case_id)}" href="#">
+        調閱來源工單與對話逐字 →</a>` : ""}
+    </div>
+
+    <section>
+      <h4>一、影響評估(G3 影子環境預演)</h4>
+      <div class="p-facts">${facts}</div>
+    </section>
+
+    <section>
+      <h4>二、觸發規則與條文</h4>
+      ${rules || `<div class="p-rule"><div class="msg">無風險升級規則;本動作屬例行需核准類別。</div></div>`}
+    </section>
+
+    <section>
+      <h4>三、指令來源鏈(G0)</h4>
+      <div class="p-chain">${chainHTML || "—"}</div>
+    </section>
+
+    <section>
+      <h4>四、Agent 推理(僅供參考)</h4>
+      <div class="p-agent">
+        <div class="warn">${ic("warn")}未經驗證的模型輸出,不得作為核准的唯一依據</div>
+        ${esc(p.agent_reasoning?.text || "(無)")}
+      </div>
+    </section>
+
+    ${signoff}
+  </div>`;
+
+  $("#btnApprove")?.addEventListener("click", () => decide(true));
+  $("#btnReject")?.addEventListener("click", () => decide(false));
+  $(".caselink")?.addEventListener("click", e => {
+    e.preventDefault();
+    openCase(e.currentTarget.dataset.case);
+  });
+}
+
+async function decide(approved){
+  const err = $("#signErr");
+  const reason = $("#reasonInput").value.trim();
+  if (!approved && !reason){ err.textContent = "駁回必須填寫理由。"; return; }
+
+  const approverId = $("#approverSel").value;
+  const body = JSON.stringify({
+    approver_id: approverId,
+    credential:  $("#credInput").value.trim(),
+    reason,
+  });
+
+  $$(".signoff button").forEach(b => b.disabled = true);
+  try {
+    await api(`/api/gate/${approved ? "approve" : "reject"}/${selectedApproval}`, {method:"POST", body});
+  } catch(e){
+    err.textContent = e.message;
+    $$(".signoff button").forEach(b => b.disabled = false);
+    return;
+  }
+
+  /* 先把本地快取改成已決行，再重畫。少了這一步，重畫會拿到還是 pending 的
+     舊資料而重新長出一組可按的簽核鈕，主管手快點第二下就會撞上 409。
+     下面的 loadQueue 會用伺服器的權威版本覆蓋這裡的樂觀更新。 */
+  const item = allItems().find(x => x.approval_id === selectedApproval);
+  if (item){
+    const who = approvers.find(a => a.approver_id === approverId);
+    item.status = approved ? "approved" : "rejected";
+    item.approver_id = approverId;
+    item.approver_name = who ? who.name : approverId;
+    item.reason = reason;
+    item.decided_at = new Date().toISOString();
+  }
+
+  renderDossier(approved ? "approved" : "rejected");
+  poll();
+  setTimeout(loadQueue, 1500);
+}
+
+/* ==========================================================================
+   稽核鏈
+   ========================================================================== */
+async function loadAudit(){
+  let d;
+  try { d = await api("/api/gate/audit?limit=300"); }
+  catch(e){ $("#auditWrap").innerHTML = errHTML("稽核鏈載入失敗", e.message); return; }
+
+  $("#tRun").textContent = d.run_id || "--";
+  $("#auditMeta").textContent = `${d.total} RECORDS · RUN ${d.run_id ?? "--"}`;
+
+  if (!d.records.length){
+    $("#auditWrap").innerHTML = emptyHTML("稽核鏈是空的",
+      "到「四分鐘劇本」跑任何一步,治理層的每一道關卡都會在這裡留下紀錄。");
+    return;
+  }
+
+  const rows = d.records.slice().reverse().map(r => {
+    const [label, g] = STAGE_LABEL[r.stage] ?? [r.stage, ""];
+    const detail = JSON.stringify(r.detail);
+    return `<tr data-seq="${r.seq}">
+      <td class="mono">${r.seq}</td>
+      <td class="mono">${esc(r.ts.slice(11,19))}</td>
+      <td><span class="stagechip" data-g="${esc(g)}">${esc(label)}</span></td>
+      <td class="mono">${r.case_id
+        ? `<a class="caselink" data-case="${esc(r.case_id)}" href="#">${esc(r.case_id)}</a>`
+        : "—"}</td>
+      <td class="mono">${esc(r.actor)}</td>
+      <td class="mono trunc" style="max-width:20rem" title="${esc(detail)}">${esc(detail)}</td>
+      <td><span class="hash"><span class="prev">${esc(r.prev_hash.slice(0,6))}</span><span class="lk">→</span><span class="cur">${esc(r.hash.slice(0,10))}</span></span></td>
+    </tr>`;
+  }).join("");
+
+  $("#auditWrap").innerHTML = `<table>
+    <thead><tr>
+      <th>#</th><th>時間</th><th>關卡</th><th>來源工單</th><th>執行者</th><th>內容</th><th>前一筆 → 本筆雜湊</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table>`;
+
+  $$("#auditWrap .caselink").forEach(el => el.addEventListener("click", e => {
+    e.preventDefault();
+    openCase(el.dataset.case);
+  }));
+}
+
+$("#btnVerify").addEventListener("click", async () => {
+  const b = $("#verifyBanner");
+  b.innerHTML = loadingHTML("VERIFYING CHAIN");
+  let v;
+  try { v = await api("/api/gate/audit/verify"); }
+  catch(e){ b.innerHTML = errHTML("驗證失敗", e.message); return; }
+
+  b.innerHTML = v.ok
+    ? `<div class="banner ok">${ic("shield")}<span><b>雜湊鏈完整</b> — ${esc(v.reason)}(共驗證 ${v.checked} 筆)</span></div>`
+    : `<div class="banner bad">${ic("broken")}<span><b>雜湊鏈已斷</b> — ${esc(v.reason)}</span></div>`;
+
+  $$("#auditWrap tr").forEach(tr => tr.classList.remove("broken"));
+  if (!v.ok && v.broken_at_seq != null){
+    const tr = document.querySelector(`#auditWrap tr[data-seq="${v.broken_at_seq}"]`);
+    tr?.classList.add("broken");
+    tr?.scrollIntoView({block:"center", behavior:"smooth"});
+  }
+});
+
+$("#btnTamper").addEventListener("click", async () => {
+  let d;
+  try { d = await api("/api/gate/audit?limit=1000"); }
+  catch(e){ $("#verifyBanner").innerHTML = errHTML("讀取稽核鏈失敗", e.message); return; }
+
+  if (!d.total){
+    $("#verifyBanner").innerHTML =
+      `<div class="banner">${ic("warn")}<span>稽核鏈是空的,先到「四分鐘劇本」跑幾步再來竄改。</span></div>`;
+    return;
+  }
+
+  /* 挑一筆「剛剛才發生、而且是真的動到系統」的紀錄下手。取鏈的中點看起來合理，
+     但長時間運作後那個 seq 早就掉出畫面上的 300 筆視窗，驗證抓出斷點也捲不到 ——
+     現場會變成「它說壞了，但我看不到壞在哪」。 */
+  const recent = d.records.slice(-60).reverse();
+  const target = recent.find(r => r.stage === "g5_executed")
+              ?? recent.find(r => r.stage === "g4_approved")
+              ?? recent[0];
+  const seq = target ? target.seq : d.total - 1;
+  try {
+    await api("/api/demo/tamper", {method:"POST", body: JSON.stringify({
+      seq, detail:{note:"這筆被偷改了:退費金額 5,000 → 500"},
+    })});
+  } catch(e){ $("#verifyBanner").innerHTML = errHTML("竄改失敗", e.message); return; }
+
+  await loadAudit();
+  document.querySelector(`#auditWrap tr[data-seq="${seq}"]`)?.classList.add("tampered");
+  $("#btnVerify").click();
+});
+
+/* ==========================================================================
+   政策條文
+   ========================================================================== */
+let policyLoaded = false;
+
+async function loadPolicy(){
+  if (policyLoaded) return;
+  let d;
+  try { d = await api("/api/gate/policy"); }
+  catch(e){ $("#policyWrap").innerHTML = errHTML("政策載入失敗", e.message); return; }
+  policyLoaded = true;
+
+  const acts = d.action_policy.map(a => `
+    <tr class="${a.forbidden ? "void" : ""}">
+      <td class="mono">${esc(a.action)}</td>
+      <td><span class="pill risk ${esc(a.base_risk)}">${esc(RISK_LABEL[a.base_risk] ?? a.base_risk)}</span></td>
+      <td>${a.forbidden ? `<span class="dimmer">不適用</span>`
+          : a.requires_approval ? `<span class="tag on">需核准</span>`
+          : `<span class="tag">可自動</span>`}</td>
+      <td>${a.forbidden ? `<span class="tag bad">禁止</span>` : "—"}</td>
+      <td class="dim">${esc(a.note)}</td>
+    </tr>`).join("");
+
+  const rules = d.rules.map(r => `
+    <div class="rulecard">
+      <span class="rid">${esc(r.rule_id)} · ${esc(r.title)}</span>
+      <span class="statute">「${esc(r.statute)}」</span>
+    </div>`).join("");
+
+  const lim = d.limits ?? {};
+
+  $("#policyWrap").innerHTML = `
+  <div class="banner ${d.llm_involved ? "bad" : "ok"}">
+    ${ic(d.llm_involved ? "warn" : "shield")}
+    <span><b>裁決引擎:${esc(d.engine)}</b> — ${esc(d.note)}</span>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><b>${ic("g2")}門檻常數</b><span class="meta">HARD LIMITS</span></div>
+    <div class="sec-b flush">
+      <div class="facts">
+        <div class="fact"><span class="macro v">${intFmt(lim.refund_single_limit ?? 0)}</span>
+          <span class="k">單筆退費上限(元)</span><span class="s">超過即升級為 high 風險</span></div>
+        <div class="fact"><span class="macro v">${intFmt(lim.refund_monthly_limit ?? 0)}</span>
+          <span class="k">30 日累計退費上限(元)</span><span class="s">同帳戶累計計算</span></div>
+        <div class="fact bad"><span class="macro v">${intFmt(lim.bulk_forbidden_count ?? 0)}</span>
+          <span class="k">批次查詢筆數上限</span><span class="s">超過即禁止,不是升級</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><b>${ic("g1")}動作權限表</b><span class="meta">${d.action_policy.length} ACTIONS</span></div>
+    <div class="sec-b flush"><div class="tbl"><table>
+      <thead><tr><th>動作</th><th>基礎風險</th><th>核准</th><th>禁止</th><th>說明</th></tr></thead>
+      <tbody>${acts}</tbody></table></div></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><b>${ic("policy")}規則條文</b><span class="meta">${d.rules.length} RULES</span></div>
+    <div class="sec-b">${rules}</div>
+  </div>`;
+}
+
+/* ==========================================================================
+   指標與驗證管線
+   ========================================================================== */
+let benchCache = null;
+
+async function loadMetrics(){
+  let d;
+  try { d = await api("/api/gate/metrics"); }
+  catch(e){ $("#liveKpis").innerHTML = errHTML("指標載入失敗", e.message); return; }
+
+  const m = d.live, a = d.audit;
+  const byGate = m.blocked_by_gate ?? {};
+  const gateStr = Object.entries(byGate).map(([k, v]) => `${k}×${v}`).join(" ") || "—";
+  const sc = m.status_counts ?? {};
+
+  $("#liveKpis").innerHTML = `
+    <div class="kpi hero"><span class="macro v">${intFmt(m.decisions)}</span>
+      <span class="l">累計裁決</span>
+      <span class="s">已執行 ${sc.executed ?? 0} · 待核 ${sc.pending_approval ?? 0} · 攔下 ${sc.blocked ?? 0}</span></div>
+    <div class="kpi"><span class="macro v">${m.decision_latency_ms.p50}<small>ms</small></span>
+      <span class="l">決策延遲 p50</span><span class="s">確定性規則,無模型呼叫</span></div>
+    <div class="kpi"><span class="macro v">${m.decision_latency_ms.p95}<small>ms</small></span>
+      <span class="l">決策延遲 p95</span><span class="s">平均 ${m.decision_latency_ms.mean} ms</span></div>
+    <div class="kpi"><span class="macro v" style="font-size:1.1rem">${esc(gateStr)}</span>
+      <span class="l">各關卡攔截</span><span class="s">攔在越前面的關卡,代價越低</span></div>
+    <div class="kpi"><span class="macro v" style="color:var(--jade)">${(a.audit_completeness * 100).toFixed(0)}<small>%</small></span>
+      <span class="l">稽核完整率</span><span class="s">已執行 ${a.executed} 筆,缺口 ${(a.gaps ?? []).length} 筆</span></div>`;
+
+  if (d.benchmark && !benchCache) benchCache = d.benchmark;
+  if (benchCache) renderBench(benchCache);
+}
+
+$("#btnBench").addEventListener("click", async () => {
+  const btn = $("#btnBench");
+  btn.disabled = true;
+  $("#benchResult").innerHTML = loadingHTML("RUNNING 120 SCENARIOS × 7 BASELINES");
+  try {
+    benchCache = await api("/api/benchmark", {method:"POST", body:"{}"});
+    renderBench(benchCache);
+  } catch(e){
+    $("#benchResult").innerHTML = errHTML("驗證管線執行失敗", e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function renderBench(rep){
+  const st = rep.scenario_stats ?? {};
+  $("#benchMeta").textContent =
+    `${st.total} 情境 · 正常 ${st.normal} / 攻擊 ${st.attack} · 有害 ${st.harmful}`;
+  if (rep.disclaimer) $("#benchDisclaimer").textContent = rep.disclaimer;
+
+  const rows = rep.baselines.map(b => {
+    const m = b.metrics;
+    const isHero = b.baseline === "B3";
+    const isAblate = b.baseline.startsWith("B3-");
+    const isWorst = b.baseline === "B0";
+    return `<tr class="${isHero ? "hero" : ""} ${isAblate ? "ablate" : ""} ${isWorst ? "worst" : ""}">
+      <td><span class="bl"><span class="id">${esc(b.baseline)}</span><span class="lb">${esc(b.label)}</span></span></td>
+      <td class="r ${m.HAR === 0 ? "good" : m.HAR > 0.3 ? "bad" : ""}">${pctOf(m.HAR)}</td>
+      <td class="r">${pctOf(m.TCR)}</td>
+      <td class="r ${m.FBR > 0.15 ? "bad" : ""}">${pctOf(m.FBR)}</td>
+      <td class="r ${m.ESB === 1 ? "good" : ""}">${pctOf(m.ESB)}</td>
+      <td class="r ${m.AC === 1 ? "good" : m.AC === 0 ? "bad" : ""}">${pctOf(m.AC)}</td>
+      <td class="r mono">${m.DL_p95_ms ?? "—"}</td>
+    </tr>`;
+  }).join("");
+
+  const b3 = rep.baselines.find(b => b.baseline === "B3");
+  const b0 = rep.baselines.find(b => b.baseline === "B0");
+  const headline = (b3 && b0) ? `
+    <div class="facts mt10">
+      <div class="fact good"><span class="macro v">${pctOf(b3.metrics.HAR)}</span>
+        <span class="k">B3 有害放行率</span><span class="s">無治理基準線為 ${pctOf(b0.metrics.HAR)}</span></div>
+      <div class="fact"><span class="macro v">${pctOf(b3.metrics.TCR)}</span>
+        <span class="k">B3 任務完成率</span><span class="s">治理沒有把正常業務擋死</span></div>
+      <div class="fact ${b3.metrics.FBR > 0.15 ? "bad" : ""}"><span class="macro v">${pctOf(b3.metrics.FBR)}</span>
+        <span class="k">B3 誤攔率</span><span class="s">產品能不能被用下去的關鍵</span></div>
+      <div class="fact good"><span class="macro v">${pctOf(b3.metrics.AC)}</span>
+        <span class="k">B3 稽核完整率</span><span class="s">被擋的動作也留完整紀錄</span></div>
+    </div>` : "";
+
+  $("#benchResult").innerHTML = `
+    ${headline}
+    <div class="tbl mt14"><table class="bench">
+      <thead><tr>
+        <th>基準線</th><th class="r">HAR 有害放行</th><th class="r">TCR 任務完成</th>
+        <th class="r">FBR 誤攔</th><th class="r">ESB 升級攔截</th><th class="r">AC 稽核完整</th><th class="r">DL p95 (ms)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="mt14">${scatter(rep.tradeoff)}</div>`;
+}
+
+/* 安全—效用取捨圖。理想區在左下角，所以左下角要看得出是「理想區」而不是空白。
+   兩組消融點用虛線接回 B3：拿掉哪一關、有害放行率就跳多少，圖上直接看得到，
+   不必回頭對表格。 */
+function scatter(points){
+  if (!points || !points.length) return "";
+  const W = 640, H = 360, L = 56, R = 22, T = 18, B = 52;
+  const px = f => L + f * (W - L - R);
+  const py = h => H - B - h * (H - B - T);
+  const IDEAL_FBR = 0.18, IDEAL_HAR = 0.08;
+
+  const grid = [0, .25, .5, .75, 1].map(v => `
+    <line x1="${px(v)}" y1="${T}" x2="${px(v)}" y2="${py(0)}" stroke="var(--line)" stroke-dasharray="2 4"/>
+    <line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="var(--line)" stroke-dasharray="2 4"/>
+    <text x="${px(v)}" y="${H - B + 16}" fill="var(--dimmer)" font-size="11" text-anchor="middle">${v * 100}%</text>
+    <text x="${L - 8}" y="${py(v) + 4}" fill="var(--dimmer)" font-size="11" text-anchor="end">${v * 100}%</text>`
+  ).join("");
+
+  const pts = points.map(p => ({...p, x: px(p.FBR), y: py(p.HAR)}));
+  const b3 = pts.find(p => p.baseline === "B3");
+
+  /* 消融連線 */
+  const links = b3 ? pts.filter(p => p.baseline.startsWith("B3-")).map(p =>
+    `<line x1="${b3.x}" y1="${b3.y}" x2="${p.x}" y2="${p.y}"
+       stroke="var(--dimmer)" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>`).join("") : "";
+
+  /* 標籤避讓。左下角有四個點擠在一起（B3 與兩組消融、最壞情況核准者），
+     一律往右畫的話標籤會疊成一團。逐點試幾個候選位置，取第一個不撞到
+     已放置標籤（含「理想區」那一塊）的。 */
+  const boxes = [];
+  /* 候選位置除了不能撞到別人，也不能掉出畫布 —— 落在最左緣的點（FBR = 0）
+     往左放標籤會被 viewBox 裁掉半個字。 */
+  const inside = b => b.x >= 2 && b.x + b.w <= W - 2 && b.y >= 2 && b.y + b.h <= H - 2;
+  const free = b => inside(b) && !boxes.some(q =>
+    b.x < q.x + q.w && b.x + b.w > q.x && b.y < q.y + q.h && b.y + b.h > q.y);
+  const CAND = [[11,4],[11,-8],[11,16],[-11,4],[-11,-8],[-11,16],[0,-13],[0,20]];
+
+  const idealLabelX = px(IDEAL_FBR) + 7, idealLabelY = py(IDEAL_HAR / 2);
+  boxes.push({x: idealLabelX, y: idealLabelY - 10, w: 42, h: 14});
+
+  const dots = pts.map(p => {
+    const hero = p.baseline === "B3";
+    const bad = p.baseline === "B0";
+    const c = hero ? "var(--cyan)" : bad ? "var(--cinnabar)" : "var(--dim)";
+    const w = p.baseline.length * 6.6 + 4, h = 13;
+
+    let lx = p.x + 11, ly = p.y + 4, anchor = "start";
+    for (const [dx, dy] of CAND){
+      const bx = dx < 0 ? p.x + dx - w : p.x + dx;
+      const box = {x: bx, y: p.y + dy - 10, w, h};
+      if (free(box)){ boxes.push(box); lx = p.x + dx; ly = p.y + dy; anchor = dx < 0 ? "end" : "start"; break; }
+    }
+
+    return `
+      ${hero ? `<circle cx="${p.x}" cy="${p.y}" r="12" fill="none" stroke="var(--cyan)" stroke-width="1" opacity=".55"/>` : ""}
+      <circle cx="${p.x}" cy="${p.y}" r="${hero ? 6.5 : 5}" fill="${c}" opacity="${hero || bad ? 1 : .85}"/>
+      <text x="${lx}" y="${ly}" text-anchor="${anchor}"
+        fill="${hero ? "var(--fg)" : bad ? "var(--cinnabar)" : "var(--dim)"}"
+        font-size="11" font-weight="${hero ? 700 : 400}">${esc(p.baseline)}</text>`;
+  }).join("");
+
+  return `<div class="chart">
+    <div class="micro" style="text-align:center;margin-bottom:.4rem">安全—效用取捨</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="散佈圖:橫軸誤攔率、縱軸有害放行率。AgentGate(B3)落在左下理想區,有害放行率 0%;無治理的 B0 在左上角,有害放行率 100%。">
+      <rect x="${px(0)}" y="${py(IDEAL_HAR)}" width="${px(IDEAL_FBR) - px(0)}" height="${py(0) - py(IDEAL_HAR)}"
+        fill="var(--jade)" opacity=".10"/>
+      <text x="${idealLabelX}" y="${idealLabelY + 4}" fill="var(--jade)" font-size="11">理想區</text>
+      ${grid}
+      <line x1="${L}" y1="${py(0)}" x2="${W - R}" y2="${py(0)}" stroke="var(--line-hi)"/>
+      <line x1="${L}" y1="${py(0)}" x2="${L}" y2="${T}" stroke="var(--line-hi)"/>
+      ${links}
+      ${dots}
+      <text x="${(L + W - R) / 2}" y="${H - 8}" fill="var(--dim)" font-size="11" text-anchor="middle">誤攔率 FBR → 越右越常擋錯</text>
+      <text x="14" y="${(T + py(0)) / 2}" fill="var(--dim)" font-size="11" text-anchor="middle"
+        transform="rotate(-90 14 ${(T + py(0)) / 2})">有害放行率 HAR → 越上越危險</text>
+    </svg>
+    <div class="cap">左下角越近越好:擋得住有害動作,又不會把正常業務擋死。
+      理想區為 HAR ≤ ${IDEAL_HAR * 100}% 且 FBR ≤ ${IDEAL_FBR * 100}%。
+      虛線是消融實驗 —— 從 B3 拿掉任何一關,點就往上跑。</div>
+  </div>`;
+}
+
+/* ==========================================================================
+   啟動
+   ========================================================================== */
+/* Run ID 只有稽核鏈端點給得出來。不先抓一次的話，頂列會一路顯示 "--"
+   直到使用者自己點進稽核鏈分頁 —— 看起來像沒接上。 */
+async function loadRunId(){
+  try {
+    const d = await api("/api/gate/audit?limit=1");
+    $("#tRun").textContent = d.run_id || "--";
+  } catch { /* 不是關鍵路徑，抓不到就維持 "--" */ }
+}
+
+/* 舊 process 陷阱 —— 開場先探一次。
+
+   dashboard 路由每次請求都重讀 index.html,所以 HTML 永遠是新的;但 Python 路由是
+   uvicorn 啟動當下的那一份。一個開了幾小時沒重啟的 process 會端出「新畫面 + 舊 API」:
+   新分頁整片 Not Found,而舊端點一切正常。那個組合看起來像程式寫壞了,
+   其實是連到了別的 process —— 在台上是最花時間的一種故障。
+
+   所以與其讓每個分頁各自噴一個 errbox,不如開場就講清楚是什麼問題、怎麼修。
+
+   三條都要探,包含不是本檔渲染的「運作機制」—— process 舊了的話那一頁一樣是壞的,
+   只點名營運中心會讓人往錯的方向找。
+
+   用 GET 不用 HEAD:FastAPI 在這些路由上不回應 HEAD,會給 405 而不是 200。
+   405 代表「路由存在」,所以底下的 404 判斷換成 HEAD 仍然會過 —— 但那是碰巧對的,
+   理由跟它看起來的理由不一樣。localhost 上省那幾 KB 不值得換來這種東西。 */
+const REQUIRED_ROUTES = [
+  ["/api/ops/state?stream=1&minutes=1", "營運中心"],
+  ["/api/ops/templates",                "情境投入"],
+  ["/api/gate/mechanism",               "運作機制"],
+];
+
+async function checkBackend(){
+  const missing = [];
+  for (const [path, label] of REQUIRED_ROUTES){
+    let res;
+    try { res = await fetch(path); }
+    catch { return; }              // 整台連不上是另一回事,各分頁自己會報
+    if (res.status === 404) missing.push(`${label}(${path.split("?")[0]})`);
+  }
+  if (!missing.length) return;
+
+  $("#staleWarn").hidden = false;
+  $("#staleWarn").innerHTML = `
+    <div class="banner bad stale">
+      ${ic("warn")}
+      <span><b>前端與後端版本不符</b> —— 後端找不到 ${esc(missing.join("、"))}。
+      畫面是新的,但你連到的伺服器 process 是舊的(dashboard 每次都重讀 HTML,
+      Python 路由卻停在啟動當下)。請關掉該 process 重啟;開發時用
+      <code>agentgate serve --reload</code> 可以避免。</span>
+    </div>`;
+}
+
+checkBackend();
+loadScript();
+loadRunId();
+loadTemplates();
+loadOps();
+opsTimer = setInterval(loadOps, 4000);
+poll();
+setInterval(poll, 2500);
+
+/* 深層連結。/#demo 這種網址要直接落在對應分頁 —— 使用場景頁(/scenario)靠這個
+   把人送回劇本,而不是丟回營運中心讓他自己再找一次要點哪個分頁。
+   放在啟動序列最後:gotoView 會接手 opsTimer(離開營運中心就停),所以順序不能反。
+   認不出來的 hash 一律忽略,維持預設的營運中心。 */
+function gotoHashView(){
+  const name = location.hash.slice(1);
+  if (name && $(`.nav button[data-view="${name}"]`)) gotoView(name);
+}
+window.addEventListener("hashchange", gotoHashView);
+gotoHashView();
+</script>
+</body>
+</html>

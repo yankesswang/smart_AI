@@ -1,0 +1,1100 @@
+/* ==========================================================================
+   AGENTGATE — 治理管制台設計系統
+   Governance Console / 稽核檔案室
+   --------------------------------------------------------------------------
+   規則（刻意約束，不要放寬）：
+
+   · 這是「治理」不是「監控」。Factory Guardian 的語彙是航太 HUD（單一 hazard
+     red、掃描線、CRT）；治理層的語彙是檔案室與公文：墨藍控制台 + 檔案紙 +
+     硃砂印。兩套視覺必須一眼可分，因為它們在提案裡是兩個不同的產品。
+   · 顏色帶語意，四色到頂，不再多：
+       cyan   = 互動與系統自身（連結、focus 以外的強調、圖表主體）
+       jade   = 放行 / 通過 / 完整
+       amber  = 待人工核准（停在人手上，不是錯誤）
+       cinnabar = 攔下 / 竄改 / 外洩（唯一的「壞」色，不做裝飾用）
+     風險等級不另開色盤，沿用這四色 + 強度。
+   · 沒有圓角。唯一例外是印章（那是實體的圓形印面）與來源鏈節點的判讀點。
+     分隔線一律靠 grid gap 1px 打出來，不用 border 疊。
+   · 沒有陰影，除了檔案紙 —— 紙浮在控制台上方是刻意的層級語言。
+   · 字體全部走系統堆疊，不下載 web font。競賽場地的網路不能賭。
+
+   可及性下限（不可退讓）：
+
+   · 所有承載資訊的文字對 --bg / --panel-3 至少 4.5:1（見各 token 註記）。
+   · 字級最小 11px 且全部用 rem，使用者放大瀏覽器字級時版面要跟著長。
+   · cinnabar 只表示異常。鍵盤 focus 一律用 cyan 實框，不跟警報搶語意。
+   · 動態一律包在 prefers-reduced-motion 之後；紙紋包在 prefers-contrast 之後。
+   · 閃爍不得是唯一的資訊載體：待核准同時有 amber 燈、文字與斜紋。
+   ========================================================================== */
+
+:root{
+  color-scheme: dark;
+
+  /* --- 墨藍控制台。比 Factory 的純黑偏藍，是電信機房的燈色。 ------------- */
+  --bg:        #0B1017;
+  --panel:     #0F151E;
+  --panel-2:   #141C27;
+  --panel-3:   #1A2432;
+  --panel-4:   #212D3D;   /* 表格 hover / 選中列 */
+
+  /* 髮絲線。這三個永遠不做文字色。 */
+  --line:      #22303F;
+  --line-hi:   #33465A;
+  --line-lo:   #1A2531;
+
+  /* 文字階梯，四級對 --bg 與 --panel-3 皆過 AA。 */
+  --fg:        #E8EEF4;   /* 15.9:1  數值、標題 */
+  --fg-2:      #C4D0DC;   /* 11.1:1  中文敘述 */
+  --dim:       #93A5B6;   /*  7.5:1  次要標籤 */
+  --dimmer:    #71879B;   /*  5.1:1  最低可用階，再暗就不准放資訊 */
+
+  /* 語意色。四個都對 --bg 過 AA。 */
+  --cyan:      #4FC3D9;   /*  9.2:1  互動 / 系統 */
+  --cyan-deep: #2A93A8;
+  --cyan-ghost:rgba(79,195,217,.12);
+  --jade:      #46C08A;   /*  8.3:1  放行 */
+  --jade-ghost:rgba(70,192,138,.12);
+  --amber:     #E8B03F;   /*  9.8:1  待核 */
+  --amber-ghost:rgba(232,176,63,.12);
+  --cinnabar:  #F0533F;   /*  5.6:1  攔下 / 外洩 */
+  --cin-deep:  #C1272D;
+  --cin-ghost: rgba(240,83,63,.13);
+
+  /* --- 檔案紙。證據包是唯一的亮面，因為它在現實裡就是一張紙。 ---------- */
+  --paper:     #F2EDE0;
+  --paper-2:   #E9E2D2;
+  --paper-3:   #DFD6C1;
+  --paper-edge:#D3C9AE;
+  --paper-txt: #23211C;   /* 15.2:1 對 --paper */
+  --paper-fg2: #4A4539;   /*  8.4:1 */
+  --paper-dim: #6A6252;   /*  5.2:1 最低可用階 */
+  --seal:      #C1272D;
+
+  /* 字級。用 rem，跟著使用者的瀏覽器字級走。 */
+  --t-micro:   0.6875rem; /* 11px  標籤、tag、表頭 */
+  --t-meta:    0.75rem;   /* 12px  次要資料、mono */
+  --t-body:    0.8125rem; /* 13px  表格、log */
+  --t-prose:   0.875rem;  /* 14px  中文敘述 */
+  --t-lede:    0.9375rem; /* 15px  導言 */
+
+  /* 字距。小字級配大字距等於不可讀，上限收在 .14em。 */
+  --tr-label:  .14em;
+  --tr-data:   .02em;
+
+  --mono: ui-monospace,"SF Mono","JetBrains Mono","IBM Plex Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans: "PingFang TC","Noto Sans TC","Microsoft JhengHei",-apple-system,system-ui,sans-serif;
+  --serif:"Songti TC","Noto Serif TC","Source Han Serif TC",PMingLiU,"Times New Roman",serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;border-radius:0}
+
+/* [hidden] 必須壓得過元件自己的 display。.sec 是 display:flex，而 UA 樣式表的
+   [hidden]{display:none} 權重輸給作者樣式 —— 少了這一行，空的「已決行」面板
+   會頂著標題列留在畫面上，看起來像壞掉。 */
+[hidden]{display:none!important}
+
+html{background:var(--bg)}
+
+body{
+  background:var(--bg);
+  color:var(--fg-2);
+  font-family:var(--sans);
+  font-size:var(--t-body);
+  line-height:1.55;
+  letter-spacing:var(--tr-data);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+
+/* --- 機房底噪。極淡的方格，讓大片深色不會死板。 -------------------------
+   pointer-events:none + fixed，不參與捲動重繪。不用 mix-blend-mode：
+   那會把全站文字一起壓暗，投影機上尤其糊。 */
+@media (prefers-contrast: no-preference){
+  body::before{
+    content:"";position:fixed;inset:0;z-index:9998;pointer-events:none;opacity:.55;
+    background-image:
+      linear-gradient(to right,rgba(79,195,217,.030) 1px,transparent 1px),
+      linear-gradient(to bottom,rgba(79,195,217,.030) 1px,transparent 1px);
+    background-size:46px 46px;
+  }
+}
+
+::selection{background:var(--cyan);color:#04090F}
+
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line-hi);border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* Focus 一律 cyan 實框。cinnabar 保留給「異常」，不跟鍵盤焦點搶語意。 */
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+/* ==========================================================================
+   排版基元
+   ========================================================================== */
+.wordmark{
+  font-family:var(--sans);font-weight:800;
+  letter-spacing:.02em;line-height:1;text-transform:uppercase;
+}
+.macro{
+  font-family:var(--mono);font-weight:600;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.03em;line-height:.9;
+}
+.micro{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim);font-weight:600;font-family:var(--sans);
+}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
+.num{font-variant-numeric:tabular-nums;letter-spacing:0}
+.dim{color:var(--dim)}
+.dimmer{color:var(--dimmer)}
+.serif{font-family:var(--serif)}
+
+h1,h2,h3,h4{font-weight:600;line-height:1.3}
+
+/* 圖示。一律 currentColor，狀態由引用處決定，sprite 只管造型。 */
+.ic{
+  width:1em;height:1em;flex:0 0 auto;
+  fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:square;stroke-linejoin:miter;
+  vertical-align:-.12em;
+}
+.ic-sprite{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ==========================================================================
+   頂列
+   ========================================================================== */
+/* 一定要能換行。頂列是一排固定寬度的欄位，在 1024px 這種投影／筆電寬度下
+   放不進一行；不換行的話它會把版面撐寬，連帶把右側控制推出視窗外。 */
+.top{
+  background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:stretch;flex-wrap:wrap;
+  position:sticky;top:0;z-index:60;
+}
+.top .brand{
+  display:flex;align-items:center;gap:.7rem;
+  padding:.6rem 1.05rem;border-right:1px solid var(--line);
+}
+.top .brand .glyph{
+  width:2.1rem;height:2.1rem;flex:0 0 auto;
+  display:grid;place-items:center;
+  font-family:var(--serif);font-size:1.15rem;font-weight:700;
+  color:var(--cyan);border:1px solid var(--cyan);
+  background:var(--cyan-ghost);
+}
+.top .brand h1{font-size:1.02rem;letter-spacing:.04em}
+.top .brand small{
+  display:block;color:var(--dim);font-size:var(--t-micro);
+  letter-spacing:var(--tr-label);text-transform:uppercase;margin-top:.12rem;
+}
+.top .slot{
+  display:flex;flex-direction:column;justify-content:center;gap:.15rem;
+  padding:.5rem .85rem;border-right:1px solid var(--line);white-space:nowrap;
+}
+.top .slot .k{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  color:var(--dim);text-transform:uppercase;
+}
+.top .slot .v{
+  font-family:var(--mono);font-size:var(--t-meta);color:var(--fg);
+  font-variant-numeric:tabular-nums;
+}
+.top .slot .v.hot{color:var(--amber)}
+.top .fill{flex:1 1 auto;border-right:1px solid var(--line);min-width:0}
+.top .synth{
+  display:flex;align-items:center;gap:.45rem;
+  padding:.5rem 1rem;background:var(--amber);color:#1B1405;
+}
+.top .synth b{font-size:var(--t-micro);letter-spacing:var(--tr-label);font-weight:800}
+
+/* 治理層開關。它是全站最重要的狀態：關掉之後每個畫面的意義都變了。 */
+.gate-sw{
+  display:flex;align-items:center;gap:.6rem;
+  padding:.5rem .9rem;border-right:1px solid var(--line);
+}
+.gate-sw .lamp{
+  width:.6rem;height:.6rem;flex:0 0 auto;background:var(--jade);
+  box-shadow:0 0 0 3px var(--jade-ghost);
+}
+.gate-sw .lbl{font-size:var(--t-meta);color:var(--fg);white-space:nowrap}
+.gate-sw.off{background:var(--cin-ghost)}
+.gate-sw.off .lamp{background:var(--cinnabar);box-shadow:0 0 0 3px var(--cin-ghost);animation:pulse 1.1s steps(2,start) infinite}
+.gate-sw.off .lbl{color:var(--cinnabar);font-weight:600}
+
+@keyframes pulse{50%{opacity:.3}}
+
+/* ==========================================================================
+   導覽
+   ========================================================================== */
+.nav{
+  display:flex;flex-wrap:wrap;background:var(--panel);
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:55;
+}
+.nav button{
+  background:none;border:0;border-right:1px solid var(--line);
+  border-bottom:2px solid transparent;
+  color:var(--dim);font-family:var(--sans);font-size:var(--t-prose);
+  padding:.6rem 1.15rem;cursor:pointer;display:flex;align-items:center;gap:.45rem;
+  text-transform:none;letter-spacing:.02em;
+  transition:color .12s linear,background .12s linear;
+}
+.nav button .ic{font-size:1.05em;color:var(--dimmer)}
+.nav button .no{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer)}
+.nav button:hover{color:var(--fg);background:var(--panel-2)}
+.nav button:hover .ic{color:var(--dim)}
+.nav button[aria-selected="true"]{
+  color:var(--fg);background:var(--panel-2);border-bottom-color:var(--cyan);
+}
+.nav button[aria-selected="true"] .ic{color:var(--cyan)}
+.nav button[aria-selected="true"] .no{color:var(--cyan)}
+.nav .badge{
+  background:var(--amber);color:#1B1405;font-family:var(--mono);
+  font-size:var(--t-micro);font-weight:700;padding:0 .38em;min-width:1.35em;
+  text-align:center;
+}
+
+/* ==========================================================================
+   版面
+   ========================================================================== */
+.shell{max-width:1440px;margin:0 auto;padding:0 0 4rem}
+.view{display:none;padding:1.1rem 1.15rem 0}
+.view.on{display:block}
+
+.view-head{margin-bottom:1rem;max-width:78ch}
+.view-head .eyebrow{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--cyan);font-weight:600;margin-bottom:.3rem;
+}
+.view-head h2{font-family:var(--serif);font-size:1.32rem;letter-spacing:.03em;color:var(--fg)}
+.view-head p{color:var(--dim);font-size:var(--t-prose);margin-top:.35rem;line-height:1.75}
+.view-head p b{color:var(--fg-2);font-weight:600}
+
+/* 髮絲分隔靠 grid gap 打出來 */
+.rig{background:var(--line);display:grid;gap:1px;border:1px solid var(--line)}
+.rig > *{background:var(--panel)}
+
+/* ==========================================================================
+   面板
+   ========================================================================== */
+.sec{background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.sec-h{
+  display:flex;align-items:center;justify-content:space-between;gap:.3rem .7rem;
+  padding:.5rem .8rem;border-bottom:1px solid var(--line);
+  background:var(--panel-2);flex:0 0 auto;flex-wrap:wrap;
+}
+.sec-h b{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  font-weight:700;color:var(--fg);white-space:nowrap;
+  display:flex;align-items:center;gap:.4rem;
+}
+.sec-h b .ic{font-size:1.15em;color:var(--cyan)}
+/* min-width:0 + overflow-wrap 缺一不可：面板標題的中繼資料裡有
+   act-6547e7b424 這種不可斷的長字串，flex item 的自動最小尺寸會讓它
+   把整個頁面推寬，而不是自己換行。 */
+.sec-h .meta{
+  font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em;
+  color:var(--dim);text-align:right;min-width:0;overflow-wrap:anywhere;
+}
+.sec-b{padding:.85rem;flex:1 1 auto;min-height:0}
+.sec-b.flush{padding:0}
+.sec-b.scroll{overflow-y:auto}
+
+hr.rule{border:0;border-top:1px solid var(--line);margin:.8rem 0}
+
+/* 危險斜紋。只掛在「被攔下」與「等人簽名」的區塊上，不做裝飾用。 */
+.hazard{height:5px;background:repeating-linear-gradient(45deg,var(--cinnabar) 0 8px,var(--panel) 8px 16px)}
+.hazard.wait{background:repeating-linear-gradient(45deg,var(--amber) 0 8px,var(--panel) 8px 16px)}
+
+/* ==========================================================================
+   狀態元件
+   ========================================================================== */
+.pill{
+  display:inline-flex;align-items:center;gap:.35rem;
+  padding:.2rem .55rem;font-size:var(--t-micro);font-weight:700;
+  letter-spacing:var(--tr-label);text-transform:uppercase;
+  border:1px solid var(--line-hi);color:var(--dim);white-space:nowrap;
+  font-family:var(--sans);
+}
+.pill .ic{font-size:1.1em}
+.pill.executed,.pill.ok{border-color:var(--jade);color:var(--jade);background:var(--jade-ghost)}
+.pill.blocked,.pill.bad,.pill.rejected{border-color:var(--cinnabar);color:var(--cinnabar);background:var(--cin-ghost)}
+.pill.pending_approval,.pill.wait{border-color:var(--amber);color:var(--amber);background:var(--amber-ghost)}
+.pill.info{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-ghost)}
+.pill.solid{background:var(--cinnabar);border-color:var(--cinnabar);color:#120604}
+.pill.solid-ok{background:var(--jade);border-color:var(--jade);color:#03130C}
+
+/* 風險等級：不另開色盤，用同四色 + 「風險」前綴保持語意清楚。 */
+.pill.risk{font-weight:600}
+.pill.risk.low{border-color:var(--jade);color:var(--jade)}
+.pill.risk.medium{border-color:var(--amber);color:var(--amber)}
+.pill.risk.high,.pill.risk.forbidden{border-color:var(--cinnabar);color:var(--cinnabar)}
+
+.tag{
+  display:inline-block;font-family:var(--mono);font-size:var(--t-micro);
+  letter-spacing:.06em;padding:.1rem .4rem;
+  border:1px solid var(--line-hi);color:var(--dim);white-space:nowrap;
+}
+.tag.on{border-color:var(--cyan);color:var(--cyan)}
+.tag.bad{border-color:var(--cinnabar);color:var(--cinnabar)}
+
+/* ==========================================================================
+   控制元件
+   ========================================================================== */
+button,select,input{
+  font-family:var(--sans);font-size:var(--t-meta);
+  background:var(--panel-3);color:var(--fg);
+  border:1px solid var(--line-hi);
+  padding:.5rem .85rem;cursor:pointer;touch-action:manipulation;
+  transition:background .12s linear,color .12s linear,border-color .12s linear;
+}
+button{letter-spacing:var(--tr-label);text-transform:uppercase;font-weight:600;
+  display:inline-flex;align-items:center;gap:.4rem}
+button .ic{font-size:1.15em}
+button:hover:not(:disabled){background:var(--fg);color:#04090F;border-color:var(--fg)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--cyan);border-color:var(--cyan);color:#04090F;font-weight:700}
+button.primary:hover:not(:disabled){background:#fff;border-color:#fff}
+button.ghost{background:transparent;color:var(--dim)}
+button.ghost:hover:not(:disabled){background:var(--fg);color:#04090F}
+button.danger{border-color:var(--cinnabar);color:var(--cinnabar);background:var(--cin-ghost)}
+button.danger:hover:not(:disabled){background:var(--cinnabar);color:#120604;border-color:var(--cinnabar)}
+
+select{padding:.5rem .6rem;text-transform:none;letter-spacing:0}
+select option{background:var(--panel-3);color:var(--fg)}
+input{text-transform:none;letter-spacing:0;cursor:text}
+input::placeholder{color:var(--dimmer)}
+
+a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(79,195,217,.35)}
+a:hover{border-bottom-color:var(--cyan)}
+
+/* ==========================================================================
+   關卡走廊 —— 全站的主視覺
+   六個關卡是產品本身。它不能只是六顆小燈：要看得出「指令沿著走廊前進，
+   在哪一格被擋下」，以及被擋之後後面的關卡根本沒有執行。
+   ========================================================================== */
+.corridor{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:1px;background:var(--line);border:1px solid var(--line);
+}
+@media(max-width:820px){.corridor{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:460px){.corridor{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.gt{
+  background:var(--panel-2);padding:.6rem .35rem .55rem;
+  display:flex;flex-direction:column;align-items:center;gap:.3rem;
+  text-align:center;min-width:0;position:relative;
+}
+/* 走廊軌道：橫線貫穿，菱形節點坐在線上。首尾各截一半，線就不會突出去。 */
+.gt-rail{position:relative;width:100%;height:.85rem;display:grid;place-items:center}
+.gt-rail::before{content:"";position:absolute;top:50%;left:0;right:0;height:1px;background:var(--line-hi)}
+.gt:first-child .gt-rail::before{left:50%}
+.gt:last-child .gt-rail::before{right:50%}
+.gt-node{
+  width:.55rem;height:.55rem;position:relative;z-index:1;
+  transform:rotate(45deg);background:var(--panel);border:1px solid var(--line-hi);
+}
+.gt-id{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.08em}
+.gt .ic{font-size:1.4rem;color:var(--dimmer)}
+.gt-name{font-size:var(--t-micro);color:var(--dim);line-height:1.35}
+.gt-st{
+  font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.1em;
+  color:var(--dimmer);text-transform:uppercase;
+}
+
+.gt.pass .ic{color:var(--jade)}
+.gt.pass .gt-node{background:var(--jade);border-color:var(--jade)}
+.gt.pass .gt-rail::before{background:var(--jade)}
+.gt.pass .gt-st{color:var(--jade)}
+.gt.pass .gt-name{color:var(--fg-2)}
+
+.gt.hold{background:var(--amber-ghost)}
+.gt.hold .ic{color:var(--amber)}
+.gt.hold .gt-node{background:var(--amber);border-color:var(--amber);animation:pulse 1.3s steps(2,start) infinite}
+.gt.hold .gt-st{color:var(--amber);font-weight:700}
+.gt.hold .gt-name{color:var(--fg)}
+
+.gt.stop{background:var(--cin-ghost)}
+.gt.stop .ic{color:var(--cinnabar)}
+.gt.stop .gt-node{
+  background:var(--cinnabar);border-color:var(--cinnabar);
+  width:.75rem;height:.75rem;box-shadow:0 0 0 3px var(--cin-ghost);
+}
+.gt.stop .gt-rail::before{background:var(--cinnabar)}
+.gt.stop .gt-st{color:var(--cinnabar);font-weight:700}
+.gt.stop .gt-name{color:var(--fg)}
+.gt.stop::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  background:repeating-linear-gradient(45deg,var(--cinnabar) 0 6px,transparent 6px 12px);
+}
+/* 被擋下之後的關卡是「從未執行」，不是「失敗」。用未點亮表示。 */
+.gt.void{opacity:.3}
+.gt.void .gt-rail::before{background:var(--line)}
+
+/* ==========================================================================
+   裁決卡
+   ========================================================================== */
+.verdict-head{
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  padding:.7rem .85rem;background:var(--panel-2);border-bottom:1px solid var(--line);
+}
+.verdict-head .big{
+  font-family:var(--serif);font-size:1.05rem;font-weight:700;letter-spacing:.06em;
+  margin-right:.3rem;
+}
+.verdict-head .big.executed{color:var(--jade)}
+.verdict-head .big.blocked,.verdict-head .big.rejected{color:var(--cinnabar)}
+.verdict-head .big.pending_approval{color:var(--amber)}
+
+.reasons{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+.reasons li{
+  position:relative;padding-left:1.15rem;font-size:var(--t-prose);
+  color:var(--fg-2);line-height:1.7;
+}
+.reasons li::before{
+  content:"";position:absolute;left:0;top:.62em;
+  width:.4rem;height:.4rem;background:var(--cyan);transform:rotate(45deg);
+}
+.reasons li.rule::before{background:var(--cinnabar)}
+.reasons li code{font-family:var(--mono);font-size:var(--t-meta);color:var(--fg)}
+
+/* 規則卡：規則 ID + 白話 + 條文原文。條文要能被主管照著念。 */
+.rulecard{border-left:2px solid var(--cinnabar);background:var(--panel-2);padding:.55rem .7rem}
+.rulecard + .rulecard{margin-top:.5rem}
+.rulecard .rid{
+  font-family:var(--mono);font-size:var(--t-micro);color:var(--cinnabar);
+  letter-spacing:.08em;font-weight:700;
+}
+.rulecard .msg{font-size:var(--t-prose);color:var(--fg);margin-top:.15rem;line-height:1.65}
+.rulecard .statute{
+  display:block;font-family:var(--serif);font-size:var(--t-meta);color:var(--dim);
+  margin-top:.3rem;padding-left:.6rem;border-left:1px solid var(--line-hi);
+}
+
+/* 執行結果原文 */
+.raw{
+  font-family:var(--mono);font-size:var(--t-meta);color:var(--dim);
+  background:var(--bg);border:1px solid var(--line);padding:.6rem .7rem;
+  white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;
+}
+
+/* ==========================================================================
+   影響數字（macro）
+   預演結果是主管唯一真正在看的東西，所以它用全站最大的字。
+   ========================================================================== */
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:1px;background:var(--line)}
+/* A/B 左欄只有半個版面寬，數字要縮一級才排得下三格。 */
+.facts.tight{grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr));border:1px solid var(--line)}
+.facts.tight .v{font-size:clamp(1.05rem,2vw,1.3rem)}
+.fact{background:var(--panel);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.2rem;min-width:0}
+.fact .v{font-size:clamp(1.3rem,2.6vw,1.75rem);color:var(--fg)}
+.fact .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--dim)}
+.fact .s{font-size:var(--t-micro);color:var(--dimmer);line-height:1.4}
+.fact.bad .v{color:var(--cinnabar)}
+.fact.good .v{color:var(--jade)}
+.fact.warn .v{color:var(--amber)}
+
+/* ==========================================================================
+   來源鏈
+   G0 是差異化核心，所以來源鏈要畫成一條看得見的鏈，最弱環節標出來。
+   ========================================================================== */
+.chain{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.chain .lnk{
+  border:1px solid var(--line-hi);background:var(--panel-2);
+  padding:.45rem .6rem;min-width:0;display:flex;flex-direction:column;gap:.15rem;
+}
+.chain .lnk .ch{font-size:var(--t-meta);color:var(--fg)}
+.chain .lnk .tr{font-family:var(--mono);font-size:var(--t-micro);color:var(--dim)}
+.chain .lnk .ref{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);overflow-wrap:anywhere}
+.chain .lnk.weak{border-color:var(--cinnabar);background:var(--cin-ghost)}
+.chain .lnk.weak .ch{color:var(--cinnabar);font-weight:600}
+.chain .lnk.weak .tr{color:var(--cinnabar)}
+.chain .arr{display:grid;place-items:center;padding:0 .45rem;color:var(--dimmer);font-family:var(--mono)}
+
+/* ==========================================================================
+   A/B 對照 —— Demo 的核心 45 秒
+   左邊是「什麼都沒發生」，右邊是「600 筆個資出去了」。兩邊的視覺重量
+   必須不對等，否則觀眾感覺不到差別。
+   ========================================================================== */
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line)}
+@media(max-width:900px){.ab{grid-template-columns:1fr}}
+.ab .col{background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.ab .col-h{
+  padding:.55rem .8rem;border-bottom:1px solid var(--line);background:var(--panel-2);
+  display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;
+}
+.ab .col-h .t{font-size:var(--t-prose);font-weight:600;color:var(--fg);display:flex;align-items:center;gap:.4rem}
+.ab .col-h .t .ic{font-size:1.15em}
+.ab .col-b{padding:.8rem;flex:1 1 auto;min-width:0}
+.ab .col.safe .col-h{border-bottom-color:var(--jade)}
+.ab .col.safe .col-h .t .ic{color:var(--jade)}
+.ab .col.leak{background:rgba(240,83,63,.045)}
+.ab .col.leak .col-h{background:var(--cin-ghost);border-bottom-color:var(--cinnabar)}
+.ab .col.leak .col-h .t{color:var(--cinnabar)}
+
+.leak-count{display:flex;align-items:baseline;gap:.5rem;margin-bottom:.55rem;flex-wrap:wrap}
+.leak-count .n{font-family:var(--mono);font-size:clamp(1.8rem,4.5vw,2.6rem);font-weight:700;
+  color:var(--cinnabar);letter-spacing:-.04em;line-height:1}
+.leak-count .u{font-size:var(--t-prose);color:var(--fg-2)}
+.leak-dest{font-family:var(--mono);font-size:var(--t-meta);color:var(--cinnabar);
+  border:1px dashed var(--cinnabar);padding:.35rem .55rem;margin-bottom:.6rem;overflow-wrap:anywhere}
+
+/* ==========================================================================
+   資料表
+   寬表在自己的容器裡橫向捲動；讓它自己捲比讓整個頁面橫捲好。
+   ========================================================================== */
+.tbl{overflow-x:auto;max-width:100%;position:relative}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{
+  font-size:var(--t-micro);letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  font-weight:600;text-align:left;padding:.45rem .55rem;
+  border-bottom:1px solid var(--line-hi);white-space:nowrap;background:var(--panel-2);
+}
+td{padding:.42rem .55rem;border-bottom:1px solid var(--line-lo);vertical-align:top;font-size:var(--t-body)}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+td.mono,th.mono{font-family:var(--mono);font-size:var(--t-meta)}
+tbody tr:hover{background:var(--panel-2)}
+tbody tr.pick{background:var(--panel-3);box-shadow:inset 3px 0 0 var(--cyan)}
+tbody tr.pick:hover{background:var(--panel-4)}
+tbody tr.void{color:var(--dim);background:var(--cin-ghost);box-shadow:inset 3px 0 0 var(--cinnabar)}
+
+/* 外洩資料表：紅框 + 等寬，看起來就像被匯出的原始檔。 */
+.leak-tbl table{font-family:var(--mono);font-size:var(--t-meta)}
+.leak-tbl th{background:rgba(240,83,63,.14);color:var(--cinnabar);border-bottom-color:var(--cinnabar)}
+.leak-tbl td{color:#F5A193;border-bottom-color:rgba(240,83,63,.22);white-space:nowrap}
+.leak-tbl tbody tr:hover{background:rgba(240,83,63,.08)}
+
+/* ==========================================================================
+   劇本軌
+   ========================================================================== */
+.script{display:flex;flex-direction:column;background:var(--line);gap:1px}
+.script .step{
+  background:var(--panel);border:0;border-left:2px solid var(--line-hi);
+  padding:.65rem .8rem;text-align:left;cursor:pointer;
+  display:flex;flex-direction:column;gap:.2rem;
+  text-transform:none;letter-spacing:0;font-weight:400;
+  transition:background .12s linear,border-color .12s linear;
+}
+.script .step:hover:not(:disabled){background:var(--panel-2);color:var(--fg);border-left-color:var(--cyan)}
+.script .step .tc{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);letter-spacing:.06em}
+.script .step .nm{font-size:var(--t-prose);color:var(--fg-2);line-height:1.45}
+.script .step .st{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--dimmer)}
+.script .step.done{border-left-color:var(--jade)}
+.script .step.done .st{color:var(--jade)}
+.script .step.done .nm{color:var(--dim)}
+.script .step.now{background:var(--panel-3);border-left-color:var(--cyan)}
+.script .step.now .nm{color:var(--fg);font-weight:600}
+.script .step.now .st{color:var(--cyan)}
+.script .step.now .tc{color:var(--cyan)}
+
+.narrative{background:var(--panel-2);border-left:2px solid var(--cyan);padding:.75rem .9rem}
+.narrative .tc{font-family:var(--mono);font-size:var(--t-micro);color:var(--cyan);letter-spacing:.1em}
+.narrative h3{font-family:var(--serif);font-size:1.05rem;color:var(--fg);margin:.2rem 0 .35rem}
+.narrative p{font-size:var(--t-prose);color:var(--fg-2);line-height:1.8}
+
+/* ==========================================================================
+   證據包（檔案紙）
+   全站唯一的亮面。它刻意長得像一份會被歸檔的公文，因為那正是它的用途：
+   主管簽下去之後，這張紙就是責任歸屬的憑據。
+   ========================================================================== */
+.dossier{
+  background:var(--paper);color:var(--paper-txt);
+  border:1px solid var(--paper-edge);
+  padding:1.5rem 1.7rem 1.3rem;position:relative;overflow:hidden;
+  box-shadow:0 14px 38px rgba(0,0,0,.5);
+  font-family:var(--serif);
+}
+/* 紙紋。極淡，投影時幾乎看不到，近看才有質感。 */
+@media (prefers-contrast: no-preference){
+  .dossier::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background-image:repeating-linear-gradient(0deg,transparent 0 3px,rgba(35,33,28,.022) 3px 4px);
+  }
+}
+/* 騎縫線：左緣的裝訂孔。 */
+.dossier::after{
+  content:"";position:absolute;left:.5rem;top:0;bottom:0;width:1px;
+  background:repeating-linear-gradient(180deg,var(--paper-edge) 0 5px,transparent 5px 11px);
+}
+.dossier .docno{
+  display:flex;justify-content:space-between;gap:.7rem;flex-wrap:wrap;
+  font-family:var(--mono);font-size:var(--t-micro);color:var(--paper-dim);
+  letter-spacing:.06em;border-bottom:1px solid var(--paper-edge);padding-bottom:.4rem;
+}
+.dossier h3{
+  font-size:1.22rem;color:var(--paper-txt);margin:.7rem 0 .2rem;letter-spacing:.03em;
+}
+.dossier .sub{font-family:var(--sans);font-size:var(--t-meta);color:var(--paper-fg2);line-height:1.75}
+.dossier .sub b{color:var(--paper-txt)}
+.dossier section{margin-top:1rem}
+.dossier h4{
+  font-family:var(--sans);font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--paper-dim);font-weight:700;
+  border-bottom:1px solid var(--paper-edge);padding-bottom:.25rem;margin-bottom:.5rem;
+  display:flex;align-items:center;gap:.4rem;
+}
+.dossier h4 .ic{font-size:1.2em}
+
+/* 紙上的影響數字。深色控制台的 .fact 在紙上不能用，這裡另開一組。 */
+.p-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:1px;background:var(--paper-edge);
+  border:1px solid var(--paper-edge)}
+.p-fact{background:var(--paper);padding:.5rem .6rem;display:flex;flex-direction:column;gap:.1rem}
+.p-fact .v{font-family:var(--mono);font-size:1.25rem;font-weight:700;color:var(--paper-txt);letter-spacing:-.02em}
+.p-fact .k{font-family:var(--sans);font-size:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--paper-dim)}
+.p-fact.bad{background:rgba(193,39,45,.07)}
+.p-fact.bad .v{color:var(--seal)}
+
+.p-rule{border-left:2px solid var(--seal);padding:.35rem .6rem;background:var(--paper-2)}
+.p-rule + .p-rule{margin-top:.4rem}
+.p-rule .rid{font-family:var(--mono);font-size:var(--t-micro);color:var(--seal);font-weight:700;letter-spacing:.06em}
+.p-rule .msg{font-family:var(--sans);font-size:var(--t-meta);color:var(--paper-txt);line-height:1.7}
+.p-rule .statute{display:block;font-size:var(--t-meta);color:var(--paper-fg2);margin-top:.2rem}
+
+.p-chain{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;font-family:var(--sans)}
+.p-chain .lnk{border:1px solid var(--paper-edge);background:var(--paper-2);padding:.3rem .5rem;font-size:var(--t-micro)}
+.p-chain .lnk b{display:block;color:var(--paper-txt);font-size:var(--t-meta)}
+.p-chain .lnk span{color:var(--paper-dim);font-family:var(--mono)}
+.p-chain .lnk.weak{border-color:var(--seal);background:rgba(193,39,45,.08)}
+.p-chain .lnk.weak b{color:var(--seal)}
+.p-chain .arr{color:var(--paper-dim);font-family:var(--mono)}
+
+/* Agent 推理。刻意排得像「引述」而不是「結論」，因為它不是依據。 */
+.p-agent{
+  font-size:var(--t-meta);color:var(--paper-fg2);line-height:1.85;
+  border:1px dashed var(--paper-edge);padding:.55rem .7rem;background:var(--paper-2);
+}
+.p-agent .warn{
+  display:flex;align-items:center;gap:.35rem;
+  font-family:var(--sans);font-size:var(--t-micro);color:var(--seal);font-weight:700;
+  letter-spacing:.04em;margin-bottom:.3rem;
+}
+
+/* 簽核區 */
+.signoff{
+  margin-top:1.1rem;border-top:2px solid var(--paper-txt);padding-top:.75rem;
+  display:flex;flex-direction:column;gap:.5rem;
+}
+.signoff .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.5rem}
+.signoff select,.signoff input{
+  background:var(--paper);border:1px solid var(--paper-edge);color:var(--paper-txt);
+  font-family:var(--sans);font-size:var(--t-meta);padding:.45rem .55rem;
+}
+.signoff select:hover,.signoff input:hover{border-color:var(--paper-dim)}
+.signoff input::placeholder{color:var(--paper-dim)}
+.signoff :focus-visible{outline-color:var(--seal)}
+.signoff .acts{display:flex;gap:.5rem;flex-wrap:wrap}
+.signoff button{
+  font-family:var(--sans);font-size:var(--t-meta);font-weight:700;
+  border:1px solid var(--paper-txt);background:var(--paper-txt);color:var(--paper);
+  padding:.55rem 1.2rem;
+}
+.signoff button:hover:not(:disabled){background:var(--seal);border-color:var(--seal);color:#fff}
+.signoff button.rej{background:transparent;color:var(--paper-txt)}
+.signoff button.rej:hover:not(:disabled){background:var(--seal);border-color:var(--seal);color:#fff}
+.signoff .err{font-family:var(--sans);font-size:var(--t-meta);color:var(--seal);font-weight:600;min-height:1.2em}
+.signoff .hint{font-family:var(--sans);font-size:var(--t-micro);color:var(--paper-dim)}
+
+/* 印章。全站唯一的圓形，因為印面本來就是圓的。 */
+.seal{
+  position:absolute;right:1.6rem;top:4.2rem;width:6.2rem;height:6.2rem;
+  border-radius:50%;border:3px solid var(--seal);color:var(--seal);
+  display:grid;place-items:center;transform:rotate(-14deg);
+  font-family:var(--serif);font-size:2.5rem;font-weight:700;
+  opacity:.86;pointer-events:none;z-index:3;
+  box-shadow:inset 0 0 0 1px var(--seal);
+}
+.seal.stamp{animation:stamp .42s cubic-bezier(.2,1.5,.4,1) 1}
+@keyframes stamp{
+  0%{transform:rotate(-14deg) scale(2.6);opacity:0}
+  60%{transform:rotate(-14deg) scale(.94);opacity:.95}
+  100%{transform:rotate(-14deg) scale(1);opacity:.86}
+}
+
+/* ==========================================================================
+   核准佇列
+   ========================================================================== */
+.qlist{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.qitem{
+  background:var(--panel);border:0;border-left:2px solid var(--amber);
+  padding:.6rem .75rem;text-align:left;cursor:pointer;
+  display:flex;flex-direction:column;gap:.2rem;
+  text-transform:none;letter-spacing:0;font-weight:400;
+}
+.qitem:hover{background:var(--panel-2);color:inherit}
+.qitem.sel{background:var(--panel-3);border-left-color:var(--cyan)}
+.qitem .k{font-size:var(--t-prose);color:var(--fg)}
+.qitem .m{font-family:var(--mono);font-size:var(--t-micro);color:var(--dim)}
+.qitem.decided{border-left-color:var(--line-hi);opacity:.65}
+
+/* ==========================================================================
+   稽核鏈
+   雜湊鏈要看得出「鏈」。前一筆的尾接這一筆的頭，斷掉的地方要爆開。
+   ========================================================================== */
+.hash{font-family:var(--mono);font-size:var(--t-micro);white-space:nowrap}
+.hash .prev{color:var(--dimmer)}
+.hash .lk{color:var(--cyan);padding:0 .15rem}
+.hash .cur{color:var(--fg-2)}
+tr.broken{background:var(--cin-ghost)!important;box-shadow:inset 3px 0 0 var(--cinnabar)}
+tr.broken .hash .lk{color:var(--cinnabar);font-weight:700}
+tr.broken .hash .cur{color:var(--cinnabar)}
+tr.tampered td{color:var(--cinnabar)}
+
+.stagechip{
+  display:inline-block;font-family:var(--mono);font-size:var(--t-micro);
+  padding:.08rem .35rem;border:1px solid var(--line-hi);color:var(--dim);white-space:nowrap;
+}
+.stagechip[data-g="g0"]{border-color:var(--cyan);color:var(--cyan)}
+.stagechip[data-g="g2"]{border-color:var(--amber);color:var(--amber)}
+.stagechip[data-g="g4"]{border-color:var(--amber);color:var(--amber)}
+.stagechip[data-g="g5"]{border-color:var(--jade);color:var(--jade)}
+.stagechip[data-g="blocked"]{border-color:var(--cinnabar);color:var(--cinnabar)}
+.stagechip[data-g="degrade"]{background:var(--cinnabar);border-color:var(--cinnabar);color:#120604;font-weight:700}
+
+.banner{
+  display:flex;align-items:center;gap:.6rem;padding:.6rem .85rem;
+  border:1px solid var(--line-hi);background:var(--panel-2);
+  font-size:var(--t-prose);color:var(--dim);
+}
+.banner .ic{font-size:1.3em;flex:0 0 auto}
+.banner.ok{border-color:var(--jade);background:var(--jade-ghost);color:var(--jade)}
+.banner.bad{border-color:var(--cinnabar);background:var(--cin-ghost);color:var(--cinnabar);font-weight:600}
+.banner b{font-family:var(--mono)}
+
+/* ==========================================================================
+   指標
+   ========================================================================== */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.kpi{background:var(--panel);padding:.8rem .9rem;display:flex;flex-direction:column;gap:.25rem;min-width:0}
+.kpi .v{font-size:clamp(1.5rem,3.2vw,2.1rem);color:var(--fg)}
+.kpi .v small{font-size:.5em;color:var(--dim);font-weight:400;margin-left:.2em}
+.kpi .l{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--dim)}
+.kpi .s{font-size:var(--t-micro);color:var(--dimmer);line-height:1.4;overflow-wrap:anywhere}
+.kpi.hero .v{color:var(--cyan)}
+
+/* 基準線表。B3 是我們自己，用 cyan 標；B0 是損害上界，用 cinnabar 標。 */
+.bench td.good{color:var(--jade);font-weight:600}
+.bench td.bad{color:var(--cinnabar);font-weight:600}
+.bench tr.hero{background:var(--cyan-ghost);box-shadow:inset 3px 0 0 var(--cyan)}
+.bench tr.hero td:first-child{color:var(--cyan);font-weight:700}
+.bench tr.hero:hover{background:rgba(79,195,217,.16)}
+.bench tr.worst{box-shadow:inset 3px 0 0 var(--cinnabar)}
+.bench tr.ablate td:first-child{color:var(--dim);padding-left:1.4rem}
+.bench .bl{display:flex;flex-direction:column;gap:.1rem}
+.bench .bl .id{font-family:var(--mono);font-size:var(--t-micro);letter-spacing:.06em}
+.bench .bl .lb{font-size:var(--t-meta)}
+
+/* 取捨散佈圖 */
+.chart{background:var(--panel);padding:.85rem}
+.chart svg{width:100%;height:auto;display:block;max-width:640px;margin:0 auto}
+.chart .cap{font-size:var(--t-micro);color:var(--dimmer);text-align:center;margin-top:.4rem;line-height:1.6}
+
+/* ==========================================================================
+   空 / 載入 / 錯誤
+   Demo 現場最怕的是 API 掛掉但畫面一片空白，看起來像沒寫完。
+   三種狀態都要看得出「系統知道自己現在是什麼情況」。
+   ========================================================================== */
+.empty{
+  padding:1.6rem 1rem;text-align:center;color:var(--dimmer);
+  font-size:var(--t-prose);line-height:1.8;
+}
+.empty .ic{font-size:1.8rem;color:var(--line-hi);display:block;margin:0 auto .5rem}
+.empty b{display:block;color:var(--dim);font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;margin-bottom:.35rem}
+
+.loading{padding:1.8rem 1rem;text-align:center}
+.loading .t{font-size:var(--t-meta);letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.loading .b{
+  width:min(260px,70%);height:4px;background:var(--panel-3);border:1px solid var(--line);
+  margin:.9rem auto 0;overflow:hidden;
+}
+.loading .b i{display:block;height:100%;width:32%;background:var(--cyan);animation:sweep 1.1s linear infinite}
+@keyframes sweep{0%{transform:translateX(-105%)}100%{transform:translateX(330%)}}
+
+.errbox{border:1px solid var(--cinnabar);background:var(--cin-ghost);padding:.8rem .9rem}
+.errbox .t{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--cinnabar);font-weight:700;display:flex;align-items:center;gap:.4rem;
+}
+.errbox .d{font-size:var(--t-meta);color:var(--fg-2);line-height:1.75;margin-top:.4rem}
+.errbox .d code{font-family:var(--mono);color:var(--fg)}
+
+/* ==========================================================================
+   註腳
+   ========================================================================== */
+.foot{
+  margin-top:1.1rem;padding:.7rem .85rem;border:1px solid var(--line);
+  background:var(--panel);font-size:var(--t-micro);color:var(--dimmer);line-height:1.85;
+}
+.foot b{color:var(--dim);font-weight:600}
+.foot .dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.15rem .9rem;margin-top:.3rem}
+.foot .dl span b{color:var(--fg-2);font-family:var(--mono)}
+
+/* ==========================================================================
+   工具
+   ========================================================================== */
+.stack{display:flex;flex-direction:column}
+.row{display:flex;align-items:center}
+.between{justify-content:space-between}
+.wrap{flex-wrap:wrap}
+.gap4{gap:.25rem} .gap6{gap:.38rem} .gap8{gap:.5rem} .gap12{gap:.75rem}
+.grow{flex:1 1 auto;min-width:0}
+.mt6{margin-top:.38rem} .mt10{margin-top:.62rem} .mt14{margin-top:.88rem}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* .micro 會把英文單位一起大寫（0.13 ms → 0.13 MS）。量測值要蓋掉它。 */
+.plain{text-transform:none;letter-spacing:var(--tr-data)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* 兩欄工作區。左欄固定、右欄流動；窄螢幕疊成一欄。 */
+.split{display:grid;grid-template-columns:17rem minmax(0,1fr);gap:1rem;align-items:start}
+@media(max-width:960px){.split{grid-template-columns:1fr}}
+.split.wide{grid-template-columns:20rem minmax(0,1fr)}
+@media(max-width:960px){.split.wide{grid-template-columns:1fr}}
+
+.stack-lg{display:flex;flex-direction:column;gap:1rem}
+
+/* ==========================================================================
+   營運中心
+   --------------------------------------------------------------------------
+   這一頁的工作是讓人在三秒內相信「這東西正在運作」。手段只有兩個：
+   一是把時間畫出來（每分鐘的來件、SLA 倒數），二是把每一列都做成可以
+   往下追的入口。裝飾一律不要 —— 值班台不需要好看，需要一眼看懂。
+   ========================================================================== */
+.nav .badge.live{
+  background:var(--jade);color:#03130C;font-weight:800;
+  animation:pulse 2.4s steps(2,start) infinite;
+}
+.top .slot .v.breach{color:var(--cinnabar);font-weight:700}
+
+.split.ops{grid-template-columns:minmax(0,1.45fr) minmax(0,1fr)}
+@media(max-width:960px){.split.ops{grid-template-columns:1fr}}
+
+/* -- 每分鐘來件 ---------------------------------------------------------- */
+.traffic{
+  display:flex;align-items:flex-end;gap:2px;height:9.5rem;
+  border-bottom:1px solid var(--line-hi);padding-bottom:2px;
+}
+.traffic .tb{
+  flex:1 1 0;min-width:0;display:flex;flex-direction:column;
+  justify-content:flex-end;align-items:center;gap:.15rem;height:100%;
+}
+.traffic .tb .stack{
+  width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
+  background:var(--panel-2);
+}
+.traffic .tb i{display:block;width:100%;min-height:0}
+.traffic .tb i.exe{background:var(--jade)}
+.traffic .tb i.pnd{background:var(--amber)}
+.traffic .tb i.blk{background:var(--cinnabar)}
+.traffic .tb .n{font-size:var(--t-micro);color:var(--dimmer);line-height:1}
+.traffic .tb:hover .stack{outline:1px solid var(--cyan);outline-offset:1px}
+
+/* -- 席位與渠道 ---------------------------------------------------------- */
+.bar{display:grid;grid-template-columns:9.5rem minmax(0,1fr) 2.5rem;align-items:center;
+  gap:.5rem;padding:.28rem 0}
+.bar .nm{font-size:var(--t-meta);color:var(--fg-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .track{height:.5rem;background:var(--panel-3);display:block}
+.bar .track i{display:block;height:100%;background:var(--cyan)}
+.bar.ch .track i{background:var(--cyan-deep)}
+.bar .n{font-size:var(--t-meta);color:var(--dim);text-align:right}
+
+/* -- 事件流 -------------------------------------------------------------- */
+table.stream tbody tr{cursor:pointer}
+table.stream tbody tr:hover{background:var(--panel-4)}
+table.stream tbody tr.blocked td:first-child{box-shadow:inset 2px 0 0 var(--cinnabar)}
+table.stream tbody tr.pending_approval td:first-child{box-shadow:inset 2px 0 0 var(--amber)}
+table.stream tbody tr.executed td:first-child{box-shadow:inset 2px 0 0 var(--jade)}
+table.stream .pill{white-space:nowrap}
+
+/* ==========================================================================
+   案件檔案 —— 工單抬頭、對話、附件
+   ========================================================================== */
+.casebar{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+  gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.casebar .cb{background:var(--panel);padding:.55rem .7rem;display:flex;flex-direction:column;
+  gap:.15rem;min-width:0}
+.casebar .cb .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim)}
+.casebar .cb .v{font-size:var(--t-meta);color:var(--fg);overflow-wrap:anywhere}
+.casebar .cb .v small{color:var(--dimmer);margin-left:.3rem}
+.casebar .cb.warn{background:var(--amber-ghost)}
+.casebar .cb.warn .v{color:var(--amber);font-weight:600}
+
+/* 對話。四種角色四種底色 —— tool 這一格必須看得出「這是機器讀進來的內容」。 */
+.talk{display:flex;flex-direction:column;gap:1px;background:var(--line);border:1px solid var(--line)}
+.turn{background:var(--panel-2);padding:.5rem .7rem;border-left:2px solid var(--line-hi)}
+.turn .turn-h{display:flex;align-items:baseline;gap:.45rem}
+.turn .who{font-size:var(--t-meta);color:var(--fg);font-weight:600}
+.turn .role{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--dimmer)}
+.turn .off{font-size:var(--t-micro);color:var(--dimmer)}
+.turn .txt{font-size:var(--t-prose);color:var(--fg-2);line-height:1.75;margin-top:.2rem}
+.turn.cust{border-left-color:var(--cyan)}
+.turn.agent{border-left-color:var(--line-hi);background:var(--panel)}
+.turn.agent .who{color:var(--dim)}
+.turn.tool{border-left-color:var(--amber);background:var(--panel-3)}
+.turn.tool .role{color:var(--amber)}
+.turn.tool .txt{font-family:var(--mono);font-size:var(--t-meta);color:var(--fg-2)}
+.turn.sys{border-left-color:var(--dimmer);background:var(--panel)}
+.turn.sys .txt{font-family:var(--mono);font-size:var(--t-meta);color:var(--dim)}
+
+/* 附件原文。夾帶指令那一行是全站唯二會反白的東西（另一個是印章）。 */
+.attach{border:1px solid var(--line);background:var(--panel-2)}
+.attach + .attach{margin-top:.6rem}
+.attach.tainted{border-color:var(--cinnabar)}
+.attach-h{display:flex;align-items:center;gap:.4rem;padding:.5rem .7rem;
+  border-bottom:1px solid var(--line);background:var(--panel-3)}
+.attach-h .ic{color:var(--dim);font-size:1.2em}
+.attach.tainted .attach-h{background:var(--cin-ghost);border-bottom-color:var(--cinnabar)}
+.attach.tainted .attach-h .ic{color:var(--cinnabar)}
+.attach-h .fn{font-size:var(--t-meta);color:var(--fg);font-weight:600}
+.attach-h .ref{font-size:var(--t-micro);color:var(--dimmer);overflow-wrap:anywhere}
+.attach-m{padding:.35rem .7rem;font-size:var(--t-micro);color:var(--dim);
+  border-bottom:1px solid var(--line)}
+.paperlines{padding:.5rem 0;background:var(--panel)}
+.paperlines .ln{display:grid;grid-template-columns:2rem minmax(0,1fr) auto;gap:.5rem;
+  padding:.22rem .7rem;align-items:baseline}
+.paperlines .ln .no{font-size:var(--t-micro);color:var(--line-hi);text-align:right}
+.paperlines .ln .tx{font-size:var(--t-meta);color:var(--fg-2);line-height:1.8;overflow-wrap:anywhere}
+.paperlines .ln.inj{background:var(--cin-ghost);box-shadow:inset 2px 0 0 var(--cinnabar)}
+.paperlines .ln.inj .tx{color:var(--fg);font-weight:600}
+.paperlines .ln.inj .no{color:var(--cinnabar)}
+.paperlines .ln .mark{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  background:var(--cinnabar);color:#120604;padding:.1rem .35rem;font-weight:700;white-space:nowrap;
+}
+.attach-f{padding:.5rem .7rem;border-top:1px solid var(--cinnabar);background:var(--cin-ghost);
+  font-size:var(--t-meta);color:var(--fg-2);line-height:1.7;display:flex;gap:.45rem}
+.attach-f .ic{color:var(--cinnabar);flex:0 0 auto;font-size:1.2em}
+.attach-f b{color:var(--cinnabar);font-family:var(--mono)}
+
+/* 「這件事為什麼沒進來源鏈」的註記。用 cyan（系統自身的說明）而不是 amber，
+   因為它講的是「這是對的」，不是警告。 */
+.evnote{display:flex;gap:.5rem;margin-top:.7rem;padding:.6rem .75rem;
+  border-left:2px solid var(--cyan);background:var(--cyan-ghost)}
+.evnote .ic{color:var(--cyan);flex:0 0 auto;font-size:1.25em}
+.evnote div{font-size:var(--t-meta);color:var(--fg-2);line-height:1.8}
+.evnote b{color:var(--fg)}
+
+.callrow{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.agentsay{border-left:2px solid var(--amber);background:var(--panel-2);padding:.55rem .7rem;
+  font-size:var(--t-prose);color:var(--fg-2);line-height:1.75}
+.agentsay .warn{display:flex;align-items:center;gap:.35rem;font-size:var(--t-micro);
+  letter-spacing:var(--tr-label);text-transform:uppercase;color:var(--amber);margin-bottom:.3rem}
+
+a.caselink{color:var(--cyan);text-decoration:none;border-bottom:1px solid var(--cyan-ghost)}
+a.caselink:hover{border-bottom-color:var(--cyan)}
+.dossier a.caselink{color:var(--seal);border-bottom-color:rgba(193,39,45,.3)}
+.dossier a.caselink:hover{border-bottom-color:var(--seal)}
+.dossier .docno .over{color:var(--seal);font-weight:700}
+
+/* ==========================================================================
+   案件抽屜
+   ========================================================================== */
+body.locked{overflow:hidden}
+.drawer{position:fixed;inset:0;z-index:60;display:flex;justify-content:flex-end}
+.drawer-scrim{position:absolute;inset:0;background:rgba(4,9,15,.72)}
+.drawer-panel{
+  position:relative;width:min(56rem,94vw);height:100%;overflow-y:auto;
+  background:var(--bg);border-left:1px solid var(--line-hi);
+  box-shadow:-24px 0 60px rgba(0,0,0,.55);padding:0 0 3rem;
+}
+.drawer-head{
+  position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;gap:1rem;
+  padding:.9rem 1.1rem;background:var(--panel);border-bottom:1px solid var(--line);
+}
+.drawer-head h3{font-family:var(--serif);font-size:1.1rem;color:var(--fg);margin-top:.15rem}
+.drawer-head .eyebrow{font-family:var(--mono);font-size:var(--t-micro);
+  letter-spacing:var(--tr-label);color:var(--cyan)}
+.drawer-head button{margin-left:auto;flex:0 0 auto}
+.drawer-body{padding:1.1rem}
+
+/* ==========================================================================
+   影子後台
+   ========================================================================== */
+input.field{width:100%}
+.rec{display:flex;flex-direction:column;gap:1px;background:var(--line)}
+.rec .rw{background:var(--panel);display:grid;grid-template-columns:8.5rem minmax(0,1fr);
+  gap:.6rem;padding:.45rem .8rem;align-items:baseline}
+.rec .rw .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim)}
+.rec .rw .v{font-size:var(--t-meta);color:var(--fg);overflow-wrap:anywhere}
+.rec .rw .v small{margin-left:.4rem}
+.rec .rw .v.ok{color:var(--jade)}
+.rec .rw .v.bad{color:var(--cinnabar)}
+.rec .rw .v.warn{color:var(--amber)}
+.rec.pii .rw{background:rgba(240,83,63,.05)}
+.rec.pii .rw .v{color:var(--fg)}
+
+/* ==========================================================================
+   執行結果單
+   「後台實際發生了什麼」是給人看的一句話，不是給 curl 看的一坨 JSON。
+   綠頭 = 寫進去了，硃砂頭 = 沒寫成。原始回應收在 <details> 裡，要查證才攤開。
+   ========================================================================== */
+.execres{border:1px solid var(--line);background:var(--panel-2)}
+.exec-h{display:flex;align-items:center;gap:.45rem;padding:.5rem .7rem;
+  border-bottom:1px solid var(--line);background:var(--jade-ghost)}
+.exec-h .ic{color:var(--jade);font-size:1.25em;flex:0 0 auto}
+.exec-h b{font-size:var(--t-prose);color:var(--fg);font-weight:600}
+.exec-h.bad{background:var(--cin-ghost);border-bottom-color:var(--cinnabar)}
+.exec-h.bad .ic{color:var(--cinnabar)}
+.exec-b{padding:.7rem}
+.execres .rec .rw{background:var(--panel-2)}
+.execres .fact{background:var(--panel-2)}
+
+.rawdrop summary{
+  font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dimmer);cursor:pointer;padding:.2rem 0;list-style:none;
+}
+.rawdrop summary::-webkit-details-marker{display:none}
+.rawdrop summary::before{content:"▸ ";color:var(--line-hi)}
+.rawdrop[open] summary::before{content:"▾ "}
+.rawdrop summary:hover{color:var(--dim)}
+
+/* 舊 process 警告。橫在所有分頁上方，因為它講的不是某一頁的問題。 */
+#staleWarn{padding:1.1rem 1.15rem 0}
+.banner.stale{align-items:flex-start;line-height:1.8;font-weight:400}
+.banner.stale b{font-family:var(--sans)}
+.banner.stale code{font-family:var(--mono);font-size:var(--t-meta);
+  background:var(--panel-3);padding:.1rem .3rem;color:var(--fg)}
+
+/* 帳戶清單自己捲，不要把整頁拉成六千像素高 —— 右邊的明細才是要看的東西，
+   被推到第三個螢幕之外就沒人會往下滑。 */
+#vaultList{max-height:min(60vh,34rem);overflow-y:auto}
+
+/* -- 佇列的 SLA 倒數 ------------------------------------------------------ */
+.qitem .sla{font-family:var(--mono);font-size:var(--t-micro);color:var(--dim);white-space:nowrap}
+.qitem .sla.over{color:var(--cinnabar);font-weight:700;display:inline-flex;align-items:center;gap:.2rem}
+.qitem .sla.done{color:var(--dimmer)}
+.qitem.over{border-left-color:var(--cinnabar);background:var(--cin-ghost)}
+
+/* ==========================================================================
+   減少動態
+   閃爍的待核提示只是「引起注意」的手段，不是唯一手段：關掉動畫之後
+   amber 燈色、斜紋與「待核准」四個字仍然把狀態講清楚了。
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.001ms!important;
+  }
+  .loading .b i{width:100%;transform:none}
+  .gt.hold .gt-node,.gate-sw.off .lamp{opacity:1}
+}
+
+/* ==========================================================================
+   列印 / PDF
+   提案書要截圖與轉 PDF。深底反白在紙上會吃掉半罐碳粉，且掃描線變髒污。
+   ========================================================================== */
+@media print{
+  body::before{display:none}
+  body{background:#fff;color:#000}
+  .top,.nav,.gate-sw,button{display:none!important}
+  .view{display:block!important;page-break-inside:avoid}
+  .sec,.sec-h,.rig,.rig > *,.kpi,.fact,.chart{background:#fff!important;color:#000!important;border-color:#999!important}
+  .sec-h b,.fact .v,.kpi .v,.view-head h2{color:#000!important}
+  .dossier{box-shadow:none;border-color:#666}
+  a{color:#000}
+  .hazard{background:repeating-linear-gradient(45deg,#000 0 8px,#fff 8px 16px)}
+}

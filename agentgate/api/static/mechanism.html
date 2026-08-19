@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>運作機制 — AgentGate</title>
+<meta name="description" content="AgentGate 的六道治理關卡怎麼運作:來源信任、動作解析、政策裁決、後果預演、人工核准、執行封存。每一關都可當場送一筆真的動作請求驗證。">
+<link rel="stylesheet" href="/static/gate.css">
+<link rel="stylesheet" href="/static/mechanism.css">
+</head>
+<body>
+
+<!-- 獨立頁的外框。刻意做得薄：這一頁的主體是關卡走廊，不是又一個管制台。
+     主要入口是 Dashboard 的「運作機制」分頁；這一頁留著給提案截圖與嵌入用，
+     兩邊掛的是同一支 mechanism.js，不會有兩份說明各自漂移的問題。 -->
+<header class="mech-top">
+  <div class="glyph" aria-hidden="true">閘</div>
+  <div>
+    <h1 class="wordmark">AgentGate</h1>
+    <small>運作機制 · Mechanism</small>
+  </div>
+  <a href="/scenario">使用場景</a>
+  <a href="/">← 回治理管制台</a>
+</header>
+
+<div class="shell">
+  <div id="mechRoot"></div>
+</div>
+
+<script src="/static/mechanism.js"></script>
+<script>window.AgentGateMechanism.mount("#mechRoot");</script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+/* ==========================================================================
+   AGENTGATE — 運作機制視角
+   --------------------------------------------------------------------------
+   延伸 gate.css，不改它。色票、字級、間距一律沿用既有 token，這裡只新增
+   「機制」這個視角自己的元件：可點的關卡走廊、關卡詳解卡、現場實證。
+
+   兩個刻意的約束：
+   · 關卡走廊沿用 .corridor/.gt 的造型語言，但那組樣式是給「裁決結果」用的
+     （pass / stop / hold 帶語意色）。機制走廊是導覽，狀態只有「選中與否」，
+     所以另開 .mech-gt，不去覆寫 .gt —— 兩者在同一頁出現時不能互相汙染。
+   · 只有「現場實證」的結果會用語意色。說明文字全部走中性階，否則整頁都在
+     喊警報，真正被擋下的那一格就不再顯眼。
+   ========================================================================== */
+
+/* --- 三個原則。整頁的前提，所以放在最上面且不可點。 --------------------- */
+.mech-principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:1px;background:var(--line);border:1px solid var(--line)}
+.mech-principle{background:var(--panel);padding:.85rem .9rem;display:flex;
+  flex-direction:column;gap:.3rem;min-width:0}
+.mech-principle .n{font-family:var(--mono);font-size:var(--t-micro);color:var(--cyan);
+  letter-spacing:.1em}
+.mech-principle .t{font-size:var(--t-prose);color:var(--fg);font-weight:600;line-height:1.5}
+.mech-principle .b{font-size:var(--t-meta);color:var(--dim);line-height:1.75}
+.mech-principle .r{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);
+  overflow-wrap:anywhere;margin-top:auto;padding-top:.3rem}
+
+/* --- 可點的關卡走廊。全視角的導覽軸。 ---------------------------------- */
+.mech-rail{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);
+  border-bottom:1px solid var(--line)}
+.mech-gt{
+  background:var(--panel);border:0;padding:.7rem .4rem .75rem;display:flex;
+  flex-direction:column;align-items:center;gap:.28rem;text-align:center;cursor:pointer;
+  font-family:var(--sans);text-transform:none;letter-spacing:var(--tr-data);
+  font-weight:400;min-width:0;
+}
+/* 軌道線。第一格只畫右半、最後一格只畫左半，走廊才有頭尾。 */
+.mech-gt .rail{position:relative;width:100%;height:.8rem;display:grid;place-items:center}
+.mech-gt .rail::before{content:"";position:absolute;top:50%;left:0;right:0;height:1px;
+  background:var(--line-hi)}
+.mech-gt:first-child .rail::before{left:50%}
+.mech-gt:last-child .rail::before{right:50%}
+.mech-gt .node{position:relative;width:.5rem;height:.5rem;background:var(--panel);
+  border:1px solid var(--line-hi);border-radius:50%}
+.mech-gt .id{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);
+  letter-spacing:.08em}
+.mech-gt .ic{font-size:1.4rem;color:var(--dimmer)}
+.mech-gt .nm{font-size:var(--t-micro);color:var(--dim);line-height:1.35}
+
+.mech-gt:hover{background:var(--panel-2)}
+.mech-gt:hover .ic{color:var(--dim)}
+.mech-gt:hover .nm{color:var(--fg-2)}
+
+/* 選中。cyan = 系統自身與互動，和「通過(jade)／攔下(cinnabar)」不搶語意。 */
+.mech-gt[aria-selected="true"]{background:var(--cyan-ghost);box-shadow:inset 0 -2px 0 var(--cyan)}
+.mech-gt[aria-selected="true"] .ic{color:var(--cyan)}
+.mech-gt[aria-selected="true"] .id{color:var(--cyan)}
+.mech-gt[aria-selected="true"] .nm{color:var(--fg);font-weight:600}
+.mech-gt[aria-selected="true"] .node{background:var(--cyan);border-color:var(--cyan)}
+.mech-gt[aria-selected="true"] .rail::before{background:var(--cyan-deep)}
+
+/* --- 關卡詳解卡 --------------------------------------------------------- */
+.mech-card-h{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;
+  padding:.8rem .85rem .55rem}
+.mech-card-h .g{font-family:var(--mono);font-size:1.05rem;color:var(--cyan);letter-spacing:.06em}
+.mech-card-h h3{font-family:var(--serif);font-size:1.2rem;color:var(--fg);letter-spacing:.03em}
+.mech-card-h .en{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--dimmer)}
+.mech-card-h .mod{font-family:var(--mono);font-size:var(--t-micro);color:var(--dimmer);
+  margin-left:auto;overflow-wrap:anywhere}
+
+.mech-lede{font-family:var(--serif);font-size:var(--t-lede);color:var(--fg-2);
+  line-height:1.9;padding:0 .85rem .8rem;max-width:70ch}
+
+/* 輸入 → 輸出。型別是機制的骨架，值得單獨一列。 */
+.mech-io{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  padding:.6rem .85rem;border-top:1px solid var(--line);background:var(--panel-2)}
+.mech-io .k{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim)}
+.mech-io .ty{font-family:var(--mono);font-size:var(--t-meta);color:var(--fg);
+  border:1px solid var(--line-hi);padding:.15rem .45rem;overflow-wrap:anywhere}
+.mech-io .arr{color:var(--cyan);font-family:var(--mono)}
+
+/* LLM 標記。G2 那格是整個系統的差異化主張，所以它是唯一有底色的。 */
+.mech-llm{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  border:1px solid var(--line-hi);color:var(--dim);padding:.12rem .4rem;white-space:nowrap}
+.mech-llm.never{border-color:var(--cyan);color:var(--cyan);background:var(--cyan-ghost);
+  font-weight:700}
+
+.mech-does{list-style:none;display:flex;flex-direction:column;gap:.45rem;padding:.8rem .85rem}
+.mech-does li{position:relative;padding-left:1.05rem;font-size:var(--t-prose);
+  color:var(--fg-2);line-height:1.8}
+.mech-does li::before{content:"";position:absolute;left:0;top:.62em;width:.42rem;height:1px;
+  background:var(--cyan-deep)}
+.mech-does li b{color:var(--fg);font-weight:600}
+
+/* 關鍵設計決定。全卡唯一的引述體 —— 這是「為什麼這樣做」，不是規格。 */
+.mech-decision{border-left:2px solid var(--cyan);background:var(--panel-2);
+  margin:0 .85rem .85rem;padding:.7rem .85rem}
+.mech-decision .t{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--cyan);margin-bottom:.25rem}
+.mech-decision .h{font-family:var(--serif);font-size:1.02rem;color:var(--fg);
+  margin-bottom:.3rem;line-height:1.5}
+.mech-decision .b{font-size:var(--t-prose);color:var(--fg-2);line-height:1.9;max-width:74ch}
+
+/* --- 依據表 ------------------------------------------------------------- */
+.mech-ref{border-top:1px solid var(--line)}
+.mech-ref .hd{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;
+  border-bottom:1px solid var(--line);background:var(--panel-2)}
+.mech-ref .hd .t{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--dim)}
+.mech-ref .hd .s{font-size:var(--t-micro);color:var(--dimmer);margin-left:auto}
+.mech-ref table{width:100%;border-collapse:collapse;font-size:var(--t-meta)}
+.mech-ref th{font-size:var(--t-micro);letter-spacing:var(--tr-label);text-transform:uppercase;
+  color:var(--dim);text-align:left;font-weight:600;padding:.45rem .85rem;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.mech-ref td{padding:.45rem .85rem;border-bottom:1px solid var(--line-lo);
+  color:var(--fg-2);vertical-align:top}
+.mech-ref tr:last-child td{border-bottom:0}
+.mech-ref td.mono{font-family:var(--mono);color:var(--fg);white-space:nowrap}
+.mech-ref td.note{color:var(--dim);font-size:var(--t-micro);line-height:1.6}
+/* 不可信通道是攻擊入口，表上要一眼看得出來，不能跟其他列一樣重。 */
+.mech-ref tr.untrusted td.mono{color:var(--cinnabar)}
+.mech-ref tr.untrusted{background:var(--cin-ghost)}
+
+/* 依據表下方的補充句（例如「完整條文在政策條文分頁」）。刻意不做成 .note，
+   免得和現場實證那一塊長得一樣 —— 那一塊是可以按的，這一句不是。 */
+.mech-hint{font-size:var(--t-meta);color:var(--dim);line-height:1.8;
+  padding:.55rem .85rem;border-top:1px solid var(--line);max-width:74ch}
+
+/* --- 現場實證 ----------------------------------------------------------- */
+.mech-probe{border-top:1px solid var(--line);padding:.8rem .85rem;background:var(--panel-2)}
+.mech-probe .hd{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.mech-probe .hd .t{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--dim)}
+.mech-probe .note{font-size:var(--t-meta);color:var(--dim);line-height:1.8;
+  margin-top:.5rem;max-width:74ch}
+.mech-probe .payload{margin-top:.5rem}
+.mech-probe .payload summary{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--dimmer);cursor:pointer;padding:.2rem 0}
+.mech-probe .payload summary:hover{color:var(--dim)}
+.mech-probe .payload pre{font-family:var(--mono);font-size:var(--t-micro);color:var(--fg-2);
+  background:var(--panel);border:1px solid var(--line);padding:.6rem .7rem;margin-top:.35rem;
+  overflow-x:auto;line-height:1.65}
+.mech-out{margin-top:.75rem;background:var(--panel);border:1px solid var(--line)}
+.mech-out .hd{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;padding:.6rem .75rem}
+.mech-out .hd .big{display:flex;align-items:center;gap:.35rem;font-size:var(--t-prose);
+  font-weight:700}
+.mech-out .hd .big.executed{color:var(--jade)}
+.mech-out .hd .big.blocked,.mech-out .hd .big.rejected{color:var(--cinnabar)}
+.mech-out .hd .big.pending_approval{color:var(--amber)}
+.mech-out .hd .lat{margin-left:auto;font-family:var(--mono);font-size:var(--t-micro);
+  color:var(--dimmer)}
+.mech-out .bd{padding:.7rem .75rem;border-top:1px solid var(--line)}
+
+/* --- 執行順序與歸因 ----------------------------------------------------- */
+.mech-order{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;padding:.8rem .85rem .4rem}
+.mech-order .st{font-family:var(--mono);font-size:var(--t-meta);color:var(--fg-2);
+  border:1px solid var(--line-hi);padding:.2rem .5rem}
+/* G0-R1 是「檢查點在別處、歸因回 G0」的那一格，它必須看起來和其他格不同。 */
+.mech-order .st.hi{border-color:var(--cinnabar);color:var(--cinnabar);background:var(--cin-ghost)}
+.mech-order .arr{color:var(--dimmer);font-family:var(--mono)}
+.mech-order-b{font-size:var(--t-prose);color:var(--fg-2);line-height:1.9;
+  padding:0 .85rem .85rem;max-width:76ch}
+
+/* --- 標準頁面外框（獨立頁 /mechanism 用；嵌進 Dashboard 時不會用到）----- */
+.mech-top{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);background:var(--panel);padding:.6rem .9rem}
+.mech-top .glyph{width:1.9rem;height:1.9rem;display:grid;place-items:center;
+  border:1px solid var(--cyan);color:var(--cyan);font-family:var(--serif);font-size:1rem}
+.mech-top h1{font-size:1rem;letter-spacing:.04em;color:var(--fg)}
+.mech-top small{display:block;font-size:var(--t-micro);color:var(--dimmer);
+  letter-spacing:var(--tr-label);text-transform:uppercase}
+.mech-top a{font-size:var(--t-micro);letter-spacing:var(--tr-label);
+  text-transform:uppercase;color:var(--dim);text-decoration:none;border:1px solid var(--line-hi);
+  padding:.35rem .6rem}
+/* 只有第一顆吃掉剩餘空白。每一顆都 margin-left:auto 的話,兩顆連結會各自
+   分掉空白、中間裂開一道縫,看起來像沒對齊。 */
+.mech-top a:first-of-type{margin-left:auto}
+.mech-top a:hover{color:#04090F;background:var(--fg);border-color:var(--fg)}
+
+/* --- 窄螢幕。走廊六格在筆電投影寬度以下會擠成一團，改成兩排三格。 ------ */
+@media (max-width:760px){
+  .mech-rail{grid-template-columns:repeat(3,1fr)}
+  .mech-gt .rail{display:none}
+  .mech-card-h .mod{margin-left:0;width:100%}
+}
