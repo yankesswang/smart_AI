@@ -169,6 +169,41 @@ def build_step_request(step_id: str) -> ActionRequest:
     return build_step_case(step_id)[1]
 
 
+# --------------------------------------------------------------------------------------
+# 真 LLM Agent 路徑
+# --------------------------------------------------------------------------------------
+#: 哪幾步可以改用真的 LLM Agent 產生動作請求。
+#: 步驟 1(查帳)刻意留在樣板路徑:它要證明的是「治理層不擋正常業務」,
+#: 沒必要為此多等一次 API 往返;真正需要看到模型被騙的是步驟 3 與 4。
+LIVE_AGENT_STEPS: tuple[str, ...] = ("bill_query", "refund", "injection",
+                                     "injection_ungated")
+
+
+def build_step_case_with_agent(
+    step_id: str, agent: Any | None = None,
+) -> tuple[Case, ActionRequest, dict[str, Any] | None]:
+    """劇本步驟 → 工單 + 動作請求 + Agent 決策紀錄。
+
+    ``agent`` 為 None(或這一步不支援)時完全走原本的樣板路徑,回傳的第三個值是
+    ``None`` —— 呼叫端不需要分兩條路寫。
+
+    這裡是四分鐘劇本從「按鈕生出動作請求」變成「模型讀完 PDF 自己決定要匯出個資」
+    的接點。模型看得到附件全文(含夾帶的那一行),來源鏈則由 agent runtime 依
+    「模型讀進 context 的東西」組出 —— 不由模型自報(見 ``agentgate/agent.py``)。
+    """
+    case, template_request = build_step_case(step_id)
+    if agent is None or step_id not in LIVE_AGENT_STEPS:
+        return case, template_request, None
+
+    run = agent.run(case, fallback=lambda: template_request)
+    request = run.request or template_request
+    # 對照組要是同一件工單的同一個 trace,兩邊的 A/B 才比得起來
+    request.trace_id = f"trace-{case.case_id.lower()}"
+    request.context = {**case.context(), "source": "demo",
+                       "agent_mode": run.mode, "agent_degraded": run.degraded}
+    return case, request, run.to_dict()
+
+
 DEMO_SCRIPT: list[dict[str, Any]] = [
     {
         "step_id": "bill_query", "time": "0:00–0:30",
@@ -211,13 +246,13 @@ DEMO_SCRIPT: list[dict[str, Any]] = [
     },
     {
         "step_id": "metrics", "time": "3:40–4:00",
-        "title": "量化成效:六指標 × 六 baseline × 取捨曲線",
-        "narrative": "在 120 條自建情境上:完整五關卡 HAR 0%、ESB 100%、稽核完整率 100%;"
+        "title": "量化成效:八指標 × 八 baseline × 取捨曲線",
+        "narrative": "在 142 條自建情境上:完整五關卡 HAR 0%、閘門誤攔 0%、ESB 100%、稽核完整率 100%;"
                      "兩條消融證明 G0 與 G3 不是裝飾。請切到「指標」分頁執行驗證管線。",
         "action": "goto_metrics",
     },
 ]
 
 
-__all__ = ["DEMO_ATTACHMENT", "DEMO_PDF", "DEMO_SCRIPT", "build_step_case",
-           "build_step_request"]
+__all__ = ["DEMO_ATTACHMENT", "DEMO_PDF", "DEMO_SCRIPT", "LIVE_AGENT_STEPS",
+           "build_step_case", "build_step_case_with_agent", "build_step_request"]

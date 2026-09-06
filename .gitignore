@@ -21,7 +21,11 @@ htmlcov/
 .ruff_cache/
 
 # 執行產出
-runs/
+# 用 runs/* 而不是 runs/:目錄整個被排除時,底下的檔案就再也 ! 不回來了。
+runs/*
+# 例外:真 LLM B1 baseline 的量測快取要進版控 —— 離線(決賽現場沒網路)
+# 也必須報得出真實 B1 的數字,而不是回頭用模擬值(見 agentgate/llm_baseline.py)。
+!runs/agentgate_b1_llm.json
 benchmark.json
 .tmp/
 
