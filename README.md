@@ -33,6 +33,18 @@ pytest -q                                     # 986 個測試（含 AgentGate �
 
 ---
 
+## 決賽簡報（兩個版本，內容相同）
+
+| 檔案 | 形態 | 適合 |
+|---|---|---|
+| [`docs/factory_guardian/Factory_Guardian_AI_競賽簡報.pptx`](docs/) | **原版**。每一頁都是獨立繪製的自由版面，圖表與表格是向量圖形 | 直接放映；視覺完全依設計稿，不會被 PowerPoint 版面規則干擾 |
+| [`docs/factory_guardian/Factory_Guardian_AI_競賽簡報_版型版.pptx`](docs/) | **版型版**。1 個投影片母片 ＋ 11 種版面配置 ＋ 59 個版面配置區；圖表與表格是**原生 PowerPoint 物件**（可在 PowerPoint 內改資料） | 要在 PowerPoint 裡續編、換色、抽換頁面或交給別人維護 |
+
+兩份都是 15 頁、講稿逐頁嵌入、數字與 `benchmark.json` / `business.json` 同源。
+版型版的來源專案在 [`projects/smart_factory_core_20260906/`](projects/)，
+版面系統取自 ppt-master 的 `presentation_core`（結構性版型，不帶品牌識別），
+配色與字級改用本專案的 `spec_lock.md` 錨點。
+
 ## 三個可信度原則
 
 競賽 Demo 最容易被質疑的是「數字是不是編的」。這套系統用架構回答：

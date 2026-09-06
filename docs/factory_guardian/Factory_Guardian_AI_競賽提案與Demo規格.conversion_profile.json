@@ -1,0 +1,28 @@
+{
+  "schema": "ppt-master.source_to_md.profile.v1",
+  "converter": "doc_to_md.py",
+  "conversion_type": "docx",
+  "source": {
+    "path": "Factory_Guardian_AI_競賽提案與Demo規格.docx",
+    "name": "Factory_Guardian_AI_競賽提案與Demo規格.docx",
+    "suffix": ".docx",
+    "kind": "file",
+    "exists": true,
+    "size_bytes": 50058
+  },
+  "outputs": {
+    "markdown": "Factory_Guardian_AI_競賽提案與Demo規格.md",
+    "asset_dir": "",
+    "image_manifest": "",
+    "image_count": 0
+  },
+  "markdown": {
+    "line_count": 303,
+    "char_count": 10353,
+    "heading_count": 15,
+    "table_count": 29,
+    "image_ref_count": 0,
+    "link_count": 0
+  },
+  "warnings": []
+}
