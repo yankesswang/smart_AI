@@ -3,11 +3,11 @@
 **Agentic AI 智慧工廠自主營運與風險管理平台**
 2026 中華電信智慧創新應用大賽｜智慧製造｜競賽 MVP
 
-> **本 repo 另含姊妹專案 [AgentGate](docs/AgentGate_實作說明.md)** —— AI Agent 可稽核治理層
-> (2026 競賽・智慧生活組),重用本專案的治理骨架。
-> 快速上手:`agentgate serve` → http://127.0.0.1:8600 ;`agentgate benchmark` 跑六指標驗證。
-> 服務啟動即回填 45 分鐘當班歷史並持續受理工單 —— 打開就是一個進行中的值班台,
-> 每一列裁決都點得開它的來源工單:對話逐字、附件原文、Agent 推理與稽核紀錄。
+> 本 repo 另含姊妹專案 AgentGate —— AI Agent 可稽核治理層（2026 競賽・智慧生活組）。
+> `agentgate serve` → http://127.0.0.1:8600；`agentgate benchmark` 跑 142 條情境 × 8 條 baseline × 8 指標；
+> `agentgate agent-run injection` 讓真的 gpt-4o-mini 客服 Agent 讀一份夾帶指令的 PDF、
+> 發出越權工具呼叫、被 G0 攔下；`agentgate business-case` 與 `agentgate external-eval`（AgentDojo）
+> 另見 docs/。
 
 > 當設備、產線或工安異常發生時，AI 不只警告，而是自動完成
 > **偵測 → 診斷 → 影響分析 → 方案規劃 → 安全檢查 → 人工核准 → 執行/派工 → 驗證恢復**。
@@ -25,7 +25,7 @@ pip install -e ".[dev]"
 factory-guardian demo bearing-degradation     # 舞台 Demo：完整閉環 + 互動核准
 factory-guardian benchmark                    # 三組對照組 KPI 比較
 factory-guardian serve                        # Web Dashboard → http://127.0.0.1:8000
-pytest -q                                     # 102 個測試，離線 4 秒跑完
+pytest -q                                     # 986 個測試（含 AgentGate 姊妹專案），離線約 42 秒跑完
 ```
 
 不需要 OpenAI 金鑰也能跑完整 Demo：沒有金鑰時 LLM 敘述會自動退回**確定性離線敘述器**。
@@ -63,7 +63,7 @@ pytest -q                                     # 102 個測試，離線 4 秒跑�
 
 | 層 | 模組 | 說明 |
 |---|---|---|
-| Data | [`twin/`](factory_guardian/twin/) | 拓撲、故障模型、模擬引擎、情境 |
+| Data | [`twin/`](factory_guardian/twin/) | 拓撲、故障模型、模擬引擎、情境、**干擾與現實落差** |
 | Knowledge | [`knowledge/`](factory_guardian/knowledge/) | Manual / SOP / 維修紀錄 + CJK-aware TF-IDF 檢索 |
 | Agent | [`agents/`](factory_guardian/agents/) | 六個 Agent + VLM 後端 |
 | Governance | [`policy/`](factory_guardian/policy/)、[`audit.py`](factory_guardian/audit.py) | Safety 硬規則、動作權限、人工核准、JSONL 稽核 |
@@ -123,6 +123,63 @@ min–max 是相對比較：候選方案在某個準則上差距很小時，正�
 信心度另外會被訊號強度壓抑：訊號還微弱時，即使指紋指向某個故障也不該給 90% 信心。
 Orchestrator 因此會在信心不足時**先繼續觀察**（`confirm_diagnosis`），不急著動設備。
 
+### 6. 一個故障可以有多個指紋
+
+單一原型指紋在雙側故障（例如馬達過載 vs 失載、冷卻不足 vs 過度冷卻）上會失去方向：
+兩種相反的偏離平均起來，餘弦自然指不到正確答案 —— 這是在
+[`docs/external_validation.md`](docs/external_validation.md) 的外部資料上實測發現的結構性弱點
+（PWF recall 只有 0.388）。`FaultSignature` 因此支援 `alt_prototypes`，比對時對所有原型取最大餘弦；
+`motor_overload`（失載）與 `cooling_failure`（冷卻過度）各補了一個手冊來源的第二原型，
+`bearing_degradation` 手冊上只有一個方向，行為逐位元不變。外部資料上重跑後 Top-1 從
+0.724 升到 **0.821**（詳見該文件 §11）。AI4I 沒有振動訊號，覆蓋不到 `bearing_degradation`
+本身——這個缺口由 [`docs/cwru_validation.md`](docs/cwru_validation.md)（真實加速規量測的軸承振動
+資料集）補上：內圈／滾珠／外圈三類歸因 Top-1 0.994，但同尺寸內的數字幾乎飽和、
+偵測任務單一 RMS 門檻的 AUC 還贏過指紋法（1.000 vs 0.982）；真正有資訊量的跨嚴重度轉移測試
+（拿壞得明顯的訓練、測剛開始壞的）Top-1 掉到 0.335 ＝ 隨機，因此**不宣稱驗證了早期偵測能力**。
+[`docs/acoustic_validation.md`](docs/acoustic_validation.md)（DCASE2020 pump，真實工業錄音）
+則驗證聲學偵測器：平均 AUC 0.903 vs 官方 baseline 0.726。三條線各自誠實地寫出輸的地方，
+不是只報贏的數字。
+
+### 7. 排名要禁得起「權重是你自己訂的」這句追問
+
+六個準則的權重是工程師訂的常數，不是學出來的。所以每次排名之後會再跑一次**權重穩健性掃描**
+（[`optimizer.py::robustness_scan`](factory_guardian/optimizer.py)）：固定種子、確定性網格
+（每個準則 ±20%）加隨機抽樣，回報推薦方案在多少比例的擾動下不變、第一二名的最小分數差、
+以及哪個準則的權重臨界值最容易翻盤排名。純計算，LLM 不參與。
+
+同一份改動也把方案模板從「寫死的參數」改成**方案參數搜尋**：PLAN-B 原本降速比例寫死 0.6，
+現在改成掃描 **5 個 derate 變體（0.4 / 0.5 / 0.6 / 0.7 / 0.8）**，每個都在信念模型上乾跑並過一次
+Safety 預測規則，只有分數最高且未被 BLOCK 的變體代表家族進入排名。PLAN-C / PLAN-D 同樣掃描
+「延後 0 / 10 / 20 分鐘再停機」（先讓機台把手上這批做完）—— 但延後變體目前**不會被選為代表**，
+原因有兩層：一是延後窗內機台仍在全速運轉，乾跑出來的訊號峰值一樣要過 SR-02P / SR-03P 預測型規則，
+早期偵測的情境下延後越久越容易被預測型規則 BLOCK；二是即使沒被 BLOCK，執行層目前的動作字彙
+還沒有「N 分鐘後再停機」，讓一個做不到的變體代表家族，會被 Verification Agent 抓到預測與實際對不上。
+掃描過的變體與分數全部留在 `RecoveryPlan.variants` 與稽核軌跡裡，不是算完就丟。
+
+### 8. 監測不只看「現在多壞」，也看「還有多久會踩線」
+
+瞬時斜率回答不了現場真正在意的問題——兩台機器同樣掉到 85 分健康度，一台 12 分鐘後踩線、
+一台 50 分鐘後才踩線，短期風險並不一樣。Monitoring Agent 因此新增 **TTT（time-to-threshold，
+到達門檻的剩餘時間）預測**（[`prediction/threshold.py`](factory_guardian/prediction/threshold.py)）：
+只讀 Agent 自己累積的可觀測歷史（和 `/api/state.history` 同一種東西，不讀孿生體的故障標籤），
+優先用時序模型換算成分鐘、拿不到結果時退回線性外推。TTT 進了 `failure_risk` 的閉環，
+但只是加權項（最多 +0.35），不是主導項——它是外推值，不該蓋過已經量到的健康度與趨勢。
+Safety Agent 讀 `last_ttt` 當佐證證據，但裁決仍然由規則引擎做。
+
+### 9. 觀察窗與誤報，兩個要付代價才買得到的東西
+
+動設備前的**觀察窗**（`Orchestrator.confirm_diagnosis`，等於 `MonitoringAgent.WINDOW`）要求
+系統多看一個完整視窗，才能分辨「訊號跳到新穩態」和「才剛開始的劣化」——這幾分鐘不是保守，
+是資訊在視窗跑完之前根本不存在。代價是實測的：關掉觀察窗，MTTD 從 10.7 分鐘降到 5.0 分鐘、
+產能達成率從 94.6% 升到 96.9%（見下方 Benchmark）。
+
+第二道機制是**誤報棄權**（`Orchestrator._abstain_reason()`）：診斷自己說沒有設備故障徵兆，
+或異常已經停在一個新穩態（一個完整視窗內健康度掉不到 3 分、最壞趨勢低於門檻），
+系統會主動放棄處置——告警照發、監控照跑，但不改變任何設備狀態。兩個判準都只在**沒有工安風險**
+時成立；人在危險區裡的時候，「再看看」不是一個選項。棄權不是萬能：`fp-warm-up` 這個誤報情境裡
+系統依然誤動作了 3 次（詳見下方 Benchmark），因為分辨它需要比目前的觀察窗再多看 4 分鐘，
+而那 4 分鐘對真實故障是有代價的。
+
 ---
 
 ## Demo 腳本（決賽舞台）
@@ -136,8 +193,8 @@ factory-guardian demo bearing-degradation
 | 0 | Factory Health 100、Production 99% | Machine A/B/C 正常運作 |
 | 1 | 注入 Bearing Degradation | Simulator 逐步提高 Vibration / Temperature |
 | 2 | **Detect** T+3 min | Monitoring Agent 觸發 WARNING（threshold + trend + health） |
-| 3 | **Confirm** 續觀察 2 min | 信心度未達 0.65，先累積證據不動設備 |
-| 4 | **Diagnose** 軸承劣化 69% | 指紋比對 + 歷史先驗 + 手冊/SOP/案例 Evidence |
+| 3 | **Confirm** 續觀察 6 min | 動設備前要求「證據夠」且「還在惡化」——\n觀察窗 = 監測視窗長度，少於它就分不出「新穩態」和「才剛開始的劣化」 |
+| 4 | **Diagnose** 軸承劣化 88% | 指紋比對 + 歷史先驗 + 手冊/SOP/案例 Evidence |
 | 5 | **Impact** ORD-A001 交期風險 | Knowledge Graph 追出受影響訂單 |
 | 6 | **Plan** 4 個方案 | 每個方案在信念模型上乾跑 30 分鐘 |
 | 7 | **Safety** PLAN-A BLOCK | 預測振動將達 14.18 mm/s → 硬限制否決 |
@@ -148,38 +205,121 @@ factory-guardian demo bearing-degradation
 
 ---
 
-## Benchmark：三組對照組
+## Benchmark：四組對照組
 
 ```bash
 factory-guardian benchmark --out benchmark.json
 ```
 
 跑在**相同 seed、相同情境、相同總時長**的孿生體上，所以 KPI 直接可比。
-以下是實際執行結果（非預錄）：
+以下是實際執行結果（非預錄）。每一個對照組的定義、每一個情境的注入參數、
+以及為什麼 Baseline C 才是該比的對象，逐項寫在 [`docs/benchmark_notes.md`](docs/benchmark_notes.md)。
+
+| 對照組 | 它代表什麼 |
+|---|---|
+| **A**｜固定門檻告警 | 感測器踩到**危險**門檻就告警，之後什麼都不做。「告警完全沒被接住」的極端 |
+| **B**｜偵測即停機 | 偵測到就停機維修，技師零等待。「告警完全被接住」的極端 |
+| **C**｜**現行流程** | 告警 → **人工判定根因 90 分鐘**（機台照跑、照劣化）→ 停機維修 → 復機。不轉單 |
+| **G**｜Factory Guardian | 跨 Machine / Production / Safety 的完整閉環，執行後回到孿生體驗證 |
+
+**為什麼加 Baseline C**：A 和 B 都是理想化的極端，沒有工廠長那樣。
+拿 41% 對 95% 當開場，第一個追問就是「哪家工廠是這樣運作的？」。
+C 把現行流程真正花時間的那一段放進模擬 —— 人工判定根因的 90 分鐘
+（來源是 [`docs/business_case.md`](docs/business_case.md) §3 假設參數表，ROI 模型引用的是同一個數字）。
 
 ### 設備故障情境（bearing / cooling / motor 平均）
 
-| KPI | Baseline A<br>固定門檻告警 | Baseline B<br>偵測即停機 | **Factory Guardian**<br>完整閉環 |
-|---|---:|---:|---:|
-| 偵測延遲 | 7.3 min | 3.7 min | **3.7 min** |
-| 根因診斷正確率 | — | — | **100%** |
-| 產能達成率 | 41.3% | 72.1% | **96.8%** |
-| 最大交期延遲 | 1,385 min | 3.5 min | **0 min** |
-| 設備最終健康度 | 27.3 | 100 | **100** |
-| 二次損壞 | **發生** | 未發生 | 未發生 |
-| 執行後驗證 | — | — | **通過** |
+| KPI | Baseline A | Baseline B | **Baseline C**<br>現行流程 | **Factory Guardian** |
+|---|---:|---:|---:|---:|
+| 偵測延遲 | 7.3 min | 4.7 min | 7.3 min | **4.7 min** |
+| 診斷確認（MTTD） | — | — | 40.0 min | **10.7 min** |
+| 產能達成率 | 41.3% | 72.1% | 54.2% | **94.6%** |
+| 最大交期延遲 | 1,385 min | 3.6 min | 24.5 min | **0 min** |
+| 設備最終健康度 | 27.3 | 100 | 100 | **100** |
+| 二次損壞 | **發生** | 未發生 | **發生** | 未發生 |
+| 單位產出能耗 | 0.75 kWh/件 | 0.44 | 0.63 | **0.33** |
+| 人工介入 | 0 | 1 | 1 | **0** |
+| 執行後驗證 | — | — | — | **通過** |
+
+Baseline C 最刺眼的一格不是產能，是**時間**：帳面上的 90 分鐘判定流程，
+三個情境裡一次都沒跑完 —— 平均在第 40 分鐘就被打斷，因為**故障自己揭曉了**
+（軸承咬死／馬達燒毀，機台自己停下來）。人工判定的價值在這裡是負的。
+Guardian 的 10.7 分鐘裡有 6 分鐘是**刻意**的觀察窗：把它關掉，MTTD 回到 5.0 分鐘、
+產能回到 96.9%（實測）—— 那 2.3 個百分點買到的是下面兩節的東西。
+
+### 診斷正確率：不再是循環論證的 100%
+
+原本的 100% 有一個誠實問題：Diagnosis Agent 比對的手冊指紋，和 Simulator 生成訊號用的
+`FaultModel.deltas` 是**同一組數字**。手冊怎麼寫，機台就怎麼壞 —— 那不是量測，那是同義反覆。
+
+所以孿生體加了可設定的**現實落差**（[`twin/disturbances.py`](factory_guardian/twin/disturbances.py)）：
+`bearing-atypical` 的軸承劣化只表現出手冊 15% 的振動、160% 的溫升；
+`cooling-with-stuck-vibration` 的振動感測器卡在 3.8 mm/s。
+`fork_as_belief()` 會把這些落差**全部清掉** —— 規劃永遠跑在手冊物理上，因為 Agent 只知道手冊。
+
+| 診斷 KPI（6 個設備故障情境） | Factory Guardian |
+|---|---:|
+| **初次**診斷正確率（偵測當下的第一次比對） | **83.3%**（5/6） |
+| **最終**診斷正確率（觀察 + 必要時重規劃之後） | **100%** |
+| 平均診斷信心度 | 0.77 |
+| 重規劃次數 | 0 |
+
+只看兩個現實落差情境，初次正確率是 **50%**、信心度掉到 **0.66**。
+`bearing-atypical` 的稽核軌跡把過程攤開來：偵測當下感測器指紋餘弦是
+**冷卻失效 0.900 對軸承 0.765**，第一個答案是錯的；信心度只有 0.50，
+低於動設備門檻，於是閉環繼續觀察 —— 十分鐘後聲學指紋與趨勢把答案糾正回軸承。
+**那 16 分鐘的 MTTD 買到的就是這個。**
+
+> **這裡有一件沒做到的事，直接寫出來：** 目前沒有任何一個情境走到
+> 「驗證失敗 → 重新規劃」。在這些落差下，方案排名仍然選中「轉單 + 停機維修」，
+> 而停機維修對診斷錯誤是**容錯**的 —— 機台停下來就不會再劣化。
+> 重試路徑本身有測試獨立守著（`test_orchestrator.py::test_a_failed_verification_triggers_a_replan_and_the_recovery_is_timed`，
+> 直接讓第一次驗證失敗），KPI（重規劃次數、驗證失敗後恢復時間）也已經接上報表；
+> 但**它在 Benchmark 上的值目前是 0 與 —**，我們不會把它寫成已經發生的事。
+
+### False Positive：4 個「機台完全健康」的干擾情境
+
+規格 §10 列了 False Positive，但如果每個情境都真的有故障，那一格永遠是空的 ——
+不是零誤報，是沒有機會誤報。所以加了四個 Ground Truth 為空的干擾：
+**感測器單點尖峰、換料重啟突波、換規格負載切換、冷機暖機過衝**。
+
+| 誤報 KPI（4 個無故障情境） | Baseline A | Baseline B | Baseline C | **Factory Guardian** |
+|---|---:|---:|---:|---:|
+| 誤報情境數 | 4 / 4 | 2 / 4 | 4 / 4 | **2 / 4** |
+| 誤報率 | 0.80 次/小時 | 0.40 | 0.80 | **0.40** |
+| **誤報後動到設備** | 0 | **4** | 0 | **3** |
+| 主動棄權（只告警、不動設備） | 0 | 0 | 0 | **1** |
+| 技師出動（每趟 90 分鐘） | 0 | 2 | **4** | **0** |
+| 產能達成率 | 95.4% | 79.1% | 95.4% | 93.7% |
+
+兩件事值得說清楚：
+
+1. **誤報的成本不在告警，在誤動作。** 這四個情境裡機台完全健康，
+   所以「偵測即停機」白停了 4 次、產能掉到 79.1%；現行流程沒有停機，
+   但派了 4 趟技師、每趟 90 分鐘。Guardian 少報一半（門檻要求越界在最近 3 個取樣裡出現 2 次，
+   單點尖峰與啟動突波因此被擋掉），並且在負載切換那一格**主動棄權**：
+   > 觀察滿 6 個取樣後，健康度僅變化 +0.5 分、最壞趨勢 +0.049/tick ——
+   > 訊號停在新的穩態而非持續惡化，比較可能是製程或負載改變。僅告警並持續監控，不動設備。
+
+2. **Guardian 在暖機那一格誤動作了 3 次（轉單 + 停機 + 維修），這一格我們不打算辯護。**
+   溫度連續 8 分鐘高於危險門檻並持續上升，在那個當下它和早期冷卻失效沒有任何
+   可觀測的差別。要分辨它需要再多看 4 分鐘 —— 而那 4 分鐘對真實故障是有代價的。
+   我們選了 6 分鐘的觀察窗，代價與收益都攤在上面兩張表裡。
 
 ### 工安情境（hazard-zone）
 
-| KPI | Baseline A | Baseline B | **Factory Guardian** |
-|---|---:|---:|---:|
-| 產能達成率 | 99.0% | 67.5% | 74.3% |
-| **人員危險區曝露** | **88 min** | 1 min | **1 min** |
+| KPI | Baseline A | Baseline B | Baseline C | **Factory Guardian** |
+|---|---:|---:|---:|---:|
+| 產能達成率 | 99.0% | 67.6% | 99.0% | 74.3% |
+| **人員危險區曝露** | **88 min** | 1 min | **88 min** | **1 min** |
 
-這一列是整個提案最重要的論點：Baseline A 的產能最漂亮，代價是讓人在運轉的機台旁邊站了 88 分鐘。
+Baseline C 在這一列和 Baseline A 一模一樣，這是刻意的：
+**現行流程沒有一雙一直盯著危險區的眼睛。** 它的工安控制是程序性的
+（SOP、圍籬、教育訓練、定期巡檢），不是偵測性的。把 AI 攝影機送給對照組，
+等於假設現況已經有了我們要新增的那個能力 —— 那個 Benchmark 就不誠實了。
+
+這一列是整個提案最重要的論點：A 與 C 的產能最漂亮，代價是讓人在運轉的機台旁邊站了 88 分鐘。
 Guardian 用 25% 的產能換 87 分鐘的風險曝露 —— **工安是硬限制，不是加權項**。
-
----
 
 ## 前端
 
@@ -229,7 +369,9 @@ factory-guardian serve      # http://127.0.0.1:8000
 ### `/benchmark` — 對照組報告頁
 
 評審問「憑什麼說你比較好」時打開這頁。每次載入都會**真的重跑**完整 Benchmark
-（5 情境 × 3 模式），不是快取也不是預錄，並把工安那一列的論點寫成標題級的大字。
+（11 情境 × 4 模式），不是快取也不是預錄，並把工安與誤報那兩列的論點寫成標題級的大字。
+情境分三族分開彙總：設備故障、無故障干擾（誤報）、現實落差（初次 vs 最終診斷）——
+混在一起平均，誤報率會被有故障的情境稀釋，產能會被沒事發生的情境拉高。
 
 ### 設計語彙
 
@@ -330,17 +472,26 @@ factory_guardian/
 ├── config.py           # 環境設定
 ├── audit.py            # JSONL 稽核軌跡
 ├── llm.py              # LLM 介接（含離線確定性敘述器）
-├── optimizer.py        # 加權多準則排名（固定尺規）
+├── optimizer.py        # 加權多準則排名（固定尺規）＋ 權重穩健性掃描
 ├── orchestrator.py     # 八階段閉環 + 重試
 ├── episode.py          # Episode 執行與 KPI 量測
-├── benchmark.py        # 三組對照組比較
+├── benchmark.py        # 四組對照組（A/B/C/Guardian）× 11 情境比較
 ├── cli.py              # 命令列介面
-├── twin/               # Digital Twin：topology / faults / engine / scenarios
+├── twin/               # Digital Twin：topology / faults / engine / scenarios / energy
+│   └── disturbances.py #   干擾與現實落差（拆掉「手冊怎麼寫機台就怎麼壞」的循環論證）
 ├── knowledge/          # Manual / SOP / History + TF-IDF 檢索
 ├── agents/             # monitoring / diagnosis / production / safety / maintenance / verification / vision
 ├── policy/             # Policy Engine + Safety 規則
+├── prediction/         # TabFM/Ridge 時序預測 adapter
+│   └── threshold.py    #   TTT（到達門檻剩餘時間）估計，Monitoring Agent 用它算 failure_risk
+├── validation/         # 外部資料驗證：獨立於 agents/ 之外的等價實作，不 import 對方
+│   ├── fingerprint.py  #   感測器指紋餘弦法的獨立實作（AI4I 驗證用）
+│   └── cwru.py         #   CWRU 軸承振動資料集驗證（真實加速規量測）
+├── deployment/         # Edge/Cloud 分層、頻寬預算、MEC 斷網續跑模擬
+├── business/           # ROI 模型、假設參數、定價、競品比較
+├── stage/              # 決賽舞台 Demo 劇本與導播
 └── api/                # FastAPI + Dashboard
-tests/                  # 102 個測試
+tests/                  # 986 個測試（含 AgentGate 姊妹專案）
 ```
 
 ---
