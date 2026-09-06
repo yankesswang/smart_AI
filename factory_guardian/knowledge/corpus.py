@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,25 @@ class MaintenanceCase:
     technician: str
     note: str = ""
     synthetic: bool = True
+    # 案發當下的感測器讀值。
+    #
+    # ## 為什麼要多這個欄位
+    #
+    # `symptoms` 是自由文字（技師怎麼寫就怎麼記），適合 RAG 檢索與人閱讀，
+    # 但判別式模型需要**固定維度的數值向量**：從中文句子裡正則抽數字，
+    # 會在句型一改就靜默抽錯，而且抽不到的訊號沒有定義好的預設值。
+    # 所以把讀值獨立成結構化欄位，`agents/diagnosis.py::DiscriminativeReranker` 直接吃它。
+    #
+    # ## 這些數字是合成的
+    #
+    # 本檔案整份都是競賽用合成語料，`readings` 也不例外：
+    # 有寫在 `symptoms` 裡的數字照抄，沒寫的（技師本來就不會把四個訊號都寫進紀錄）
+    # 依該故障在 `twin/faults.py` 的手冊徵兆方向補一個合理值。
+    # 因此它**可以**用來驗證「判別式接手層這條程式路徑會不會動、降級會不會被記錄」，
+    # **不可以**被引用為「判別式模型在真實維修歷史上有效」——
+    # 那個宣稱要等真實場域資料，見 `docs/external_validation.md` §8.3。
+    readings: dict[str, float] = field(default_factory=dict)
+    readings_synthetic: bool = True
 
     def as_text(self) -> str:
         return (
@@ -202,6 +221,45 @@ def manual_by_ref(ref: str) -> ManualDoc | None:
 # --------------------------------------------------------------------------------------
 # Maintenance History（30 筆合成案例）
 # --------------------------------------------------------------------------------------
+#: 每筆案例的感測器讀值（合成；理由與限制見 `MaintenanceCase.readings` 的說明）。
+#:
+#: 規則：`symptoms` 裡寫出來的數字**一律照抄**（文字與數值不可以互相打臉），
+#: 沒寫的訊號依 `twin/faults.py` 該故障的手冊徵兆方向補一個合理值。
+#: M-C 是包裝機（`PACKAGING_SIGNALS`），沒有 vibration 感測器，所以只有三個訊號。
+_CASE_READINGS: dict[str, dict[str, float]] = {
+    "MH-001": {"vibration": 8.1, "temperature": 79.0, "current": 12.6, "rpm_pct": 96.0},
+    "MH-002": {"vibration": 2.6, "temperature": 88.0, "current": 10.5, "rpm_pct": 98.0},
+    "MH-003": {"vibration": 3.0, "temperature": 75.0, "current": 15.2, "rpm_pct": 82.0},
+    "MH-004": {"vibration": 7.4, "temperature": 76.0, "current": 12.4, "rpm_pct": 96.5},
+    "MH-005": {"vibration": 2.5, "temperature": 91.0, "current": 10.6, "rpm_pct": 97.8},
+    "MH-006": {"vibration": 6.9, "temperature": 74.0, "current": 11.8, "rpm_pct": 97.0},
+    "MH-007": {"vibration": 3.1, "temperature": 75.0, "current": 14.8, "rpm_pct": 80.0},
+    "MH-008": {"vibration": 9.2, "temperature": 82.0, "current": 13.2, "rpm_pct": 94.5},
+    "MH-009": {"temperature": 72.0, "current": 13.9, "rpm_pct": 88.0},
+    "MH-010": {"vibration": 2.8, "temperature": 84.0, "current": 10.4, "rpm_pct": 98.2},
+    "MH-011": {"vibration": 5.8, "temperature": 71.0, "current": 11.3, "rpm_pct": 97.6},
+    "MH-012": {"vibration": 3.2, "temperature": 76.0, "current": 15.6, "rpm_pct": 78.0},
+    "MH-013": {"vibration": 7.8, "temperature": 78.0, "current": 12.9, "rpm_pct": 96.2},
+    "MH-014": {"vibration": 2.5, "temperature": 86.0, "current": 10.4, "rpm_pct": 98.0},
+    "MH-015": {"vibration": 6.4, "temperature": 73.0, "current": 11.6, "rpm_pct": 97.2},
+    "MH-016": {"temperature": 72.0, "current": 11.8, "rpm_pct": 97.5},
+    "MH-017": {"vibration": 8.4, "temperature": 80.0, "current": 13.1, "rpm_pct": 94.0},
+    "MH-018": {"vibration": 3.0, "temperature": 74.0, "current": 14.2, "rpm_pct": 84.0},
+    "MH-019": {"vibration": 2.4, "temperature": 83.0, "current": 10.3, "rpm_pct": 98.4},
+    "MH-020": {"vibration": 5.1, "temperature": 71.0, "current": 11.0, "rpm_pct": 98.0},
+    "MH-021": {"vibration": 2.7, "temperature": 89.0, "current": 10.8, "rpm_pct": 97.6},
+    "MH-022": {"vibration": 3.1, "temperature": 75.0, "current": 15.0, "rpm_pct": 81.0},
+    "MH-023": {"vibration": 7.1, "temperature": 77.0, "current": 12.5, "rpm_pct": 96.4},
+    "MH-024": {"temperature": 71.0, "current": 13.6, "rpm_pct": 84.0},
+    "MH-025": {"vibration": 2.9, "temperature": 82.0, "current": 10.6, "rpm_pct": 98.3},
+    "MH-026": {"vibration": 6.7, "temperature": 75.0, "current": 12.2, "rpm_pct": 96.8},
+    "MH-027": {"vibration": 3.0, "temperature": 76.0, "current": 14.6, "rpm_pct": 82.0},
+    "MH-028": {"vibration": 4.6, "temperature": 71.0, "current": 10.9, "rpm_pct": 98.2},
+    "MH-029": {"vibration": 2.5, "temperature": 85.0, "current": 10.4, "rpm_pct": 98.1},
+    "MH-030": {"vibration": 5.4, "temperature": 72.0, "current": 11.6, "rpm_pct": 97.8},
+}
+
+
 def _cases() -> tuple[MaintenanceCase, ...]:
     raw = [
         ("MH-001", "M-A", 412, "振動由 2.5 升到 8.1 mm/s，溫度升至 79°C，電流 12.6 A", "bearing_degradation",
@@ -269,6 +327,7 @@ def _cases() -> tuple[MaintenanceCase, ...]:
         MaintenanceCase(
             case_id=c[0], machine_id=c[1], days_ago=c[2], symptoms=c[3], diagnosed_fault=c[4],
             parts_used=c[5], repair_min=float(c[6]), technician=c[7], note=c[8],
+            readings=dict(_CASE_READINGS.get(c[0], {})),
         )
         for c in raw
     )

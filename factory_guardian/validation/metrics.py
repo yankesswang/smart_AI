@@ -162,10 +162,101 @@ def random_top_k(n_classes: int, k: int) -> float:
     return min(1.0, k / n_classes)
 
 
+def roc_auc(labels: list[int], scores: list[float]) -> float:
+    """ROC AUC，以 Mann–Whitney U 統計量計算（含平手的 0.5 折算）。
+
+    手寫而不用 `sklearn.metrics.roc_auc_score`，理由與本檔其他指標一致：
+    本模組的核心路徑不該因為 sklearn 缺席就跑不動，而且指標定義要在程式碼裡看得見。
+    與 `acoustics/detector.py::auc_scores`（用 sklearn）的定義相同，
+    測試 `test_cwru.py::TestAucMath` 拿手算例子對過答案。
+    """
+    pos = [s for s, y in zip(scores, labels) if y == 1]
+    neg = [s for s, y in zip(scores, labels) if y == 0]
+    if not pos or not neg:
+        return 0.0
+    # 排名法：把所有分數排序給平均秩，AUC = (R_pos − n_pos(n_pos+1)/2) / (n_pos·n_neg)
+    ranks = _average_ranks(scores)
+    rank_sum = sum(r for r, y in zip(ranks, labels) if y == 1)
+    n_pos, n_neg = len(pos), len(neg)
+    return (rank_sum - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+
+
+def partial_auc(labels: list[int], scores: list[float], p: float = 0.1) -> float:
+    """pAUC：只看 FPR ∈ [0, p] 的那一段。
+
+    p = 0.1 是 DCASE2020 Task2 的官方設定，本專案 `docs/acoustic_validation.md` 也用它。
+    **它比 AUC 重要**：工廠現場能容忍的誤報率本來就只有個位數百分比，
+    「整體 AUC 漂亮但要接受 50% 誤報才抓得到異常」的模型在產線上沒有價值。
+
+    回傳值採 **McClish 標準化**（與 `sklearn.metrics.roc_auc_score(..., max_fpr=p)`
+    以及 `acoustics/detector.py::auc_scores` 逐位元一致），因此隨機猜測 = 0.5、完美 = 1.0，
+    和 AUC 同一把尺。不這樣做的話，`docs/cwru_validation.md` 的 pAUC 就不能和
+    `docs/acoustic_validation.md` 的 0.785 放在同一句話裡比較 —— 那是最容易發生、
+    也最難被發現的一種數字造假。
+    """
+    if p <= 0.0 or p > 1.0:
+        return 0.0
+    n_pos = sum(1 for y in labels if y == 1)
+    n_neg = len(labels) - n_pos
+    if not n_pos or not n_neg:
+        return 0.0
+
+    # ROC 曲線：分數由高到低掃過每個門檻，累積 (FPR, TPR) 折點。
+    pairs = sorted(zip(scores, labels), key=lambda kv: -kv[0])
+    fpr, tpr = [0.0], [0.0]
+    tp = fp = 0
+    i = 0
+    while i < len(pairs):
+        j = i
+        while j + 1 < len(pairs) and pairs[j + 1][0] == pairs[i][0]:
+            j += 1
+        for _, y in pairs[i : j + 1]:
+            tp += 1 if y == 1 else 0
+            fp += 0 if y == 1 else 1
+        fpr.append(fp / n_neg)
+        tpr.append(tp / n_pos)
+        i = j + 1
+
+    # 梯形積分到 FPR = p，超過的那一段用線性內插切斷（與 sklearn 相同）。
+    area = 0.0
+    for k in range(1, len(fpr)):
+        x0, x1, y0, y1 = fpr[k - 1], fpr[k], tpr[k - 1], tpr[k]
+        if x0 >= p:
+            break
+        if x1 > p:
+            y1 = y0 + (y1 - y0) * (p - x0) / (x1 - x0) if x1 > x0 else y0
+            x1 = p
+        area += (x1 - x0) * (y0 + y1) / 2.0
+        if x1 >= p:
+            break
+
+    # McClish 標準化：把 [隨機, 完美] 從 [p²/2, p] 拉回 [0.5, 1]。
+    min_area, max_area = 0.5 * p * p, p
+    return 0.5 * (1.0 + (area - min_area) / (max_area - min_area))
+
+
+def _average_ranks(values: list[float]) -> list[float]:
+    """平均秩（1 起算），平手取平均 —— AUC 的平手處理靠這個才會是 0.5。"""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        average = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = average
+        i = j + 1
+    return ranks
+
+
 __all__ = [
     "ClassMetrics",
     "ClassificationReport",
     "classification_report",
+    "partial_auc",
     "random_top_k",
+    "roc_auc",
     "top_k_hit_rate",
 ]

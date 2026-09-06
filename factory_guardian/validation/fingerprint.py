@@ -130,6 +130,12 @@ class Candidate:
     docs: float
     combined: float
     confidence: float
+    prototype: int = 0
+    """命中的是這個故障的第幾個原型（0 = 第一個）。
+
+    對應 `RootCauseCandidate.scores["prototype"]`。單原型時永遠是 0，
+    多原型時它讓「這一筆是被哪個子指紋救回來的」變成可以清點的事實，
+    而不是只能看總分猜。"""
 
 
 @dataclass
@@ -153,10 +159,15 @@ class FingerprintModel:
 
     channels: tuple[str, ...] = STRICT_CHANNELS
     n_prototypes: int = 1
-    """每個故障模式的原型數量。1 = 專案現行做法（單一指紋）。
+    """每個故障模式的原型數量。**預設 1**，讓 `docs/external_validation.md` 既有的數字原地可重現。
 
-    >1 時改用 k-means 分群出多個子指紋、取最大餘弦，用來量化
-    「單一原型無法表示雙側/多峰故障」這個限制到底損失多少。這是 ablation，不是主實驗。
+    >1 時改用 k-means 分群出多個子指紋、取最大餘弦。這原本只是 ablation，
+    但 §8.2 的結果（Top-1 0.724 → 0.821）已經被 `agents/diagnosis.py` 採納：
+    診斷 Agent 現在支援一個故障對多個指紋（`FaultSignature.alt_prototypes`），
+    來源是手冊語意而不是 k-means —— 兩邊「取最大餘弦」的規則相同，
+    差別只在原型從哪裡來（手冊 vs 訓練切分的分群），這正是本模組與 Agent 的既有分工。
+
+    主實驗要跑多原型時用 `python -m factory_guardian.validation --prototypes 2`。
     """
 
     use_prior: bool = True
@@ -233,19 +244,23 @@ class FingerprintModel:
         strength = self.normalizer.strength(observed)
         prior_row = self.priors.get(sample.product_type, {})
 
-        raw: list[tuple[str, float, float, float]] = []
+        raw: list[tuple[str, float, float, float, int]] = []
         for code, protos in self.prototypes.items():
             # 多原型時取最大餘弦：任何一個子指紋像就算像。
-            cos = max(cosine(observed, p.profile) for p in protos)
+            # 平手取索引小的，與 `DiagnosisAgent._match_prototype()` 同一條規則（結果可重現）。
+            index, cos = max(
+                ((i, cosine(observed, p.profile)) for i, p in enumerate(protos)),
+                key=lambda pair: (pair[1], -pair[0]),
+            )
             prior = prior_row.get(code, 0.0) if self.use_prior else 0.0
             combined = (
                 W_SIGNATURE * max(0.0, cos)
                 + W_PRIOR * prior
                 + W_DOCS * DOCS_AFFINITY_UNAVAILABLE
             )
-            raw.append((code, cos, prior, combined))
+            raw.append((code, cos, prior, combined, index))
 
-        confidences = self._confidences({code: comb for code, _, _, comb in raw}, strength)
+        confidences = self._confidences({code: comb for code, _, _, comb, _ in raw}, strength)
         candidates = [
             Candidate(
                 fault_id=code,
@@ -254,8 +269,9 @@ class FingerprintModel:
                 docs=DOCS_AFFINITY_UNAVAILABLE,
                 combined=comb,
                 confidence=confidences[code],
+                prototype=index,
             )
-            for code, cos, prior, comb in raw
+            for code, cos, prior, comb, index in raw
         ]
         candidates.sort(key=lambda c: -c.combined)
 

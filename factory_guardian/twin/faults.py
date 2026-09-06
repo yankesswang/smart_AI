@@ -17,7 +17,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import FaultSignature
+from ..domain import FaultPrototype, FaultSignature
+
+
+@dataclass(frozen=True)
+class AltSignature:
+    """同一個故障的**另一個**徵兆方向（手冊語意，不是模擬器行為）。
+
+    ## 為什麼需要它
+
+    `docs/external_validation.md` §8.2 在 AI4I 2020 上量到「一個故障一個原型」的結構性代價：
+    雙側故障（功率過低**或**過高）的單一質心會落在兩簇中間，方向失去意義。
+    改成每模式 2 個原型後 Top-1 從 0.724 升到 0.821。
+
+    ## 為什麼它放在這裡，而且不影響 Simulator
+
+    `FaultModel.deltas` 是**模擬器怎麼演**（Agent 看不到），`alt_signatures` 是
+    **手冊怎麼寫**（Agent 看得到）。Demo 的注入情境只會走 `deltas` 那條主方向，
+    所以多這些原型不會讓 Simulator 產生任何新的訊號，也不會有任何標籤流向 Agent ——
+    它純粹是「工程師手冊上還寫了另一種表現」這件領域知識。
+
+    每一項都必須寫 `rationale`：多一個原型就是多一個可以誤命中的方向，
+    沒有手冊理由的原型等於在替方法開後門。
+    """
+
+    name: str
+    deltas: dict[str, float]
+    rationale: str
 
 
 @dataclass(frozen=True)
@@ -41,6 +67,9 @@ class FaultModel:
     required_skill: str = "mechanical-tech"
     repair_min: float = 40.0
     signature_note: str = ""
+    # 手冊上同一個故障的其他徵兆方向。只影響 `fault_signatures()`（Agent 側的知識），
+    # 完全不影響 `deltas`（Simulator 側的物理效果）。
+    alt_signatures: tuple[AltSignature, ...] = ()
 
 
 FAULTS: dict[str, FaultModel] = {
@@ -71,6 +100,20 @@ FAULTS: dict[str, FaultModel] = {
         required_skill="utility-tech (L2)",
         repair_min=30.0,
         signature_note="Temperature 大幅上升，Vibration 與 Current 幾乎維持正常。",
+        alt_signatures=(
+            AltSignature(
+                name="overcooling",
+                # 冷卻過度：溫度低於正常帶、電流略升、振動略升、轉速達成率小幅下降。
+                deltas={"temperature": -12.0, "current": 0.8, "vibration": 0.4, "rpm_pct": -0.8},
+                rationale=(
+                    "MAN-A-4.1 把這個故障定義為「冷卻迴路失去調節能力」，而不是「冷卻不足」。"
+                    "調節閥卡在全開、或冷卻液流量控制失效時，機台會被過度冷卻："
+                    "主軸與床台熱變形量偏離熱平衡設計點，切削阻力上升 → 電流略升、振動略升，"
+                    "溫度則掉到正常帶以下。方向與「冷卻不足」幾乎相反，"
+                    "單一原型的餘弦在這種工況下會指向負值，等於整個故障被排除掉。"
+                ),
+            ),
+        ),
     ),
     "motor_overload": FaultModel(
         fault_id="motor_overload",
@@ -85,6 +128,21 @@ FAULTS: dict[str, FaultModel] = {
         required_skill="electrical-tech (L3)",
         repair_min=55.0,
         signature_note="Current 大幅上升且 RPM 明顯下降，Temperature 中度上升。",
+        alt_signatures=(
+            AltSignature(
+                name="under_load",
+                # 失載：電流大幅下降、轉速衝過額定、溫度略降、振動因失去阻尼而略升。
+                deltas={"current": -4.0, "rpm_pct": 6.0, "temperature": -4.0, "vibration": 1.2},
+                rationale=(
+                    "MAN-A-5.3 的鑑別段落把「主軸動力異常」拆成過載與**失載**兩側："
+                    "皮帶斷裂、聯軸器鬆脫、刀具脫落時，馬達失去負載 —— "
+                    "電流大幅下降、轉速達成率反而衝過 100%、溫度略降，"
+                    "振動則因為旋轉件失去阻尼與殘餘不平衡而略升。"
+                    "這與過載是方向相反的兩個簇，正是 AI4I 的 PWF（功率過低**或**過高）"
+                    "把單一原型打成 recall 0.388 的同一個結構。"
+                ),
+            ),
+        ),
     ),
 }
 
@@ -97,6 +155,10 @@ def fault_signatures(scales: dict[str, float]) -> list[FaultSignature]:
     """把故障模型轉成 Diagnosis Agent 使用的「正規化指紋」。
 
     以每個訊號的 scale 正規化，讓不同單位（°C / mm/s / A / %）可以放在同一個向量空間比較。
+
+    `alt_signatures` 走同一條正規化路徑掛成 `FaultSignature.alt_prototypes`；
+    沒有宣告 `alt_signatures` 的故障（例如 bearing_degradation）拿到的仍然是
+    「只有主原型」的指紋，行為與多原型改動前逐位元相同。
     """
     sigs: list[FaultSignature] = []
     for model in FAULTS.values():
@@ -110,9 +172,17 @@ def fault_signatures(scales: dict[str, float]) -> list[FaultSignature]:
                 typical_parts=model.typical_parts,
                 required_skill=model.required_skill,
                 repair_min=model.repair_min,
+                alt_prototypes=tuple(
+                    FaultPrototype(
+                        name=alt.name,
+                        profile={s: d / scales.get(s, 1.0) for s, d in alt.deltas.items()},
+                        rationale=alt.rationale,
+                    )
+                    for alt in model.alt_signatures
+                ),
             )
         )
     return sigs
 
 
-__all__ = ["FaultModel", "FAULTS", "HAZARD_EVENT_ID", "fault_signatures"]
+__all__ = ["AltSignature", "FaultModel", "FAULTS", "HAZARD_EVENT_ID", "fault_signatures"]

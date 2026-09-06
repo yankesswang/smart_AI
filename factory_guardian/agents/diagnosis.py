@@ -66,6 +66,42 @@ Digital Twin 的聲學指標由既有的振動／轉速／電流物理算出（�
 > ⚠️ Demo 的聲學觀測是**合成**的。偵測器本身的有效性另以外部真實工業錄音驗證
 > （DCASE2020 Task2 / MIMII pump，AUC 0.903 / pAUC 0.785），
 > 兩者沒有任何資料流往來 —— 見 `docs/acoustic_validation.md`。
+
+---
+
+## 一個故障可以有多個指紋（多原型）
+
+原本每個故障只有一個方向向量。外部驗證量到了這個假設的代價
+（`docs/external_validation.md` §8.2）：AI4I 2020 的 PWF 是**雙側**故障
+（功率過低**或**過高），單一質心落在兩簇中間、方向失去意義，recall 只有 0.388。
+改成每模式 2 個原型、取最大餘弦後，PWF recall 0.788、整體 Top-1 0.724 → **0.821**。
+
+真實設備上是同一件事：馬達過載與失載都是動力異常、冷卻迴路可以不足也可以過度。
+所以 `FaultSignature.profile` 保留為主原型（既有數字全綁在它身上），
+額外方向放進 `alt_prototypes`，比對時取最大餘弦。只有主原型的故障
+（例如 `bearing_degradation`）行為**逐位元不變**。
+
+命中哪一個原型會一路寫進 `scores.prototype`（數字索引）、稽核 log
+（`scores.<fault>.prototype`，名稱）與 Evidence 文字 —— 排名被哪個方向拿下，
+說明就必須講同一個故事。
+
+---
+
+## 判別式接手層（`DiscriminativeReranker`）
+
+`docs/external_validation.md` §8.3 的實測：同樣特徵下 LogisticRegression 的
+歸因 Top-1 是 0.964，指紋餘弦法是 0.724。誠實的結論是「有標註歷史時該加一層判別式模型」，
+但那**不會**取代指紋法 —— 兩者需要的輸入不同（標註樣本 vs 手冊徵兆）。
+
+因此這裡的定位是：**指紋 `combined` 仍是主排名**，判別式模型只在
+「同機台帶讀值的標註案例 ≥ `MIN_LABELLED_CASES`」時，以一個固定權重加進合分：
+
+    combined = 0.75 × cos_fused + 0.15 × prior + 0.10 × docs + w_rerank × P(fault)
+
+**預設 `w_rerank = 0.0` 且 `DiagnosisAgent` 不掛載這一層**，此時上式的第四項
+根本不會被執行，行為逐位元等同改動前。啟用與否、為什麼沒啟用（缺 scikit-learn、
+案例不足、只有單一類別），全部寫進 `Diagnosis.reranker` 與稽核 log ——
+降級必須被看見，不能靜默。
 """
 
 from __future__ import annotations
@@ -83,6 +119,7 @@ from ..acoustics.signatures import cosine as acoustic_cosine
 from ..acoustics.signatures import deviation_vector as acoustic_deviation
 from ..acoustics.signatures import strength as acoustic_strength
 from ..domain import (
+    PRIMARY_PROTOTYPE,
     AcousticObservation,
     AnomalyEvent,
     Diagnosis,
@@ -91,7 +128,7 @@ from ..domain import (
     FaultSignature,
     RootCauseCandidate,
 )
-from ..knowledge.corpus import manual_by_ref
+from ..knowledge.corpus import MAINTENANCE_HISTORY, manual_by_ref
 from ..llm import SYSTEM_PROMPT
 from ..twin.faults import FAULTS, fault_signatures
 from .base import Agent
@@ -115,6 +152,18 @@ W_ACOUSTIC_SHARE = 0.20
 # （也就是感測器訊號才剛開始踩到警戒線的時候）的聲學偏離長度約 0.6。
 # 門檻設在這裡，聲音才會和感測器在同一個時間點開始有發言權，而不是慢半拍。
 ACOUSTIC_STRENGTH_FULL = 0.60
+# --- 判別式接手層 ---------------------------------------------------------------------
+# 同一台機台要累積到幾筆「帶感測器讀值的標註案例」，判別式模型才准參與排名。
+# 8 筆的來由：這是一個 3 類別、4 維特徵的多項式 LogisticRegression，
+# 每類平均不到 3 筆時它學到的只是雜訊，而排名一旦被雜訊推動就再也解釋不了。
+# 這個門檻同時是對評審的承諾：**新產線第一天不會有這一層**，指紋法自己撐冷啟動。
+MIN_LABELLED_CASES = 8
+# 判別式模型在合分裡的固定權重。**預設 0.0 = 完全不參與**。
+# 為什麼預設是 0：`docs/external_validation.md` §8.3 的結論是「有標註歷史時應該加這一層」，
+# 但 Demo 的維修歷史是合成的，用它去推動排名等於用自己編的資料證明自己。
+# 所以程式路徑先建好、可稽核、可開啟，權重留給有真實標註歷史的場域再調。
+W_RERANK = 0.0
+
 # **死區**：偏離量低於這個值時，麥克風完全棄權（share 直接歸零）。
 #
 # 這條不是保守而已，它是一條**保證**。四個聲學指標各自帶量測雜訊，正規化之後
@@ -135,15 +184,192 @@ class _Match:
     prior: float
     docs: float
     combined: float
+    # 感測器餘弦是被哪一個原型拿下的（0 = 主原型）。單原型故障永遠是 0。
+    prototype_index: int = 0
+    prototype_name: str = PRIMARY_PROTOTYPE
+    # 判別式接手層給這個候選的機率；沒啟用時為 0.0，且不會進入 combined。
+    rerank: float = 0.0
+
+
+# =====================================================================================
+# 判別式接手層
+# =====================================================================================
+class DiscriminativeReranker:
+    """有標註歷史時，加一層判別式模型參與排名。指紋法仍然是主排名與解釋來源。
+
+    ## 為什麼有這一層
+
+    `docs/external_validation.md` §8.3 的實測結論：在 AI4I 2020 上，同樣的特徵下
+    LogisticRegression 的歸因 Top-1 是 0.964，指紋餘弦法是 0.724，而且學習曲線顯示
+    這個差距在「每個模式只有 1 筆標註」時就已經存在。誠實的結論是 ——
+    **在已經累積標註故障歷史的產線上，判別式模型該被加進來。**
+
+    ## 為什麼它不取代指紋法
+
+    兩者需要的輸入不同。判別式模型需要每個故障模式的標註樣本；新產線、新設備、罕見故障，
+    樣本就是不存在。指紋法只需要手冊上的徵兆描述，設備進廠第一天就有。
+    所以這裡的定位是**接手**不是取代：指紋 `combined` 仍是主排名，
+    這一層只在同機台標註案例夠多時，以一個固定權重加進合分。
+
+    ## 三條紅線
+
+    1. **預設不參與**（`W_RERANK = 0.0`，且 `DiagnosisAgent` 預設 `reranker=None`）。
+       權重為 0 或沒有實例時，`combined` 的算式一個字都不會被碰到，行為逐位元不變。
+    2. **降級必須被看見**。沒有 scikit-learn、同機台案例不足、只有單一類別 ——
+       任何一種情況都會在 `status()` 留下 `enabled=False` 與 `reason`，
+       並被寫進 `Diagnosis.reranker` 與稽核 log。靜默跳過等於騙人。
+    3. **不讀 ground truth**。訓練資料是 `knowledge/corpus.py` 的維修歷史
+       （＝人類技師事後寫下的判定），不是 Simulator 的故障標籤。
+
+    ## 訓練資料
+
+    `MAINTENANCE_HISTORY` 中帶 `readings` 的案例，特徵與指紋法**完全相同**：
+    正規化偏離向量 `(值 − nominal) / scale`。特徵相同才比得出「方法」的差別，
+    而不是比特徵工程。
+    """
+
+    def __init__(self, weight: float = W_RERANK, min_cases: int = MIN_LABELLED_CASES) -> None:
+        self.weight = float(weight)
+        self.min_cases = int(min_cases)
+        self._cache: dict[str, dict[str, object]] = {}
+
+    # ------------------------------------------------------------------ 可用性
+    @staticmethod
+    def sklearn_available() -> bool:
+        try:
+            import sklearn  # noqa: F401
+        except Exception:
+            return False
+        return True
+
+    # ------------------------------------------------------------------ 主入口
+    def probabilities(
+        self, machine, machine_id: str, readings: dict[str, float], fault_ids: list[str]
+    ) -> dict[str, object]:
+        """回傳這一層的完整狀態（含機率）。永遠回傳一個 dict，不會丟例外。
+
+        鍵：``enabled`` / ``reason`` / ``weight`` / ``probabilities`` / ``cases`` /
+        ``sklearn`` / ``min_cases`` / ``synthetic_training_data``。
+        """
+        base: dict[str, object] = {
+            "enabled": False,
+            "weight": 0.0,
+            "configured_weight": self.weight,
+            "min_cases": self.min_cases,
+            "sklearn": self.sklearn_available(),
+            "cases": 0,
+            "probabilities": {fid: 0.0 for fid in fault_ids},
+            "synthetic_training_data": True,
+            "reason": "",
+            "note": (
+                "訓練資料為 knowledge/corpus.py 的合成維修歷史（readings 欄位亦為合成），"
+                "不是 Simulator 的 ground truth，也不是真實產線紀錄。"
+            ),
+        }
+        if self.weight <= 0.0:
+            return {**base, "reason": f"權重為 {self.weight:g}，這一層不參與排名（預設狀態）。"}
+        if not self.sklearn_available():
+            return {**base, "reason": "scikit-learn 未安裝，判別式接手層降級為停用（排名完全由指紋法決定）。"}
+
+        model = self._model_for(machine, machine_id)
+        base["cases"] = model["cases"]
+        if model["error"]:
+            return {**base, "reason": str(model["error"])}
+
+        features = self._features(machine, readings)
+        if features is None:
+            return {**base, "reason": "本次觀測缺少訓練時使用的訊號，無法組出特徵向量。"}
+
+        classes: list[str] = model["classes"]  # type: ignore[assignment]
+        proba = model["clf"].predict_proba([features])[0]  # type: ignore[index]
+        table = {fid: 0.0 for fid in fault_ids}
+        for cls, p in zip(classes, proba):
+            if cls in table:
+                table[cls] = float(p)
+        return {
+            **base,
+            "enabled": True,
+            "weight": self.weight,
+            "probabilities": table,
+            "reason": (
+                f"同機台標註案例 {model['cases']} 筆 ≥ {self.min_cases}，"
+                f"LogisticRegression 以固定權重 {self.weight:g} 參與合分。"
+            ),
+        }
+
+    # ------------------------------------------------------------------ 內部
+    def _model_for(self, machine, machine_id: str) -> dict[str, object]:
+        """為單一機台訓練（並快取）一個多類別 LogisticRegression。
+
+        只用**這台機台自己**的案例：不同機台的 nominal/scale 與工況不同，
+        把 M-B 的案例混進 M-A 的模型，等於用別台機器的歷史去推翻這台機器的觀測。
+        """
+        if machine_id in self._cache:
+            return self._cache[machine_id]
+
+        rows: list[list[float]] = []
+        labels: list[str] = []
+        for case in MAINTENANCE_HISTORY:
+            if case.machine_id != machine_id or not case.readings:
+                continue
+            if case.diagnosed_fault not in FAULTS:
+                continue
+            vector = self._features(machine, case.readings)
+            if vector is None:
+                continue
+            rows.append(vector)
+            labels.append(case.diagnosed_fault)
+
+        result: dict[str, object] = {"cases": len(rows), "error": None, "clf": None, "classes": []}
+        if len(rows) < self.min_cases:
+            result["error"] = (
+                f"{machine_id} 只有 {len(rows)} 筆帶讀值的標註案例，未達門檻 {self.min_cases}；"
+                "判別式接手層停用，排名完全由指紋法決定（這正是冷啟動的預期狀態）。"
+            )
+        elif len(set(labels)) < 2:
+            result["error"] = f"{machine_id} 的標註案例只涵蓋 1 種故障，判別式模型無從鑑別，停用。"
+        else:
+            from sklearn.linear_model import LogisticRegression
+
+            clf = LogisticRegression(
+                # class_weight balanced：維修歷史本來就偏向常見故障，
+                # 不平衡下不設它會學成「一律猜最常見的那一個」，那就退化成多數決 baseline。
+                class_weight="balanced",
+                max_iter=1000,
+                # 固定 seed，讓稽核軌跡上的機率可重現（規格：所有數字要可重現）。
+                random_state=20260809,
+            )
+            clf.fit(rows, labels)
+            result["clf"] = clf
+            result["classes"] = list(clf.classes_)
+        self._cache[machine_id] = result
+        return result
+
+    @staticmethod
+    def _features(machine, readings: dict[str, float]) -> list[float] | None:
+        """特徵 = 指紋法的那個正規化偏離向量，順序固定為 `machine.signals`。
+
+        刻意與 `DiagnosisAgent._deviation_vector()` 用同一個定義：
+        兩個方法吃**完全相同**的輸入，比較才是在比方法而不是比特徵工程。
+        """
+        vector: list[float] = []
+        for spec in machine.signals:
+            value = readings.get(spec.name)
+            if value is None:
+                return None
+            vector.append((value - spec.nominal) / spec.scale)
+        return vector
 
 
 class DiagnosisAgent(Agent):
     name = "diagnosis-agent"
     role = "根因分析"
 
-    def __init__(self, ctx=None) -> None:
+    def __init__(self, ctx=None, reranker: "DiscriminativeReranker | None" = None) -> None:
         super().__init__(ctx)
         self.signatures: list[FaultSignature] = []
+        # 預設 None＝判別式接手層不存在。這條路徑要被明確打開才會影響任何一個數字。
+        self.reranker = reranker
 
     # ------------------------------------------------------------------ 主流程
     def diagnose(
@@ -165,7 +391,12 @@ class DiagnosisAgent(Agent):
 
         with self.timed() as timing:
             with self.tool("sensor.deviation_vector", f"machine={machine_id}"):
-                cosines = {sig.fault_id: self._cosine(observed, sig.profile) for sig in self.signatures}
+                # 多原型：同一個故障可能有一個以上的徵兆方向（過載 vs 失載、冷卻不足 vs 過度），
+                # 取最大餘弦 —— 任何一個方向像就算像。只有主原型的故障結果與單原型逐位元相同。
+                prototype_hits = {
+                    sig.fault_id: self._match_prototype(observed, sig) for sig in self.signatures
+                }
+                cosines = {fid: hit[2] for fid, hit in prototype_hits.items()}
 
             # 聲音模態：合成麥克風觀測（Agent 側只看得到四個指標，看不到任何故障標籤）。
             observation = snapshot.machines[machine_id].acoustics
@@ -180,6 +411,13 @@ class DiagnosisAgent(Agent):
                 docs = self.ctx.kb.fault_affinity(query, list(cosines))
                 retrieved = self.ctx.kb.search(query, top_k=6, machine_id=machine_id)
 
+            # 判別式接手層：只有在被明確裝上、權重 > 0、且同機台標註案例夠多時才會參與。
+            with self.tool("history.discriminative_rerank", f"machine={machine_id}"):
+                rerank = self._rerank_state(machine, machine_id, readings, list(cosines))
+            rerank_enabled = bool(rerank["enabled"])
+            rerank_weight = float(rerank["weight"]) if rerank_enabled else 0.0
+            rerank_probs: dict[str, float] = rerank["probabilities"]  # type: ignore[assignment]
+
             share = float(acoustic["share"])
             matches = []
             for sig in self.signatures:
@@ -187,6 +425,16 @@ class DiagnosisAgent(Agent):
                 mic_cos = float(acoustic["cosines"].get(sig.fault_id, 0.0))
                 # 融合：share = 0 時逐位元退化成原本的純感測器判斷。
                 fused = (1.0 - share) * sensor_cos + share * mic_cos
+                base = (
+                    W_SIGNATURE * max(0.0, fused)
+                    + W_PRIOR * priors.get(sig.fault_id, 0.0)
+                    + W_DOCS * docs.get(sig.fault_id, 0.0)
+                )
+                proba = float(rerank_probs.get(sig.fault_id, 0.0))
+                # 沒啟用時**完全不碰這條算式**（不是加 0.0，是根本不執行加法），
+                # 「預設行為逐位元不變」因此是結構上成立，而不是靠浮點數剛好相等。
+                combined = base + rerank_weight * proba if rerank_enabled else base
+                index, name, _ = prototype_hits[sig.fault_id]
                 matches.append(
                     _Match(
                         signature=sig,
@@ -195,11 +443,10 @@ class DiagnosisAgent(Agent):
                         cosine_acoustic=mic_cos,
                         prior=priors.get(sig.fault_id, 0.0),
                         docs=docs.get(sig.fault_id, 0.0),
-                        combined=(
-                            W_SIGNATURE * max(0.0, fused)
-                            + W_PRIOR * priors.get(sig.fault_id, 0.0)
-                            + W_DOCS * docs.get(sig.fault_id, 0.0)
-                        ),
+                        combined=combined,
+                        prototype_index=index,
+                        prototype_name=name,
+                        rerank=proba,
                     )
                 )
             confidences = self._confidences(matches, strength)
@@ -232,6 +479,9 @@ class DiagnosisAgent(Agent):
                 "docs": W_DOCS,
                 "signature_sensor": W_SIGNATURE * (1.0 - share),
                 "signature_acoustic": W_SIGNATURE * share,
+                # 判別式接手層的權重。停用時為 0.0，「合計 = 各項相加」因此照樣成立
+                #（多出來的那一項乘以 0）。啟用時 Dashboard 需要多渲染一列，見 docs。
+                "rerank": rerank_weight,
             },
             thresholds={
                 "strength_full": STRENGTH_FULL,
@@ -241,6 +491,7 @@ class DiagnosisAgent(Agent):
             },
             observations=self._observations(machine, readings, observed),
             acoustics=acoustic,
+            reranker=rerank,
         )
         self.log(
             "diagnose",
@@ -255,12 +506,26 @@ class DiagnosisAgent(Agent):
                     "cosine_acoustic": round(m.cosine_acoustic, 3),
                     "prior": round(m.prior, 3),
                     "docs": round(m.docs, 3),
+                    "rerank": round(m.rerank, 3),
                     "combined": round(m.combined, 3),
                     "confidence": round(confidences[m.signature.fault_id], 3),
+                    # 稽核 log 是純 JSON，這裡可以放原型的**名稱**；
+                    # RootCauseCandidate.scores 只能放數字（見 domain.py 的說明）。
+                    "prototype": m.prototype_name,
+                    "prototype_index": m.prototype_index,
+                    "prototype_count": len(m.signature.prototypes),
                 }
                 for m in matches
             },
             acoustic_share=round(share, 3),
+            reranker={
+                "enabled": rerank["enabled"],
+                "weight": rerank["weight"],
+                "cases": rerank["cases"],
+                "sklearn": rerank["sklearn"],
+                "reason": rerank["reason"],
+                "probabilities": {k: round(v, 3) for k, v in rerank_probs.items()},
+            },
             top=diagnosis.top.fault_id if diagnosis.top else None,
             latency_ms=round(diagnosis.latency_ms, 1),
             note=(
@@ -440,6 +705,45 @@ class DiagnosisAgent(Agent):
             vector[spec.name] = (value - spec.nominal) / spec.scale
         return vector
 
+    def _rerank_state(
+        self, machine, machine_id: str, readings: dict[str, float], fault_ids: list[str]
+    ) -> dict[str, object]:
+        """判別式接手層的完整狀態。沒有裝上這一層時也要留下紀錄，而不是什麼都不寫。
+
+        「沒有啟用」與「啟用了但沒作用」在稽核上是兩件不同的事，
+        所以未安裝時也回傳一個帶 `reason` 的 dict，Dashboard 與 log 都看得到。
+        """
+        if self.reranker is None:
+            return {
+                "enabled": False,
+                "weight": 0.0,
+                "configured_weight": 0.0,
+                "min_cases": MIN_LABELLED_CASES,
+                "sklearn": DiscriminativeReranker.sklearn_available(),
+                "cases": 0,
+                "probabilities": {fid: 0.0 for fid in fault_ids},
+                "synthetic_training_data": True,
+                "reason": "本次診斷未掛載判別式接手層；排名完全由指紋法決定（預設狀態）。",
+                "note": "指紋法負責冷啟動與可解釋性，判別式模型在標註歷史累積後才接手排序。",
+            }
+        return self.reranker.probabilities(machine, machine_id, readings, fault_ids)
+
+    @classmethod
+    def _match_prototype(
+        cls, observed: dict[str, float], signature: FaultSignature
+    ) -> tuple[int, str, float]:
+        """在一個故障的所有原型裡取最大餘弦，回傳 ``(索引, 名稱, 餘弦)``。
+
+        平手時取索引小的，也就是優先採信主原型 —— 一來結果確定可重現，
+        二來「手冊主徵兆」在說得通的時候不該被替代方向搶走解釋權。
+        """
+        best_index, best_name, best_cos = 0, PRIMARY_PROTOTYPE, -2.0
+        for index, prototype in enumerate(signature.prototypes):
+            value = cls._cosine(observed, prototype.profile)
+            if value > best_cos:
+                best_index, best_name, best_cos = index, prototype.name, value
+        return best_index, best_name, best_cos
+
     @staticmethod
     def _cosine(observed: dict[str, float], profile: dict[str, float]) -> float:
         keys = set(observed) | set(profile)
@@ -492,18 +796,33 @@ class DiagnosisAgent(Agent):
         sig = match.signature
         evidence: list[Evidence] = []
 
-        # 1) 感測器證據：貢獻最大的兩個訊號
-        contributions = sorted(sig.profile.items(), key=lambda kv: -abs(kv[1]))[:2]
+        # 1) 感測器證據：貢獻最大的兩個訊號。
+        # 用**實際命中的那個原型**來挑訊號與寫文字：若排名是被「失載」方向拿下的，
+        # 卻拿「過載」方向的訊號當證據，Evidence 就會和排名說不同的故事。
+        hit = sig.prototypes[match.prototype_index]
+        contributions = sorted(hit.profile.items(), key=lambda kv: -abs(kv[1]))[:2]
+        variant = "" if match.prototype_index == 0 else f"（{hit.name} 變異型）"
         for name, _ in contributions:
             if name in readings:
                 evidence.append(
                     Evidence(
                         source="sensor",
                         reference=f"{machine_id}.{name}",
-                        statement=f"{name} 觀測值 {readings[name]:.2f}，符合此故障指紋的主要方向。",
+                        statement=(
+                            f"{name} 觀測值 {readings[name]:.2f}，符合此故障指紋{variant}的主要方向。"
+                        ),
                         weight=abs(match.cosine_sensor),
                     )
                 )
+        if match.prototype_index != 0 and hit.rationale:
+            evidence.append(
+                Evidence(
+                    source="manual",
+                    reference=(sig.manual_refs[0] if sig.manual_refs else "MANUAL"),
+                    statement=f"命中的是「{hit.name}」變異型指紋。{hit.rationale}",
+                    weight=abs(match.cosine_sensor),
+                )
+            )
 
         # 1b) 聲學證據（合成音訊特徵；聲音沒發言權時不會產生）
         if acoustic is not None:
@@ -553,7 +872,13 @@ class DiagnosisAgent(Agent):
                 "cosine_acoustic": match.cosine_acoustic,
                 "prior": match.prior,
                 "docs": match.docs,
+                # 判別式接手層的機率。停用時為 0.0，且沒有進入 combined。
+                "rerank": match.rerank,
                 "combined": match.combined,
+                # 命中的是第幾個原型（0 = 手冊主徵兆）。這裡只能放數字，
+                # 名稱請看稽核 log 的 scores.<fault>.prototype（理由見 domain.py）。
+                "prototype": float(match.prototype_index),
+                "prototype_count": float(len(match.signature.prototypes)),
             },
         )
 
@@ -603,10 +928,13 @@ class DiagnosisAgent(Agent):
 __all__ = [
     "ACOUSTIC_STRENGTH_FLOOR",
     "ACOUSTIC_STRENGTH_FULL",
+    "MIN_LABELLED_CASES",
     "DiagnosisAgent",
+    "DiscriminativeReranker",
     "NO_FAULT_ID",
     "W_ACOUSTIC_SHARE",
     "W_DOCS",
     "W_PRIOR",
+    "W_RERANK",
     "W_SIGNATURE",
 ]

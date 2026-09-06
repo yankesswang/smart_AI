@@ -413,6 +413,12 @@ class AnomalyEvent:
     detector: str = "monitoring-agent"
     # "equipment" = 感測器偵測到的設備異常；"safety" = 影像/環境偵測到的工安事件。
     kind: str = "equipment"
+    # 預估還有多少分鐘會踩到 CRITICAL 門檻（time-to-threshold）。
+    # None = 依目前可觀測的趨勢外推不會踩線（等同無限遠）。
+    # 這個值來自 Monitoring Agent 對**可觀測歷史**的預測，不是讀模擬器的故障進度。
+    time_to_threshold_min: float | None = None
+    # TTT 的來源說明：哪個訊號最先踩線、用哪個 runtime 算的（forecast:xxx / linear-extrapolation）。
+    time_to_threshold_detail: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -426,6 +432,10 @@ class AnomalyEvent:
             "health": round(self.health, 1),
             "detector": self.detector,
             "readings": {k: v.to_dict() for k, v in self.readings.items()},
+            "time_to_threshold_min": (
+                round(self.time_to_threshold_min, 1) if self.time_to_threshold_min is not None else None
+            ),
+            "time_to_threshold_detail": self.time_to_threshold_detail,
         }
 
 
@@ -439,6 +449,11 @@ class RootCauseCandidate:
     # 排名的三個原始訊號與加權後的合分（cosine / prior / docs / combined）。
     # 信心度本身是 softmax 後的結果，看不出它是怎麼來的；沒有這份明細，
     # 畫面上就只剩一個「88%」，講不出「88% 是 0.92 的指紋相似度換來的」。
+    #
+    # 這個 dict 的值**一律是數字**（`prototype` 存的是命中原型的索引，不是名稱）。
+    # 理由不是潔癖：`stage/director.py` 會用 `f"{v:.3f}"` 逐項格式化整個 scores，
+    # 塞一個字串進來會讓 Demo 導播稿在執行時炸掉。原型的可讀名稱因此走另外兩條路 ——
+    # 稽核 log 的 `scores.<fault>.prototype` 與候選的 Evidence 文字。
     scores: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -468,6 +483,11 @@ class Diagnosis:
     # 刻意獨立於 observations：observations 是「指紋餘弦的輸入向量」，
     # 混進聲學指標會讓 signal_strength 與畫面上列的東西對不起來。
     acoustics: dict[str, Any] = field(default_factory=dict)
+    # 判別式接手層（DiscriminativeReranker）的狀態與輸出機率。
+    # 預設是空 dict（＝這條路徑沒有啟用）。獨立成一個欄位而不是塞進 weights，
+    # 是因為這裡要記的不只是權重，還有「為什麼沒啟用」——
+    # 沒有 scikit-learn、同機台標註案例不足，都必須被看見而不是靜默跳過。
+    reranker: dict[str, Any] = field(default_factory=dict)
 
     @property
     def top(self) -> RootCauseCandidate | None:
@@ -487,6 +507,7 @@ class Diagnosis:
             "thresholds": self.thresholds,
             "observations": self.observations,
             "acoustics": self.acoustics,
+            "reranker": self.reranker,
         }
 
 
@@ -639,6 +660,9 @@ class RecoveryPlan:
     rank: int = 0
     feasible: bool = True
     infeasible_reason: str = ""
+    # 同一個模板家族掃描過的參數變體與各自的乾跑分數（見 agents/production.py 的參數搜尋）。
+    # 留著是為了回答「為什麼是 0.6 不是 0.4」—— 沒有這份紀錄，0.6 就只是一個寫死的常數。
+    variants: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def requires_approval(self) -> bool:
@@ -660,6 +684,7 @@ class RecoveryPlan:
             "feasible": self.feasible,
             "infeasible_reason": self.infeasible_reason,
             "requires_approval": self.requires_approval,
+            "variants": self.variants,
         }
 
 
@@ -770,11 +795,41 @@ class VerificationReport:
 # --------------------------------------------------------------------------------------
 # 情境定義
 # --------------------------------------------------------------------------------------
+#: 主原型的固定名稱。它就是 `FaultSignature.profile`，也就是這個專案原本唯一的那個指紋。
+PRIMARY_PROTOTYPE = "primary"
+
+
+@dataclass(frozen=True)
+class FaultPrototype:
+    """一個故障的**其中一個**指紋方向。
+
+    每個訊號給一個期望的偏移方向與相對幅度（正 = 上升、負 = 下降）。
+    """
+
+    name: str
+    profile: dict[str, float]
+    rationale: str = ""
+    """為什麼手冊上同一個故障會有這個方向。空字串等同「沒有理由」，審查時應視為缺陷。"""
+
+
 @dataclass(frozen=True)
 class FaultSignature:
     """故障的「感測器指紋」——Diagnosis Agent 用這個比對，而不是看標籤。
 
-    每個訊號給一個期望的偏移方向與相對幅度（正 = 上升、負 = 下降）。
+    ## 為什麼一個故障可以有多個原型
+
+    原本的設計是「一個故障 = 一個方向向量」。`docs/external_validation.md` §8.2 在 AI4I 2020
+    上量到這個假設的代價：AI4I 的 PWF（功率失效）生成規則是**雙側**的（功率過低**或**過高），
+    在偏離向量空間裡是兩個相反方向的簇，單一質心會落在兩簇中間、方向失去意義 ——
+    PWF recall 只有 0.388，80 筆裡 42 筆被誤判成 HDF。改成每模式 2 個原型、取最大餘弦後，
+    PWF recall 0.788、整體 Top-1 從 0.724 升到 0.821。
+
+    真實設備上同樣的情形是存在的：馬達「過載」與「失載」都是同一顆馬達的動力異常，
+    冷卻迴路失去調節能力也可以是「冷卻不足」或「冷卻過度」。所以 `profile` 保留為
+    **主原型**（既有行為與所有既有數字都綁在它身上），額外的方向放進 `alt_prototypes`，
+    比對時對所有原型取最大餘弦 —— 任何一個方向像就算像。
+
+    `profile` 的語意完全沒變，因此不提供第二個原型的故障，行為與改動前逐位元相同。
     """
 
     fault_id: str
@@ -784,6 +839,16 @@ class FaultSignature:
     typical_parts: tuple[str, ...] = ()
     required_skill: str = "mechanical-tech"
     repair_min: float = 40.0
+    #: 主原型以外的其他指紋方向。來源必須同樣是手冊語意，不是從標籤學來的。
+    alt_prototypes: tuple[FaultPrototype, ...] = ()
+
+    @property
+    def prototypes(self) -> tuple[FaultPrototype, ...]:
+        """主原型排第一，其餘依宣告順序。索引 0 永遠是 `profile`，稽核輸出靠這個對得上。"""
+        return (
+            FaultPrototype(PRIMARY_PROTOTYPE, self.profile, "手冊載明的主要徵兆方向。"),
+            *self.alt_prototypes,
+        )
 
 
 @dataclass(frozen=True)

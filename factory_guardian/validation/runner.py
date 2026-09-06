@@ -64,6 +64,9 @@ from .metrics import ClassificationReport, classification_report, random_top_k, 
 
 DEFAULT_FOLDS = 5
 DEFAULT_SEED = 20260809
+#: 每個故障模式的指紋原型數。預設 1 —— 文件裡既有的數字全部綁在單一原型上。
+#: `agents/diagnosis.py` 已經採納多原型（來源是手冊語意），本模組要量它時用 `--prototypes 2`。
+DEFAULT_PROTOTYPES = 1
 
 #: 歸因任務的候選集合：只有 4 個可診斷模式（no-fault 在這個任務被移除，見模組 docstring）。
 ATTRIBUTION_LABELS: tuple[str, ...] = DIAGNOSABLE_MODES
@@ -447,6 +450,7 @@ def _learning_curve(
     n_folds: int,
     channels: tuple[str, ...],
     seed: int,
+    n_prototypes: int = DEFAULT_PROTOTYPES,
 ) -> list[LearningCurvePoint]:
     points: list[LearningCurvePoint] = []
     failures = [s for s in samples if s.diagnosable_modes]
@@ -460,7 +464,7 @@ def _learning_curve(
             test = [s for i, s in enumerate(samples) if folds[i] == fold and s.diagnosable_modes]
             if not test:
                 continue
-            fp = FingerprintModel(channels=channels, seed=seed).fit(train)
+            fp = FingerprintModel(channels=channels, n_prototypes=n_prototypes, seed=seed).fit(train)
             bucket = ranked.setdefault("fingerprint_cosine", {})
             for s in test:
                 bucket[s.uid] = _strip_no_fault([c.fault_id for c in fp.rank(s)])
@@ -487,7 +491,14 @@ def run_validation(
     channels: tuple[str, ...] = STRICT_CHANNELS,
     with_ablations: bool = True,
     with_learning_curve: bool = True,
+    n_prototypes: int = DEFAULT_PROTOTYPES,
 ) -> ValidationReport:
+    """跑完整外部驗證。
+
+    `n_prototypes` 預設 1 —— 文件裡既有的 0.724 / 0.706 全部綁在單一原型上，
+    改預設值會讓那些數字在別人重跑時對不起來。要跑多原型主實驗請顯式給
+    `--prototypes 2`，報告的 `config.n_prototypes` 會標明這一次跑的是哪一種。
+    """
     samples = ai4i.load_samples(path)
     summary = ai4i.dataset_summary(samples)
     folds = stratified_folds(samples, n_folds, seed)
@@ -497,7 +508,9 @@ def run_validation(
     # 方法工廠：每個 fold 重新建立、只吃 train fold。
     def make_methods(train: list[Sample]) -> dict[str, object]:
         methods: dict[str, object] = {
-            "fingerprint_cosine": FingerprintModel(channels=channels, seed=seed).fit(train),
+            "fingerprint_cosine": FingerprintModel(
+                channels=channels, n_prototypes=n_prototypes, seed=seed
+            ).fit(train),
             "threshold_rule": ThresholdRuleBaseline(channels=channels).fit(train),
             "majority": MajorityBaseline().fit(train),
             "stratified_random": StratifiedRandomBaseline(seed=seed).fit(train),
@@ -511,13 +524,18 @@ def run_validation(
     if with_ablations:
         ablation_specs = {
             "fingerprint_no_prior": lambda tr: FingerprintModel(
-                channels=channels, use_prior=False, seed=seed
+                channels=channels, n_prototypes=n_prototypes, use_prior=False, seed=seed
+            ).fit(tr),
+            # 這一列刻意固定成「1 個原型」與「2 個原型」的對照，不跟著 --prototypes 走：
+            # 它要回答的問題是「多原型值不值得」，而不是「這次跑了幾個原型」。
+            "fingerprint_1_prototype": lambda tr: FingerprintModel(
+                channels=channels, n_prototypes=1, seed=seed
             ).fit(tr),
             "fingerprint_2_prototypes": lambda tr: FingerprintModel(
                 channels=channels, n_prototypes=2, seed=seed
             ).fit(tr),
             "fingerprint_derived_channels": lambda tr: FingerprintModel(
-                channels=ai4i.EXTENDED_CHANNELS, seed=seed
+                channels=ai4i.EXTENDED_CHANNELS, n_prototypes=n_prototypes, seed=seed
             ).fit(tr),
         }
 
@@ -638,7 +656,7 @@ def run_validation(
         )
 
     curve = (
-        _learning_curve(samples, folds, fold_of, n_folds, channels, seed)
+        _learning_curve(samples, folds, fold_of, n_folds, channels, seed, n_prototypes)
         if with_learning_curve
         else []
     )
@@ -655,10 +673,19 @@ def run_validation(
         "歸因任務中所有方法的排序都已移除 `no_equipment_fault`；"
         "端到端任務則保留，兩張表因此不可直接互比。"
     )
+    notes.append(
+        f"本次主實驗每個故障模式使用 {n_prototypes} 個指紋原型"
+        + (
+            "（＝ docs/external_validation.md §7 既有數字的設定）。"
+            if n_prototypes == 1
+            else "（多原型；對應 agents/diagnosis.py 的 FaultSignature.alt_prototypes 設計）。"
+        )
+    )
 
     config = {
         "n_folds": n_folds,
         "seed": seed,
+        "n_prototypes": n_prototypes,
         "channels": list(channels),
         "weights": {"signature": 0.75, "prior": 0.15, "docs": 0.10},
         "docs_note": "AI4I 無文件語料，docs 項對所有候選皆為 0，不影響排名。",
@@ -691,6 +718,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--json", type=Path, default=None, help="輸出 JSON 結果")
     parser.add_argument("--markdown", type=Path, default=None, help="輸出 Markdown 結果段落")
+    parser.add_argument(
+        "--prototypes",
+        type=int,
+        default=DEFAULT_PROTOTYPES,
+        help="每個故障模式的指紋原型數（預設 1；2 = 對應 agents/diagnosis.py 的多原型設計）",
+    )
     parser.add_argument("--no-ablations", action="store_true")
     parser.add_argument("--no-learning-curve", action="store_true")
     args = parser.parse_args(argv)
@@ -706,6 +739,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         with_ablations=not args.no_ablations,
         with_learning_curve=not args.no_learning_curve,
+        n_prototypes=args.prototypes,
     )
     text = report.to_markdown()
     print(text)
@@ -719,6 +753,7 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "ATTRIBUTION_LABELS",
     "DEFAULT_FOLDS",
+    "DEFAULT_PROTOTYPES",
     "DEFAULT_SEED",
     "END_TO_END_LABELS",
     "LEARNING_CURVE_BUDGETS",

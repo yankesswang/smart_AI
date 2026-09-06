@@ -6,10 +6,17 @@
 > 但**輸給**同樣特徵下的 LogisticRegression（0.964）與 RandomForest（0.939）。
 > 方法在別人的資料上成立，但它不是最強的分類器 —— 兩件事都寫在這裡。
 
+> **§8 的建議後來被採納了。** 診斷 Agent 現在支援「一個故障對多個指紋」，
+> 同一份資料上 Top-1 從 0.724 升到 **0.821**、macro-F1 0.706 → **0.830**。
+> §1–§10 記錄的是**單原型**版本（預設值，數字原地可重現），
+> 採納後的重跑數字與程式改動記在 **§11**。
+> 缺振動訊號那條缺口（§2.2）則由 [`docs/cwru_validation.md`](cwru_validation.md) 補上。
+
 重現指令：
 
 ```bash
-python -m factory_guardian.validation --json runs/ai4i_validation.json
+python3 -m factory_guardian.validation --json runs/ai4i_validation.json                  # 單原型（§7）
+python3 -m factory_guardian.validation --prototypes 2 --json runs/ai4i_validation_p2.json  # 多原型（§11.1）
 ```
 
 程式在 [`factory_guardian/validation/`](../factory_guardian/validation/)，
@@ -366,8 +373,11 @@ PWF recall 只有 0.388，80 筆中 42 筆被誤判為 HDF。原因是 PWF 的�
 
 **這是給 `agents/diagnosis.py` 的具體改進建議**：`FaultSignature.profile` 目前是單一向量，
 若某個故障在不同工況下有相反的訊號方向（例如馬達過載 vs 失載、冷卻過度 vs 不足），
-就需要一個故障對多個指紋、取最大餘弦。本次驗證沒有修改診斷 Agent，
-這條建議連同上表的數字留在這裡供後續採納。
+就需要一個故障對多個指紋、取最大餘弦。
+
+> **✅ 已採納（見 §11.1）。** `FaultSignature` 現在支援 `alt_prototypes`，
+> `twin/faults.py` 為 `motor_overload`（失載）與 `cooling_failure`（冷卻過度）
+> 各補了一個手冊來源的第二原型。本模組也可以用 `--prototypes 2` 重跑主實驗。
 
 ### 8.3 有標註歷史時，判別式分類器該被加進來 —— 但那不會取代指紋法
 
@@ -384,6 +394,27 @@ LR 0.964 / RF 0.939 明顯優於指紋法 0.724，且學習曲線顯示這個差
 （Dashboard 上把 88% 拆成算式的那一格，判別式模型給不出等價的東西）。
 這一點應該寫進提案的技術路線圖，而不是宣稱指紋法是最強的方法 —— 它不是。
 
+> **✅ 程式路徑已建好，但預設關閉（見 §11.2）。** `agents/diagnosis.py` 新增
+> `DiscriminativeReranker`，在「同機台帶讀值的標註案例 ≥ 8 筆」時以固定權重參與合分。
+> **預設權重 0.0、且 `DiagnosisAgent` 預設不掛載這一層**，理由見 §11.2 ——
+> Demo 的維修歷史是合成的，用它去推動排名等於用自己編的資料證明自己。
+
+---
+
+## 8.4 `bearing_degradation` 的缺口已由另一份驗證補上
+
+§2.2 寫過：AI4I 沒有振動訊號，Demo 主線情境 `bearing-degradation` 的診斷能力
+「這份驗證完全沒有覆蓋到」。這個缺口現在由 **CWRU 軸承振動資料集**（真實加速規量測）
+補上，見 [`docs/cwru_validation.md`](cwru_validation.md)。
+
+一句話摘要（細節與誠實邊界請讀那份文件，不要只引用這三行）：
+
+* 內圈／滾珠／外圈三類歸因，leave-one-load-out Top-1 **0.994**；
+* 但**同尺寸內的數字幾乎飽和，證明不了什麼** —— 單一特徵規則就有 0.925，
+  RMS 單一門檻的偵測 AUC 是 **1.000**（贏過指紋法的 0.982）；
+* 真正有資訊量的是**跨嚴重度轉移**：拿 0.021″（壞得明顯）訓練、測 0.007″（剛開始壞），
+  指紋 Top-1 掉到 **0.335 ＝ 隨機**。這條結果不支持「早期偵測」的宣稱。
+
 ---
 
 ## 9. 明確不做的宣稱
@@ -391,6 +422,8 @@ LR 0.964 / RF 0.939 明顯優於指紋法 0.724，且學習曲線顯示這個差
 * ❌ 不宣稱本專案已在**真實工廠資料**上驗證診斷能力（AI4I 是合成資料集）。
 * ❌ 不宣稱指紋法優於機器學習分類器（實測輸給 LR 與 RF，見 §7.1）。
 * ❌ 不宣稱已驗證 `bearing_degradation` 的辨識能力（缺振動訊號，AI4I 無對應模式）。
+  **這份文件**仍然不覆蓋它；覆蓋它的是 [`docs/cwru_validation.md`](cwru_validation.md)，
+  而那份文件同樣明確不宣稱早期偵測能力（跨嚴重度轉移 Top-1 = 隨機）。
 * ❌ 不宣稱系統能辨識「不可診斷案例」（RNF 拒答率並未優於一般正常樣本，見 §7.5）。
 * ❌ 不宣稱指紋法可單獨作為異常偵測器（端到端 macro-F1 0.308，見 §7.4）。
 * ✅ **宣稱**：指紋餘弦這個機制在一份外部、第三方、公開可查證、非本專案產生的資料上，
@@ -419,7 +452,174 @@ python -m pytest tests/test_validation.py -q
   沒有任何 Demo 數字來自這裡。
 
 **被驗證的方法版本**：`W_SIGNATURE = 0.75`、`W_PRIOR = 0.15`、`W_DOCS = 0.10`、
-softmax 溫度 `0.16`、單一原型、四訊號偏離向量餘弦。
+softmax 溫度 `0.16`、四訊號偏離向量餘弦。
+原型數由 `--prototypes` 決定：**預設 1**（§7 的所有數字），`2` 對應 §11.1 採納後的設計。
 `agents/diagnosis.py` 日後若調整融合權重或新增模態（例如聲學），
 本模組的常數**不會自動跟上**（刻意不 import，見 `validation/fingerprint.py` 模組說明）。
 要驗證新版本時，更新 `validation/fingerprint.py` 的常數並重跑上面的指令，同時更新本節。
+
+判別式接手層（§11.2）的權重 `W_RERANK` **不在**本模組的驗證範圍內：
+它預設為 0、不參與任何排名，因此上面所有數字都是「純指紋法」的數字。
+
+---
+
+## 11. §8 的建議被採納之後（重跑數字）
+
+§8 列的是「從結果學到的三件事」。這一節記錄其中兩件**已經改進到程式裡**之後的實際數字，
+以及一件刻意**沒有**打開的改進與理由。改動落在
+[`agents/diagnosis.py`](../factory_guardian/agents/diagnosis.py)、
+[`twin/faults.py`](../factory_guardian/twin/faults.py)、
+[`domain.py`](../factory_guardian/domain.py) 的 `FaultSignature`。
+
+### 11.1 多原型指紋：診斷 Agent 已採納
+
+`FaultSignature` 現在有 `alt_prototypes`，比對時對所有原型**取最大餘弦**
+（平手取索引小的，也就是優先採信手冊主徵兆）。
+`twin/faults.py` 為兩個故障各補了一個第二原型，來源同樣是**手冊語意**、不是從標籤學來的：
+
+| 故障 | 第二原型 | 方向 | 手冊理由（摘要，完整版在程式碼裡） |
+|---|---|---|---|
+| `motor_overload` | `under_load` | 電流 −4.0 A、轉速 +6.0%、溫度 −4.0°C、振動 +1.2 mm/s | MAN-A-5.3 把主軸動力異常拆成過載與**失載**兩側：皮帶斷裂、聯軸器鬆脫、刀具脫落時馬達失去負載，電流大幅下降、轉速衝過 100%、振動因失去阻尼而略升。 |
+| `cooling_failure` | `overcooling` | 溫度 −12.0°C、電流 +0.8 A、振動 +0.4 mm/s、轉速 −0.8% | MAN-A-4.1 定義的是「冷卻迴路**失去調節能力**」，不只有冷卻不足：調節閥卡在全開時機台被過度冷卻，熱變形量偏離設計點、切削阻力上升。 |
+
+`bearing_degradation` 沒有第二原型（手冊上它只有一個方向），因此它的行為**逐位元不變** ——
+由 `tests/test_agents.py::TestMultiPrototypeFingerprint::test_single_prototype_faults_are_unchanged` 守住。
+
+#### AI4I 上的重跑數字：單原型 vs 多原型
+
+```bash
+python3 -m factory_guardian.validation --json runs/ai4i_validation.json      # 單原型（§7 的數字）
+python3 -m factory_guardian.validation --prototypes 2 --json runs/ai4i_validation_p2.json
+```
+
+**任務一：根因歸因**
+
+| 方法 | Top-1 | Top-3 | macro-P | macro-R | macro-F1 | fold macro-F1 (mean±sd) |
+|---|---:|---:|---:|---:|---:|---:|
+| 指紋餘弦（**單原型**，§7 主實驗） | 0.724 | 0.985 | 0.809 | 0.702 | 0.706 | 0.705±0.046 |
+| 指紋餘弦（**2 原型**） | **0.821** | **1.000** | 0.848 | 0.820 | **0.830** | 0.829±0.051 |
+| 差值 | **+9.7pt** | +1.5pt | +3.9pt | **+11.8pt** | **+12.4pt** | — |
+| *（不變）單一訊號門檻規則* | *0.458* | *0.852* | *0.545* | *0.512* | *0.463* | *0.406±0.043* |
+| *（不變）LogisticRegression* | *0.964* | *1.000* | *0.956* | *0.963* | *0.959* | *0.959±0.017* |
+
+**每模式 precision / recall**（多原型救回來的正是 §8.2 指出的 PWF）：
+
+| 模式 | support | P（1 原型） | R（1 原型） | F1（1 原型） | P（2 原型） | R（2 原型） | F1（2 原型） |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| TWF 刀具磨耗 | 43 | 1.000 | 0.698 | 0.822 | 1.000 | **0.814** | **0.897** |
+| HDF 散熱失效 | 106 | 0.645 | 0.736 | 0.687 | **0.800** | 0.792 | **0.796** |
+| PWF 功率失效（雙側） | 80 | 0.969 | **0.388** | 0.554 | 0.840 | **0.787** | **0.813** |
+| OSF 過應變 | 78 | 0.621 | 0.987 | 0.762 | **0.750** | 0.885 | **0.812** |
+
+**混淆矩陣（2 原型，out-of-fold pooled）**：§7.3 那個「80 筆 PWF 有 42 筆被判成 HDF」的
+單一最大錯誤來源消失了（42 → 12）。
+
+| 真實＼預測 | TWF | HDF | PWF | OSF | 合計 |
+|---|---:|---:|---:|---:|---:|
+| TWF | **35** | 0 | 1 | 7 | 43 |
+| HDF | 0 | **84** | 11 | 11 | 106 |
+| PWF | 0 | 12 | **63** | 5 | 80 |
+| OSF | 0 | 9 | 0 | **69** | 78 |
+
+**學習曲線也整條抬升**（每模式標註筆數 vs 歸因 Top-1）：
+
+| 每模式標註筆數 | 指紋（1 原型） | 指紋（2 原型） | LogisticRegression |
+|---|---:|---:|---:|
+| 1 | 0.497 | 0.497 | **0.612** |
+| 2 | 0.621 | 0.621 | **0.842** |
+| 3 | 0.636 | 0.636 | **0.873** |
+| 5 | 0.661 | 0.706 | **0.903** |
+| 10 | 0.718 | 0.748 | **0.945** |
+| 20 | 0.703 | 0.797 | **0.948** |
+| 40 | 0.721 | 0.809 | **0.958** |
+| 全部 | 0.724 | 0.821 | **0.964** |
+
+**兩個必須一起講的觀察，否則這張表會被過度解讀：**
+
+1. 標註 ≤ 3 筆時多原型**一點忙都沒幫上**（0.497 / 0.621 / 0.636，與單原型完全相同）。
+   原因寫在 `fingerprint.py` 裡：`len(vectors) < 2 × n_prototypes` 時自動退回單一質心 ——
+   4 筆樣本分兩群，每群 2 筆，那不是分群是過擬合。
+   **也就是說「多原型」與「冷啟動」是兩件互斥的事**：它要有足夠樣本才分得出第二個方向。
+   在真實部署上，Agent 的第二原型來自**手冊**（不需要樣本），這個限制不存在 ——
+   但那件事 AI4I 量不到，只能在此留白（與 §2.3 同一個結構性限制）。
+2. **多原型沒有翻轉 §8.3 的結論。** LogisticRegression 全程仍然領先（0.964 vs 0.821）。
+   指紋法變強了，但它仍然不是最強的分類器。
+
+**端到端任務（次要）也一併重跑**，結論不變 —— 指紋法單獨當偵測器仍然是最差的：
+
+| 方法 | macro-P | macro-R | macro-F1 | accuracy |
+|---|---:|---:|---:|---:|
+| 指紋餘弦（1 原型） | 0.276 | 0.587 | 0.308 | 0.798 |
+| 指紋餘弦（2 原型） | 0.281 | 0.502 | **0.305** | 0.836 |
+| RandomForest | 0.640 | 0.447 | **0.497** | 0.978 |
+
+多原型讓 no-fault gate 的實際誤報從 **19.3% 降到 15.0%**（名目設計值都是 1.0%），
+但 macro-F1 幾乎沒動（0.308 → 0.305）。**這是誠實的壞消息**：
+多原型解決的是「歸因時方向指錯」，不是「不該啟動時被啟動」——
+後者是 §7.4 講的架構問題，不會因為指紋變準而消失。
+
+### 11.2 判別式接手層：路徑建好了，但預設關閉
+
+`agents/diagnosis.py` 新增 `DiscriminativeReranker`：
+
+```
+combined = 0.75 × cos_fused + 0.15 × prior + 0.10 × docs + w_rerank × P(fault | 讀值)
+```
+
+* 訓練資料：`knowledge/corpus.py::MAINTENANCE_HISTORY` 中帶 `readings` 的案例
+  （新增欄位，**合成**，理由與限制寫在 `MaintenanceCase.readings` 的註解裡）。
+* 特徵：與指紋法**完全相同**的正規化偏離向量 —— 比的是方法，不是特徵工程。
+* 啟用條件：**同機台**帶讀值的標註案例 ≥ `MIN_LABELLED_CASES = 8`
+  （M-A 19 筆、M-B 8 筆會啟用；M-C 只有 3 筆，維持停用 ＝ 冷啟動狀態）。
+* 只用同一台機台的案例訓練：不同機台的 nominal/scale 與工況不同，
+  拿 M-B 的歷史去推翻 M-A 的觀測是錯的。
+
+**為什麼預設權重是 0、且 `DiagnosisAgent` 預設不掛載這一層：**
+
+§8.3 的結論是「**有標註歷史時**應該加一層判別式模型」。Demo 的維修歷史是我們自己寫的合成語料，
+拿它去推動排名，就是用自己編的資料證明自己 —— 那正是這整份文件想避免的事。
+所以程式路徑建好、可稽核、可一行打開，權重留給有真實標註歷史的場域再調。
+`tests/test_agents.py::TestDiscriminativeReranker::test_default_is_bit_identical`
+守住「預設狀態下逐位元不變」。
+
+**降級不可靜默。** 缺 scikit-learn、同機台案例不足、標註只涵蓋單一故障 ——
+三種情況都會在 `Diagnosis.reranker` 與稽核 log 留下 `enabled=False` 與 `reason`，
+而不是安靜地不作用。
+
+**對 Dashboard 的影響**：`Diagnosis.weights` 多了一個 `rerank` 鍵（停用時 0.0），
+`RootCauseCandidate.scores` 多了 `rerank`（機率）與 `prototype`（命中的原型索引）。
+「合計 = 各項相加」在四項下仍然成立，由
+`tests/test_agents.py::TestDiscriminativeReranker::test_weights_still_add_up` 守住。
+⚠️ **未完成**：`api/static/index.html` 的推理面板目前只渲染三項；
+啟用這一層時需要多渲染一列（見本文件末的整合備註）。
+
+### 11.3 稽核輸出的新欄位
+
+| 位置 | 欄位 | 型別 | 說明 |
+|---|---|---|---|
+| `RootCauseCandidate.scores` | `prototype` | float | 命中的原型**索引**（0 = 手冊主徵兆）。 |
+| `RootCauseCandidate.scores` | `prototype_count` | float | 這個故障總共有幾個原型。 |
+| `RootCauseCandidate.scores` | `rerank` | float | 判別式模型給這個候選的機率（停用時 0.0）。 |
+| `Diagnosis.weights` | `rerank` | float | 判別式模型的權重（停用時 0.0）。 |
+| `Diagnosis.reranker` | dict | — | `enabled` / `reason` / `cases` / `sklearn` / `probabilities`。 |
+| 稽核 log `scores.<fault>` | `prototype` | str | 原型**名稱**（`primary` / `under_load` / `overcooling`）。 |
+
+`scores` 的值一律是數字，`prototype` 因此存索引而不是名稱 ——
+`stage/director.py` 會用 `f"{v:.3f}"` 逐項格式化整個 `scores`，塞字串進去會讓 Demo 導播稿炸掉。
+名稱走稽核 log 與候選的 Evidence 文字（命中替代原型時，Evidence 會直接說明是哪一個變異型、
+以及手冊上的理由）。這條由
+`tests/test_agents.py::TestMultiPrototypeFingerprint::test_scores_stay_numeric_and_serialisable` 守住。
+
+---
+
+## 12. 整合備註（需要動到本文件範圍外的檔案）
+
+以下兩件事**尚未做**，因為它們落在別的模組，改動需要與 Dashboard／導播稿一起驗證：
+
+1. **`api/static/index.html` 的推理面板**：`reasonDiagnose()` 目前把「合計」拆成
+   指紋 / 先驗 / 文件三列。判別式接手層啟用時（`weights.rerank > 0`）需要多一列
+   `判別式模型 P(fault) × w.rerank`，否則畫面上的「合計」會對不起來。
+   停用時（預設）`weights.rerank = 0`，畫面完全不受影響。
+2. **原型名稱的呈現**：`scores.prototype` 是索引（0 = 主原型）。
+   要在畫面上顯示「命中的是失載變異型」時，名稱在稽核 log 與該候選的 Evidence 文字裡，
+   前端可以直接用 Evidence，不需要新的 API 欄位。

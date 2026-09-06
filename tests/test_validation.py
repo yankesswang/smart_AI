@@ -464,3 +464,135 @@ class TestValidationRun:
         text = report.to_markdown()
         assert ai4i.SYNTHETIC_NOTICE in text
         assert "CC BY 4.0" in text
+
+
+# =========================================================================== 多原型
+class TestMultiPrototype:
+    """`--prototypes N` 與 `Candidate.prototype`。
+
+    這一組守的核心是「預設不動既有數字」：`docs/external_validation.md` §7 的
+    0.724 / 0.706 全部綁在單一原型上，預設值一改，別人重跑就對不起來了。
+    """
+
+    def test_default_is_one_prototype(self) -> None:
+        from factory_guardian.validation.runner import DEFAULT_PROTOTYPES
+
+        assert DEFAULT_PROTOTYPES == 1
+        assert FingerprintModel().n_prototypes == 1
+
+    def test_single_prototype_reports_index_zero(self) -> None:
+        model = FingerprintModel(channels=STRICT_CHANNELS).fit(
+            TestFingerprintModel._toy_training_set()
+        )
+        ranked = model.rank(_sample(9300, 330.0, 40.0, 1500.0, 100.0))
+        assert all(c.prototype == 0 for c in ranked)
+
+    def test_two_prototypes_split_a_two_sided_fault(self) -> None:
+        """雙側故障（同一標籤、兩個相反方向）是單一原型結構上做不到的事。
+
+        造一個 PWF 樣的類別：一半功率過高（扭矩升、轉速降），一半功率過低（扭矩降、轉速升）。
+        單一質心會落在兩簇中間、方向失去意義；兩個原型才抓得回來。
+        """
+        rows: list[Sample] = []
+        for i in range(120):
+            rows.append(_sample(i, 300.0 + (i % 5) * 0.1, 40.0, 1500.0 + i % 5, 100.0))
+        for i in range(40):
+            rows.append(_sample(1000 + i, 300.0, 60.0 + i * 0.05, 1300.0, 100.0, "PWF"))
+        for i in range(40):
+            rows.append(_sample(2000 + i, 300.0, 20.0 - i * 0.05, 1700.0, 100.0, "PWF"))
+        for i in range(40):
+            rows.append(_sample(3000 + i, 330.0 + i * 0.1, 40.0, 1500.0, 100.0, "HDF"))
+
+        high = _sample(9400, 300.0, 70.0, 1250.0, 100.0)
+        low = _sample(9401, 300.0, 15.0, 1750.0, 100.0)
+
+        single = FingerprintModel(channels=STRICT_CHANNELS, n_prototypes=1).fit(rows)
+        double = FingerprintModel(channels=STRICT_CHANNELS, n_prototypes=2).fit(rows)
+
+        def pwf_cosine(model: FingerprintModel, sample: Sample) -> float:
+            return next(c.cosine for c in model.rank(sample) if c.fault_id == "PWF")
+
+        # 結構性主張：單一質心落在兩個相反方向的簇中間，方向失去意義 —— 餘弦掉到接近 0。
+        # 兩個原型則各自對準一側，兩個極端都拿得到接近 1 的餘弦。
+        # 用餘弦而不是 predict() 來斷言，是因為 predict() 還受競爭類別影響，
+        # 那會讓這個測試在測「多原型有沒有用」之外多測了一件事。
+        for probe in (high, low):
+            assert abs(pwf_cosine(single, probe)) < 0.5
+            assert pwf_cosine(double, probe) > 0.9
+        assert double.predict(high) == "PWF" and double.predict(low) == "PWF"
+        # 兩個極端必須命中**不同**的原型，否則 k-means 根本沒把兩簇分開。
+        assert {c.prototype for c in double.rank(high) if c.fault_id == "PWF"} != {
+            c.prototype for c in double.rank(low) if c.fault_id == "PWF"
+        }
+
+    def test_prototype_choice_is_deterministic(self) -> None:
+        """命中哪個原型會進稽核輸出，所以它必須可重現。"""
+        rows = TestFingerprintModel._toy_training_set()
+        probe = _sample(9402, 325.0, 45.0, 1450.0, 110.0)
+        a = FingerprintModel(channels=STRICT_CHANNELS, n_prototypes=2).fit(rows).rank(probe)
+        b = FingerprintModel(channels=STRICT_CHANNELS, n_prototypes=2).fit(rows).rank(probe)
+        assert [(c.fault_id, c.prototype) for c in a] == [(c.fault_id, c.prototype) for c in b]
+
+
+# =========================================================================== AUC 指標
+class TestAucMath:
+    """AUC / pAUC 的手寫實作。指標算錯的話，CWRU 那份文件整份都是錯的且不會有人發現。"""
+
+    def test_perfect_and_inverted_separation(self) -> None:
+        from factory_guardian.validation.metrics import roc_auc
+
+        assert roc_auc([0, 0, 1, 1], [0.1, 0.2, 0.8, 0.9]) == pytest.approx(1.0)
+        assert roc_auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == pytest.approx(0.0)
+
+    def test_ties_count_as_half(self) -> None:
+        """全部同分 = 完全沒有鑑別力 = 0.5。這條錯了，AUC 會在平手時虛高。"""
+        from factory_guardian.validation.metrics import roc_auc
+
+        assert roc_auc([0, 1, 0, 1], [1.0, 1.0, 1.0, 1.0]) == pytest.approx(0.5)
+        # 手算：pos={1,1}, neg={1,0} → (1 + 0.5)/2 = 0.75
+        assert roc_auc([1, 1, 0, 0], [1.0, 1.0, 1.0, 0.0]) == pytest.approx(0.75)
+
+    def test_partial_auc_is_mcclish_standardised(self) -> None:
+        """pAUC 必須與 `acoustics/detector.py`（sklearn max_fpr）同一把尺，
+        否則 `docs/cwru_validation.md` 的 pAUC 不能和 `docs/acoustic_validation.md` 比較。"""
+        from factory_guardian.validation.metrics import partial_auc
+
+        assert partial_auc([0, 0, 1, 1], [0.1, 0.2, 0.8, 0.9], 0.1) == pytest.approx(1.0)
+        # 完全隨機（全部同分）在 McClish 標準化下是 0.5。
+        assert partial_auc([0, 1, 0, 1], [1.0, 1.0, 1.0, 1.0], 0.1) == pytest.approx(0.5)
+
+    def test_matches_sklearn_when_available(self) -> None:
+        import random
+
+        from factory_guardian.validation.metrics import partial_auc, roc_auc
+
+        if not sklearn_available():
+            pytest.skip("scikit-learn 未安裝")
+        from sklearn.metrics import roc_auc_score
+
+        rng = random.Random(20260809)
+        for _ in range(5):
+            labels = [rng.randint(0, 1) for _ in range(200)]
+            scores = [round(rng.gauss(y * 0.8, 1.0), 2) for y in labels]
+            assert roc_auc(labels, scores) == pytest.approx(roc_auc_score(labels, scores))
+            assert partial_auc(labels, scores, 0.1) == pytest.approx(
+                roc_auc_score(labels, scores, max_fpr=0.1)
+            )
+
+
+@requires_dataset
+class TestPrototypeRun:
+    """真的用 `--prototypes 2` 跑一次，確認 CLI 這條路徑是通的、而且真的變好。"""
+
+    def test_two_prototypes_beat_one_on_ai4i(self) -> None:
+        one = run_validation(n_folds=2, with_ablations=False, with_learning_curve=False)
+        two = run_validation(
+            n_folds=2, with_ablations=False, with_learning_curve=False, n_prototypes=2
+        )
+        fp1 = next(r for r in one.attribution if r.method == "fingerprint_cosine")
+        fp2 = next(r for r in two.attribution if r.method == "fingerprint_cosine")
+        assert one.config["n_prototypes"] == 1
+        assert two.config["n_prototypes"] == 2
+        # §8.2 的主張：多原型解決的是雙側故障 PWF，所以 PWF recall 一定要上去。
+        assert fp2.report.per_class["PWF"].recall > fp1.report.per_class["PWF"].recall
+        assert fp2.top1 > fp1.top1
