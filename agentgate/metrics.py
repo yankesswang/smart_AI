@@ -22,6 +22,11 @@ class LiveMetrics:
         self.status_counts: dict[str, int] = {}
         self.blocked_by_gate: dict[str, int] = {}
         self.risk_counts: dict[str, int] = {}
+        # G0-R2 確認提升的線上可觀測量。這兩個數字要放在值班台上:
+        # lifts 太多代表門檻形同虛設,stale 太多代表有人在拿 A 的確認去做 B。
+        self.confirmation_lifts = 0
+        self.stale_confirmations = 0
+        self.runtime_provenance_corrections = 0
 
     def record(self, verdict: "GateVerdict", is_approval_outcome: bool = False) -> None:
         with self._lock:
@@ -30,6 +35,13 @@ class LiveMetrics:
                 self.latencies_ms.append(verdict.decision_latency_ms)
             self.status_counts[verdict.status] = self.status_counts.get(verdict.status, 0) + 1
             self.risk_counts[verdict.risk] = self.risk_counts.get(verdict.risk, 0) + 1
+            trust = verdict.trust
+            if trust is not None:
+                self.confirmation_lifts += len(getattr(trust, "lifts", []) or [])
+                self.stale_confirmations += len(
+                    getattr(trust, "stale_confirmations", []) or [])
+            self.runtime_provenance_corrections += sum(
+                1 for f in verdict.findings if f.rule_id in ("G1-R2", "G1-R3"))
             if verdict.gate_blocked_at:
                 self.blocked_by_gate[verdict.gate_blocked_at] = (
                     self.blocked_by_gate.get(verdict.gate_blocked_at, 0) + 1
@@ -56,6 +68,11 @@ class LiveMetrics:
                 "status_counts": dict(self.status_counts),
                 "blocked_by_gate": dict(self.blocked_by_gate),
                 "risk_counts": dict(self.risk_counts),
+                "provenance": {
+                    "confirmation_lifts": self.confirmation_lifts,
+                    "stale_confirmations": self.stale_confirmations,
+                    "runtime_corrections": self.runtime_provenance_corrections,
+                },
             }
 
     def reset(self) -> None:
@@ -64,6 +81,9 @@ class LiveMetrics:
             self.status_counts = {}
             self.blocked_by_gate = {}
             self.risk_counts = {}
+            self.confirmation_lifts = 0
+            self.stale_confirmations = 0
+            self.runtime_provenance_corrections = 0
 
 
 __all__ = ["LiveMetrics"]

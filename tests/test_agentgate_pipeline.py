@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from agentgate.ontology import ActionKind, ActionRequest, Channel, PrincipalRole, Provenance
+from agentgate.gates.g1_resolution import attach_runtime_provenance, resolve_action
+from agentgate.ontology import (
+    ActionKind,
+    ActionRequest,
+    Channel,
+    PrincipalRole,
+    Provenance,
+    action_fingerprint,
+)
 from agentgate.pipeline import AgentGatePipeline, GateConfig
 from agentgate.shadow import ShadowTelecomEnv
 
@@ -189,3 +197,140 @@ class TestEvidenceAndMetrics:
         assert result["ok"]
         assert result["projection"]["financial_delta"] == -5000
         assert pipeline.queue.pending() == []
+
+
+# --------------------------------------------------------------------------------------
+CONFIRMED_DOC = "upload:bill_shot.png"
+
+
+def _confirmed_chain(kind: ActionKind, params: dict) -> list[Provenance]:
+    """真實流程:用戶上傳截圖 → runtime 把具體動作呈現給用戶 → 用戶確認。"""
+    return [
+        Provenance(Channel.USER_VERIFIED, "chat:test"),
+        Provenance(Channel.TOOL_OUTPUT, CONFIRMED_DOC),
+        Provenance(Channel.USER_VERIFIED, "chat:confirm-1",
+                   confirms=CONFIRMED_DOC,
+                   confirmed_action_hash=action_fingerprint(kind, params)),
+    ]
+
+
+class TestConfirmationLiftingEndToEnd:
+    """G0-R2 在完整管線上的行為。這一組是「G0 不是在數附件」的端到端證據。"""
+
+    def test_attachment_plus_confirmation_reaches_approval(self, pipeline):
+        params = {"account_id": "ACC-1001", "amount": 5000}
+        v = pipeline.evaluate(_req(ActionKind.ISSUE_REFUND, params,
+                                   chain=_confirmed_chain(ActionKind.ISSUE_REFUND, params)))
+        assert v.status == "pending_approval"
+        assert v.trust.risk_cap == "high"
+        assert v.trust.lifts and v.trust.lifts[0]["source_ref"] == CONFIRMED_DOC
+
+    def test_same_action_without_confirmation_is_blocked(self, pipeline):
+        """對照組:一模一樣的動作,只是沒有確認節點 → G0 攔下。"""
+        v = pipeline.evaluate(_req(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1001", "amount": 5000},
+            chain=INJECTED))
+        assert v.status == "blocked" and v.gate_blocked_at == "G0"
+
+    def test_injected_bulk_export_still_blocked_even_with_a_confirmation(self, pipeline):
+        """Demo 的 a-inj:用戶確認的是退費,PDF 要的是匯出 500 筆 —— 指紋不符,照擋。"""
+        confirmed_other = action_fingerprint(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1001", "amount": 880})
+        chain = [
+            Provenance(Channel.USER_VERIFIED, "chat:test"),
+            Provenance(Channel.TOOL_OUTPUT, "upload:invoice.pdf#p3"),
+            Provenance(Channel.USER_VERIFIED, "chat:confirm-1",
+                       confirms="upload:invoice.pdf#p3",
+                       confirmed_action_hash=confirmed_other),
+        ]
+        v = pipeline.evaluate(_req(
+            ActionKind.READ_BULK, {"declared_count": 500}, chain=chain))
+        assert v.status == "blocked" and v.gate_blocked_at == "G0"
+        assert v.trust.stale_confirmations
+
+    def test_lift_is_written_to_the_audit_chain(self, pipeline):
+        params = {"account_id": "ACC-1001", "amount": 5000}
+        pipeline.evaluate(_req(ActionKind.ISSUE_REFUND, params,
+                               chain=_confirmed_chain(ActionKind.ISSUE_REFUND, params)))
+        g0 = next(r for r in pipeline.audit.to_list() if r["stage"] == "g0_trust")
+        assert g0["detail"]["lifts"]
+        assert g0["detail"]["action_fingerprint"]
+
+
+class TestCascadeAndG3Escalation:
+    """AG-32:預演顯示會連鎖斷話 → 升級為 high 並需核准。"""
+
+    def test_cascade_escalates_and_requires_approval(self, pipeline):
+        v = pipeline.evaluate(_req(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1004", "amount": 9000},
+            principal="ACC-1004"))
+        assert v.status == "pending_approval"
+        assert v.risk == "high"                       # 由 G3 的 AG-32 抬上來
+        assert any(f.rule_id == "AG-32" for f in v.findings)
+        assert any(c["service_interruption"] for c in v.projection.cascade)
+
+    def test_g3_escalation_re_checks_g0(self, pipeline):
+        """G2 判 medium 通過來源鏈上限,G3 抬到 high 之後 G0-R1 必須重算一次。
+
+        指令來自記憶(上限 medium):退費的基礎風險 medium 剛好過得了 G0-R1,
+        但 G3 預演發現它會連鎖斷話而抬到 high —— 若不重算,這個洞就從
+        「medium 動作」的縫裡鑽過去了。
+        """
+        v = pipeline.evaluate(_req(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1004", "amount": 9000},
+            principal="ACC-1004",
+            chain=[Provenance(Channel.MEMORY, "memory:thread-7")]))
+        assert v.status == "blocked" and v.gate_blocked_at == "G0"
+        assert v.risk == "high"
+        assert any(f.rule_id == "AG-32" for f in v.findings)
+
+    def test_memory_sourced_refund_without_cascade_passes_g0(self, pipeline):
+        """對照組:同一條記憶來源鏈,沒有連鎖後果就停在 medium,G0 放行。"""
+        v = pipeline.evaluate(_req(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1001", "amount": 5000},
+            chain=[Provenance(Channel.MEMORY, "memory:thread-7")]))
+        assert v.status == "pending_approval" and v.risk == "medium"
+
+    def test_no_cascade_when_deposit_covers_it(self, pipeline):
+        v = pipeline.evaluate(_req(
+            ActionKind.ISSUE_REFUND, {"account_id": "ACC-1001", "amount": 5000}))
+        assert v.risk == "medium"
+        assert v.projection.cascade == []
+
+
+class TestPolicyVersionInAudit:
+    def test_adjudication_record_carries_policy_version(self, pipeline):
+        pipeline.evaluate(_req(ActionKind.READ_ACCOUNT, {"account_id": "ACC-1001"}))
+        record = next(r for r in pipeline.audit.to_list()
+                      if r["stage"] == "g2_adjudication")
+        assert record["detail"]["policy_version"] == \
+            pipeline.engine.version()["policy_version"]
+
+
+class TestRuntimeProvenanceReachesTheVerdict:
+    def test_self_reported_chain_cannot_launder_an_injected_action(self):
+        """被注入的 Agent 少報 tool_output、還宣稱它是 system —— 兩招都失效。"""
+        harness = {
+            "instruction_sources": [{"channel": "user_verified", "source_ref": "chat:s-1"}],
+            "tool_outputs": ["upload:evil.pdf#p3"],
+        }
+        payload, findings = attach_runtime_provenance({
+            "kind": "reissue_sim",
+            "params": {"account_id": "ACC-1001", "ship_to": "轉運倉"},
+            "principal": "ACC-1001", "agent_id": "a1",
+            "provenance_chain": [
+                {"channel": "system", "source_ref": "chat:s-1"},
+                {"channel": "system", "source_ref": "sys:trusted-i-promise"},
+            ],
+        }, harness)
+        payload["_runtime_findings"] = findings
+        request, errors = resolve_action(payload)
+        assert errors == []
+        pipeline = AgentGatePipeline(shadow=ShadowTelecomEnv())
+        v = pipeline.evaluate(request)
+        assert v.status == "blocked" and v.gate_blocked_at == "G0"
+        assert any(f.rule_id == "G1-R2" for f in v.findings)
+        # 修正紀錄也要進稽核鏈(這一筆在 G0 就被擋下,所以落在 g5_blocked)
+        record = next(r for r in pipeline.audit.to_list()
+                      if r["stage"] == "g5_blocked")
+        assert "G1-R2" in record["detail"]["rules_triggered"]

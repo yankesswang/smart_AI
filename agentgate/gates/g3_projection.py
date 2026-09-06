@@ -47,6 +47,35 @@ def project_consequences(
                 )
             )
 
+    # AG-32 連鎖服務中斷:預演顯示這個動作會讓**別的**自動化流程去中斷用戶服務。
+    # 這是 G3 存在的理由的第二種形態 —— AG-31 抓的是「範圍比申報大」,
+    # AG-32 抓的是「後果比動作本身遠」。退費本身可回復、金額也在限額內,
+    # 但它把帳戶推進負餘額,帳務系統就會在幾週後自動停話。
+    # 用一個「安全」的動作做出一次拒絕服務,只有預演看得見。
+    interrupting = [c for c in projection.cascade if c.get("service_interruption")]
+    if interrupting:
+        steps = " → ".join(str(c.get("label", "")) for c in projection.cascade)
+        findings.append(
+            Finding(
+                rule_id="AG-32",
+                title="連鎖服務中斷需人工核准",
+                severity=Severity.APPROVAL_REQUIRED,
+                message=(
+                    f"預演顯示 {request.kind.value} 會觸發連鎖流程並中斷用戶服務:{steps}。"
+                    "風險升級為 high,需人工核准。"
+                ),
+                statute=(
+                    "動作之預演若顯示將觸發連鎖流程而中斷用戶服務,"
+                    "風險升級為 high 並需人工核准,無論該動作本身之風險等級。"),
+                escalate_to="high",
+                evidence=tuple(
+                    Evidence("projection", f"cascade:{c.get('process', '')}",
+                             str(c.get("label", "")))
+                    for c in projection.cascade
+                ),
+            )
+        )
+
     # AG-30 不可回復的動作應當永遠需要人工核准,無論金額大小(規格 §4.4)
     if not projection.reversible and request.kind is not ActionKind.POLICY_OVERRIDE:
         findings.append(
@@ -84,6 +113,12 @@ def projection_evidence(projection: Projection) -> list[Evidence]:
         items.append(
             Evidence("projection", "pii_fields",
                      "觸及個資欄位:" + ", ".join(projection.pii_fields_exposed))
+        )
+    for step in projection.cascade:
+        items.append(
+            Evidence("projection", f"cascade:{step.get('process', '')}",
+                     ("連鎖後果(服務中斷):" if step.get("service_interruption")
+                      else "連鎖後果:") + str(step.get("label", "")))
         )
     return items
 

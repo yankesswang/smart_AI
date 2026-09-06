@@ -23,13 +23,20 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .. import DATA_DISCLAIMER, __version__
+from ..agent import (
+    AgentSettings,
+    CustomerServiceAgent,
+    available_references,
+    resolve_case,
+)
 from ..console import CASE_TEMPLATES, TEMPLATES_BY_ID, OpsSimulator, current_shift
-from ..demo import DEMO_SCRIPT, build_step_case
-from ..gates.g1_resolution import resolve_action
+from ..demo import DEMO_SCRIPT, LIVE_AGENT_STEPS, build_step_case_with_agent
+from ..gates.g1_resolution import attach_runtime_provenance, resolve_action
 from ..gates.g4_approval import APPROVERS
 from ..mechanism import describe as describe_mechanism
 from ..pipeline import AgentGatePipeline, GateConfig
 from ..shadow import PLANS, ShadowTelecomEnv
+from ..scenarios import build_scenarios, scenario_stats
 from ..validation import run_validation
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -51,6 +58,11 @@ class EvaluatePayload(BaseModel):
     agent_id: str = ""
     provenance_chain: list[dict[str, Any]] = Field(default_factory=list)
     reasoning: str = ""
+    # runtime(harness)握有的事實:這次 tool call 之前 Agent 讀過哪些工具回傳/附件、
+    # 使用者確認過哪些動作、已知悉哪些條件。給了它,來源鏈就以 runtime 為準;
+    # 沒給,payload 自報的 confirms / confirmed_action_hash / acknowledgements
+    # 會在 G1 邊界被清空(見 gates/g1_resolution)。
+    harness_context: dict[str, Any] | None = None
     action_id: str | None = None
     trace_id: str | None = None
 
@@ -63,6 +75,21 @@ class DecisionPayload(BaseModel):
 
 class DemoStepPayload(BaseModel):
     step_id: str
+    #: "template" = 既有的情境樣板路徑;"llm" = 真的讓 LLM Agent 讀工單決定工具呼叫。
+    #: 沒有金鑰時 "llm" 會自動降級回樣板並在回應與稽核鏈標記 degraded。
+    agent: str = "template"
+
+
+class AgentRunPayload(BaseModel):
+    """讓被治理的 LLM Agent 跑一件工單。
+
+    ``case_id`` 指向營運中心已經發生過的工單(重放它的對話與附件);
+    ``scenario_id`` 指向 Demo 步驟或情境樣板(當場生一件新的)。
+    """
+
+    case_id: str | None = None
+    scenario_id: str | None = None
+    evaluate: bool = True         # False = 只要 tool call 與來源鏈,不進治理管線
 
 
 class GateTogglePayload(BaseModel):
@@ -106,6 +133,14 @@ def create_app(live_ops: bool | None = None,
     if live_ops:
         ops.warm_start(minutes=warm_minutes)
 
+    agent_holder: dict[str, Any] = {"agent": None}
+
+    def get_agent() -> CustomerServiceAgent:
+        """被治理的那個 Agent。延遲建立 —— 沒人要用真 Agent 就別碰 openai 套件。"""
+        if agent_holder["agent"] is None:
+            agent_holder["agent"] = CustomerServiceAgent(audit=pipeline.audit)
+        return agent_holder["agent"]
+
     state: dict[str, Any] = {
         "benchmark": None,          # 最近一次驗證報告
         "demo_events": [],          # Demo 敘事事件(前端輪詢)
@@ -136,10 +171,24 @@ def create_app(live_ops: bool | None = None,
         return {"ok": True, "version": __version__, "disclaimer": DATA_DISCLAIMER}
 
     # ---------------------------------------------------------------- 治理閘門(§6)
+    def _resolve(payload: EvaluatePayload):
+        """把 payload 過一次 runtime provenance 契約再解析。
+
+        有 harness_context 就以 runtime 紀錄改寫來源鏈(自報只能縮小信任);
+        沒有的話走純自報路徑,而 resolve_action 會把自報的確認欄位清掉。
+        """
+        raw = payload.model_dump()
+        harness = raw.pop("harness_context", None)
+        findings: list[Any] = []
+        if harness is not None:
+            raw, findings = attach_runtime_provenance(raw, harness)
+        raw["_runtime_findings"] = findings
+        return resolve_action(raw)
+
     @app.post("/api/gate/evaluate")
     def gate_evaluate(payload: EvaluatePayload) -> dict[str, Any]:
         """動作請求 → 完整裁決(同步)。"""
-        request, errors = resolve_action(payload.model_dump())
+        request, errors = _resolve(payload)
         if request is None:
             raise HTTPException(422, detail={"gate": "G1", "errors": errors})
         verdict = pipeline.evaluate(request)
@@ -149,7 +198,7 @@ def create_app(live_ops: bool | None = None,
     @app.post("/api/gate/simulate")
     def gate_simulate(payload: EvaluatePayload) -> dict[str, Any]:
         """僅執行 G3 預演,不進入核准佇列。"""
-        request, errors = resolve_action(payload.model_dump())
+        request, errors = _resolve(payload)
         if request is None:
             raise HTTPException(422, detail={"gate": "G1", "errors": errors})
         return pipeline.simulate(request)
@@ -221,8 +270,14 @@ def create_app(live_ops: bool | None = None,
 
     @app.get("/api/gate/policy")
     def gate_policy() -> dict[str, Any]:
-        """匯出現行政策(規則 + 動作權限表)。"""
-        return pipeline.engine.describe()
+        """匯出現行政策(規則 + 動作權限表 + 政策版本)。
+
+        ``version.policy_version`` 是規則條文、權限表與生效限額的內容雜湊,
+        也是每筆 g2_adjudication 稽核紀錄上帶的那一個 —— 稽核可以拿紀錄上的
+        版本號回來比對「當時生效的條文是不是這一份」。
+        """
+        described = pipeline.engine.describe()
+        return {**described, "policy_version": described["version"]["policy_version"]}
 
     @app.get("/api/gate/mechanism")
     def gate_mechanism() -> dict[str, Any]:
@@ -234,15 +289,86 @@ def create_app(live_ops: bool | None = None,
         """
         return {**describe_mechanism(), "disclaimer": DATA_DISCLAIMER}
 
+    @app.post("/api/gate/agent/run")
+    def gate_agent_run(payload: AgentRunPayload) -> dict[str, Any]:
+        """被治理的 LLM Agent 跑一件工單:tool call → 來源鏈 → GateVerdict。
+
+        模型看得到附件全文(含夾帶的注入行),但 ``provenance_chain`` 由 runtime
+        依「模型讀進 context 的東西」組出,不由模型自報(規格 §4.2)。
+        模型的輸出必須先通過 G1 ``validate_request()`` 才進得了 G2(§4.3)。
+        """
+        if payload.case_id:
+            record = find_case(payload.case_id)
+            if record is None:
+                raise HTTPException(404, f"找不到工單 {payload.case_id}")
+            reference = record["case"].get("template_id", "")
+            reference = reference[5:] if reference.startswith("demo_") else reference
+        elif payload.scenario_id:
+            reference = payload.scenario_id
+        else:
+            raise HTTPException(422, "需要 case_id 或 scenario_id 其中之一")
+
+        try:
+            case, template_request = resolve_case(reference, shadow=shadow)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+        agent = get_agent()
+        run = agent.run(case, fallback=lambda: template_request)
+        request = run.request or template_request
+        result: dict[str, Any] = {
+            "case": case.to_dict(),
+            "agent": run.to_dict(),
+            "request": request.to_dict(),
+            "verdict": None,
+            "latency": {"mapping_latency_ms": round(run.mapping_latency_ms, 3),
+                        "gate_latency_ms": None},
+            "references": available_references(),
+            "disclaimer": DATA_DISCLAIMER,
+        }
+        if payload.evaluate:
+            verdict = pipeline.evaluate(request)
+            result["verdict"] = verdict.to_dict()
+            result["latency"]["gate_latency_ms"] = round(verdict.decision_latency_ms, 3)
+            state["demo_cases"][case.case_id] = {
+                "case": case.to_dict(), "request": request.to_dict(),
+                "verdict": verdict.to_dict(), "seq": -1, "agent": run.to_dict(),
+            }
+            publish("agent_run", result)
+        return result
+
+    @app.get("/api/gate/agent")
+    def gate_agent_info() -> dict[str, Any]:
+        """被治理的 Agent 長什麼樣:模式、七個工具的 schema、可跑的情境。"""
+        from ..agent import SYSTEM_PROMPT, TOOL_SPECS
+
+        settings = AgentSettings.from_env()
+        return {
+            "mode": settings.mode,
+            "llm_available": settings.llm_enabled,
+            "model": settings.model,
+            "max_tokens": settings.max_tokens,
+            "system_prompt": SYSTEM_PROMPT,
+            "tools": TOOL_SPECS,
+            "references": available_references(),
+            "note": "來源鏈由 runtime 注入,模型無從自報;模型輸出須通過 G1 schema 驗證。",
+        }
+
     @app.get("/api/gate/metrics")
     def gate_metrics() -> dict[str, Any]:
         """§5.2 指標:線上可觀測的即時值 + 最近一次驗證管線結果。"""
+        stats = scenario_stats(build_scenarios())
         return {
             "live": pipeline.metrics.summary(),
             "audit": pipeline.audit.completeness(),
+            "chain": pipeline.audit.verify(),
+            "policy_version": pipeline.engine.version()["policy_version"],
             "benchmark": state["benchmark"],
-            "note": "HAR/TCR/FBR/ESB 需要情境標註,由驗證管線在 120 條測試集上計算;"
-                    "live 區塊為線上即時值(決策延遲、各關卡攔截數)。",
+            "scenario_stats": stats,
+            "note": (
+                f"HAR/TCR/FBR/ESB 需要情境標註,由驗證管線在 {stats['total']} 條測試集上計算;"
+                "FBR 拆成 FBR_gate(被 G0/G2/G3 擋下)與 FBR_approver(被核准者駁回),"
+                "兩者相加即 FBR;live 區塊為線上即時值(決策延遲、各關卡攔截數)。"),
         }
 
     # ---------------------------------------------------------------- 營運實境
@@ -338,9 +464,16 @@ def create_app(live_ops: bool | None = None,
     # ---------------------------------------------------------------- Demo 導播(§7.2)
     @app.get("/api/demo/script")
     def demo_script() -> dict[str, Any]:
+        settings = AgentSettings.from_env()
         return {
             "script": DEMO_SCRIPT,
             "gate_enabled": pipeline.config.gate_enabled,
+            "agent": {
+                # 沒有金鑰時前端仍然可以按「真 Agent」,只是會誠實顯示降級。
+                "llm_available": settings.llm_enabled,
+                "mode": settings.mode,
+                "live_steps": list(LIVE_AGENT_STEPS),
+            },
             "disclaimer": DATA_DISCLAIMER,
         }
 
@@ -349,34 +482,52 @@ def create_app(live_ops: bool | None = None,
         step = next((s for s in DEMO_SCRIPT if s["step_id"] == payload.step_id), None)
         if step is None:
             raise HTTPException(404, f"未知 Demo 步驟 {payload.step_id}")
+        agent = get_agent() if payload.agent == "llm" else None
 
-        def run(step_id: str) -> tuple[dict[str, Any], Any]:
+        def run(step_id: str) -> tuple[dict[str, Any], Any, dict[str, Any] | None]:
             """跑一個劇本步驟,並把工單留下來供「案件檢視」回查。"""
-            case, request = build_step_case(step_id)
+            case, request, agent_run = build_step_case_with_agent(step_id, agent)
             verdict = pipeline.evaluate(request)
             state["demo_cases"][case.case_id] = {
                 "case": case.to_dict(), "request": request.to_dict(),
-                "verdict": verdict.to_dict(), "seq": -1,
+                "verdict": verdict.to_dict(), "seq": -1, "agent": agent_run,
             }
-            return case.to_dict(), verdict
+            return case.to_dict(), verdict, agent_run
 
         if step["action"] == "evaluate":
-            case, verdict = run(payload.step_id)
-            result = {"step": step, "case": case, "verdict": verdict.to_dict()}
+            case, verdict, agent_run = run(payload.step_id)
+            result = {
+                "step": step, "case": case, "verdict": verdict.to_dict(),
+                "agent": agent_run,
+                # 決策延遲拆成兩段。混成一個數字的話,「治理層很慢」與
+                # 「模型很慢」就分不出來了 —— 而 AgentGate 只為後半段負責。
+                "latency": {
+                    "mapping_latency_ms": round(agent_run["mapping_latency_ms"], 3)
+                                          if agent_run else None,
+                    "gate_latency_ms": round(verdict.decision_latency_ms, 3),
+                },
+            }
             publish("demo_step", result)
             return result
 
         if step["action"] == "ab_compare":
             # 關閉治理層 → 同一份 PDF 的指令直接執行 → 自動重新開啟
-            case, gated = run("injection")
+            case, gated, agent_run = run("injection")
             pipeline.config.gate_enabled = False
-            _, ungated = run("injection_ungated")
+            _, ungated, agent_run_ungated = run("injection_ungated")
             pipeline.config.gate_enabled = True
             result = {
                 "step": step,
                 "case": case,
                 "gated": gated.to_dict(),
                 "ungated": ungated.to_dict(),
+                "agent": agent_run,
+                "agent_ungated": agent_run_ungated,
+                "latency": {
+                    "mapping_latency_ms": round(agent_run["mapping_latency_ms"], 3)
+                                          if agent_run else None,
+                    "gate_latency_ms": round(gated.decision_latency_ms, 3),
+                },
                 "gate_enabled": True,
             }
             state["ab_result"] = result

@@ -1098,3 +1098,29 @@ input.field{width:100%}
   a{color:#000}
   .hazard{background:repeating-linear-gradient(45deg,#000 0 8px,#fff 8px 16px)}
 }
+
+/* 真 LLM Agent 切換與它的兩塊輸出。tool call 與來源鏈刻意分成兩塊：
+   合成一塊，「來源鏈是誰產生的」就模糊掉了，而那正是這條路徑要證明的事。 */
+.agent-switch{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.agent-switch .seg{font:inherit;font-size:var(--t-meta);padding:4px 12px;border-radius:999px;
+  border:1px solid var(--line);background:transparent;color:var(--dim);cursor:pointer}
+.agent-switch .seg:hover{border-color:var(--line-hi);color:var(--fg-2)}
+.agent-switch .seg.on{background:var(--cyan-ghost);border-color:var(--cyan-deep);color:var(--fg)}
+
+.agentcard .toolcall{font-family:var(--mono);font-size:var(--t-meta);line-height:1.7;
+  white-space:pre-wrap;word-break:break-word;padding:10px 12px;border-radius:6px;
+  background:var(--panel-2);border:1px solid var(--line);color:var(--fg-2)}
+.agentcard .toolcall .fn{color:var(--cyan);font-weight:600}
+.agentcard .srcrow{display:flex;gap:10px;padding:8px 0;border-top:1px dashed var(--line-lo)}
+.agentcard .srcrow:first-child{border-top:0}
+.agentcard .srcrow .badge{flex:0 0 auto;height:fit-content;font-size:var(--t-micro);
+  padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+/* 進鏈的節點是 G0 的輸入，用琥珀色拉出來；不進鏈的證據壓暗，
+   因為「它為什麼不進鏈」比「它是什麼」更值得看。 */
+.agentcard .srcrow.chained .badge{border-color:var(--amber);color:var(--amber);
+  background:var(--amber-ghost)}
+.agentcard .srcrow.evidence{opacity:.62}
+.agentcard .srcrow .ref{font-family:var(--mono);font-size:var(--t-meta);color:var(--fg-2)}
+.agentcard .srcrow .why{font-size:var(--t-meta);color:var(--dim);margin-top:3px;line-height:1.6}
+.agentcard .lat{display:flex;gap:20px;flex-wrap:wrap;font-size:var(--t-meta);color:var(--dim)}
+.agentcard .lat b{color:var(--fg);font-family:var(--mono);margin-left:4px}

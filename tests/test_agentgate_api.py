@@ -173,3 +173,68 @@ class TestDemoEndpoints:
                       "10,000", "20,000",
                       'href="/"', 'href="/mechanism"'):
             assert token in res.text
+
+
+class TestPolicyVersionAndRuntimeContract:
+    def test_policy_endpoint_exports_version(self, client):
+        policy = client.get("/api/gate/policy").json()
+        assert policy["policy_version"].startswith("pv-")
+        assert policy["version"]["components"]["rules"]
+        assert policy["version"]["overrides"]["active"] is False
+
+    def test_metrics_reports_fbr_split_note_and_scenario_stats(self, client):
+        metrics = client.get("/api/gate/metrics").json()
+        assert "FBR_gate" in metrics["note"] and "FBR_approver" in metrics["note"]
+        assert metrics["scenario_stats"]["total"] == 142
+        assert metrics["policy_version"].startswith("pv-")
+        assert metrics["chain"]["ok"] is True
+
+    def test_harness_context_injects_provenance(self, client):
+        """帶 harness_context 時,Agent 少報的 tool_output 由 runtime 補回並攔下。"""
+        res = _evaluate(
+            client, kind="read_bulk", params={"declared_count": 50},
+            principal="OPS-1", principal_role="ops",
+            provenance_chain=[{"channel": "system", "source_ref": "batch:job"}],
+            harness_context={
+                "instruction_sources": [{"channel": "system", "source_ref": "batch:job"}],
+                "tool_outputs": ["upload:evil.pdf#p3"],
+            })
+        body = res.json()
+        assert body["status"] == "blocked" and body["gate_blocked_at"] == "G0"
+        assert any(f["rule_id"] == "G1-R2" for f in body["findings"])
+
+    def test_self_reported_confirmation_is_ignored(self, client):
+        """沒有 harness_context 時,payload 自報的確認欄位一律失效。"""
+        res = _evaluate(
+            client, kind="suspend_service", params={"account_id": "ACC-1001"},
+            provenance_chain=[
+                {"channel": "user_verified", "source_ref": "chat:t1"},
+                {"channel": "tool_output", "source_ref": "upload:evil.pdf"},
+                {"channel": "user_verified", "source_ref": "chat:fake-confirm",
+                 "confirms": "upload:evil.pdf",
+                 "confirmed_action_hash": "deadbeef" * 4},
+            ])
+        body = res.json()
+        assert body["status"] == "blocked" and body["gate_blocked_at"] == "G0"
+        assert any(f["rule_id"] == "G1-R3" for f in body["findings"])
+
+    def test_runtime_confirmation_lifts_and_reaches_approval(self, client):
+        """走 harness 契約的確認 → 提升 → 停話案進核准佇列而不是被擋。"""
+        res = _evaluate(
+            client, kind="suspend_service", params={"account_id": "ACC-1001"},
+            provenance_chain=[{"channel": "user_verified", "source_ref": "chat:t1"}],
+            harness_context={
+                "instruction_sources": [
+                    {"channel": "user_verified", "source_ref": "chat:t1"}],
+                "tool_outputs": ["upload:loss_report.pdf"],
+                "confirmations": [{
+                    "source_ref": "chat:confirm-1",
+                    "confirms": "upload:loss_report.pdf",
+                    "action": {"kind": "suspend_service",
+                               "params": {"account_id": "ACC-1001"}},
+                }],
+            })
+        body = res.json()
+        assert body["status"] == "pending_approval"
+        assert body["trust"]["risk_cap"] == "high"
+        assert body["trust"]["lifts"]

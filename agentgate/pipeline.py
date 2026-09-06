@@ -30,6 +30,7 @@ from .ontology import (
     GateVerdict,
     Severity,
     risk_exceeds,
+    risk_max,
 )
 
 # 核准政策:回傳 True=核准 / False=駁回 / None=留在佇列等真人
@@ -49,6 +50,9 @@ class GateConfig:
     approval_policy: ApprovalPolicy | None = None   # None = 等待真人簽核
     persist_dir: Path | None = None
     auto_approver: str = "benchmark-auto"  # approval_policy 決定時記錄的核准者
+    # 每寫入幾筆稽核紀錄就打一次外部錨點(0 = 關閉)。錨定長在正式路徑上,
+    # 不是「示範用的另一個按鈕」—— 見 g5_audit.AuditChain.anchor。
+    anchor_every: int = 100
 
 
 @dataclass
@@ -94,31 +98,29 @@ class AgentGatePipeline:
             return self._blocked(request, "G1", g1_errors, [], None, None, t0)
 
         # ---- G0 來源信任 ----
-        trust = evaluate_trust(request.provenance_chain)
+        # 指紋由 runtime 算(不是 Agent 自報),確認提升只認得上這個指紋的確認節點。
+        fingerprint = request.fingerprint()
+        trust = evaluate_trust(request.provenance_chain, fingerprint)
         self.audit.append(
             trace_id=request.trace_id, action_id=request.action_id,
             stage="g0_trust", actor="agentgate", **stamp,
             risk_cap=trust.risk_cap, min_trust=trust.min_trust,
+            action_fingerprint=fingerprint,
+            lifts=trust.lifts, stale_confirmations=trust.stale_confirmations,
             chain=[p.to_dict() for p in request.provenance_chain],
         )
+        self._maybe_anchor()
 
         # ---- G2 政策裁決(確定性規則;同時作為 G0-R1 的風險求值器)----
         decision = self.engine.adjudicate(request, self.shadow)
+        # G1 清洗 provenance 時產生的 finding(severity=info)併進裁決:
+        # 「Agent 少報了一個 tool_output、已由 runtime 補回」這件事必須留痕。
+        decision.findings = list(request.runtime_findings) + decision.findings
 
-        # G0-R1 權限升級阻斷:動作風險不得高於來源鏈最低信任通道可授權的等級。
+        # G0-R1 權限升級阻斷:動作風險不得高於來源鏈最低信任通道可授權的等級
+        # (上限已計入 G0-R2 的確認提升)。
         if self.config.enable_g0 and risk_exceeds(decision.risk, trust.risk_cap):
-            weakest = trust.weakest_link
-            finding = Finding(
-                rule_id="G0-R1", title="權限升級阻斷", severity=Severity.BLOCK,
-                message=(
-                    f"動作風險 {decision.risk} 超過指令來源鏈可授權上限 {trust.risk_cap}"
-                    f"(最弱環節:{weakest.channel.value} / {weakest.source_ref})。"
-                    if weakest else
-                    f"動作風險 {decision.risk} 超過空來源鏈可授權上限 {trust.risk_cap}。"
-                ),
-                statute="動作的風險等級,不得高於其指令來源鏈中最低信任通道所能授權的等級。",
-                evidence=tuple(trust_evidence(trust)),
-            )
+            finding = self._g0r1_finding(decision.risk, trust)
             return self._blocked(
                 request, "G0", [finding.message],
                 decision.findings + [finding], trust, None, t0, risk=decision.risk,
@@ -129,6 +131,7 @@ class AgentGatePipeline:
             stage="g2_adjudication", actor="policy-engine", **stamp,
             risk=decision.risk, allowed=decision.allowed,
             requires_approval=decision.requires_approval,
+            policy_version=decision.policy_version,
             rules_triggered=[f.rule_id for f in decision.findings],
         )
         if not decision.allowed:
@@ -141,6 +144,7 @@ class AgentGatePipeline:
         projection = None
         findings = list(decision.findings)
         requires_approval = decision.requires_approval
+        risk = decision.risk
         if self.config.enable_g3:
             projection, g3_findings = project_consequences(request, self.shadow)
             self.audit.append(
@@ -153,9 +157,22 @@ class AgentGatePipeline:
             for f in g3_findings:
                 if f.severity is Severity.BLOCK:
                     return self._blocked(request, "G3", [f.message], findings,
-                                         trust, projection, t0, risk=decision.risk)
+                                         trust, projection, t0, risk=risk)
                 if f.severity is Severity.APPROVAL_REQUIRED:
                     requires_approval = True
+                # G3 的規則也可以抬升風險(AG-32 連鎖服務中斷)。抬升靠 Finding
+                # 的 escalate_to 欄位,不在這裡寫死規則 ID。
+                if f.escalate_to:
+                    risk = risk_max(risk, f.escalate_to)
+            if risk != decision.risk:
+                requires_approval = requires_approval or risk == "high"
+                # 風險被 G3 抬高之後,G0-R1 必須重算一次 —— 否則就會出現
+                # 「G2 判 medium 通過了來源鏈上限,G3 抬到 high 卻沒人再檢查」的洞。
+                if self.config.enable_g0 and risk_exceeds(risk, trust.risk_cap):
+                    finding = self._g0r1_finding(risk, trust)
+                    return self._blocked(
+                        request, "G0", [finding.message], findings + [finding],
+                        trust, projection, t0, risk=risk)
 
         # ---- 證據包組裝 ----
         evidence: list[Evidence] = trust_evidence(trust)
@@ -172,7 +189,7 @@ class AgentGatePipeline:
         # ---- G4 人工核准 ----
         if requires_approval:
             pending = PendingApproval(
-                request=request, risk=decision.risk, findings=findings,
+                request=request, risk=risk, findings=findings,
                 projection=projection, trust=trust, evidence=evidence,
                 created_at=stamp["ts"],
             )
@@ -180,7 +197,7 @@ class AgentGatePipeline:
             self.audit.append(
                 trace_id=request.trace_id, action_id=request.action_id,
                 stage="g4_pending", actor="agentgate", **stamp,
-                approval_id=pending.approval_id, risk=decision.risk,
+                approval_id=pending.approval_id, risk=risk,
                 rules_triggered=[f.rule_id for f in findings],
             )
             if self.config.approval_policy is not None:
@@ -199,7 +216,7 @@ class AgentGatePipeline:
                     return verdict
             verdict = GateVerdict(
                 action_id=request.action_id, allowed=True, requires_approval=True,
-                risk=decision.risk, status="pending_approval", gate_blocked_at=None,
+                risk=risk, status="pending_approval", gate_blocked_at=None,
                 reasons=decision.reasons + ["等待人工核准(G4)。"],
                 findings=findings, projection=projection, trust=trust,
                 evidence=evidence, approval_id=pending.approval_id,
@@ -214,12 +231,13 @@ class AgentGatePipeline:
         record = self.audit.append(
             trace_id=request.trace_id, action_id=request.action_id,
             stage="g5_executed", actor="agentgate", **stamp,
-            risk=decision.risk, result_ok=bool(result.get("ok")),
+            risk=risk, result_ok=bool(result.get("ok")),
             rules_triggered=[f.rule_id for f in findings],
         )
+        self._maybe_anchor()
         verdict = GateVerdict(
             action_id=request.action_id, allowed=True, requires_approval=False,
-            risk=decision.risk, status="executed", gate_blocked_at=None,
+            risk=risk, status="executed", gate_blocked_at=None,
             reasons=decision.reasons, findings=findings, projection=projection,
             trust=trust, evidence=evidence, audit_ref=record.hash,
             execution_result=result,
@@ -302,6 +320,27 @@ class AgentGatePipeline:
         return verdict, ""
 
     # ------------------------------------------------------------------ 內部
+    def _g0r1_finding(self, risk: str, trust: Any) -> Finding:
+        """組出 G0-R1 的攔截紀錄。G2 之後與 G3 之後各檢查一次,共用這一段。"""
+        weakest = trust.weakest_link
+        return Finding(
+            rule_id="G0-R1", title="權限升級阻斷", severity=Severity.BLOCK,
+            message=(
+                f"動作風險 {risk} 超過指令來源鏈可授權上限 {trust.risk_cap}"
+                f"(最弱環節:{weakest.channel.value} / {weakest.source_ref})。"
+                if weakest else
+                f"動作風險 {risk} 超過空來源鏈可授權上限 {trust.risk_cap}。"
+            ),
+            statute=("動作的風險等級,不得高於其指令來源鏈中最低信任通道所能授權的等級;"
+                     "不可信來源僅在有獨立且指紋相符的確認節點時,始得提升其授權上限。"),
+            evidence=tuple(trust_evidence(trust)),
+        )
+
+    def _maybe_anchor(self) -> None:
+        every = self.config.anchor_every
+        if every and self.audit.records and len(self.audit.records) % every == 0:
+            self.audit.anchor()
+
     def _blocked(
         self, request: ActionRequest, gate: str, reasons: list[str],
         findings: list[Finding], trust: Any, projection: Any,
@@ -314,6 +353,7 @@ class AgentGatePipeline:
             gate=gate, risk=risk, reasons=reasons,
             rules_triggered=[f.rule_id for f in findings],
         )
+        self._maybe_anchor()
         evidence: list[Evidence] = []
         if trust is not None:
             evidence.extend(trust_evidence(trust))

@@ -197,6 +197,15 @@
     <div class="eyebrow">Four-minute guided script</div>
     <h2>六個步驟走完治理閉環</h2>
     <p>正常放行 → 分級核准 → <b>注入攔截</b> → A/B 對照 → 稽核回溯 → 量化成效。點左側任一步驟執行；每一步都會顯示指令走到哪一道關卡、被誰擋下、依據哪一條規則。</p>
+    <div class="agent-switch" id="agentSwitch">
+      <span class="micro">動作請求由誰產生</span>
+      <button class="seg on" data-agent="template">情境樣板</button>
+      <button class="seg" data-agent="llm">真 LLM Agent</button>
+      <span class="micro plain" id="agentMode">—</span>
+    </div>
+    <p class="micro plain">切到「真 LLM Agent」後，步驟 2／3／4 會把整件工單（含附件全文、夾帶的那一行）
+      送進模型，由模型自己決定要呼叫哪個後台工具。<b>來源鏈不由模型自報</b>，
+      而是由 agent runtime 依「模型讀進 context 的東西」組出。沒有金鑰時會誠實顯示降級。</p>
   </div>
   <div class="split">
     <div class="sec">
@@ -308,7 +317,7 @@
   <div class="view-head">
     <div class="eyebrow">Live telemetry &amp; validation pipeline</div>
     <h2>驗證與指標</h2>
-    <p>上半是本次 Demo 的線上即時值;下半是驗證管線 —— <b>120 條自建情境 × 7 條基準線 × 6 項指標</b>,含兩組消融與一組最壞情況核准者的敏感度測試。</p>
+    <p>上半是本次 Demo 的線上即時值;下半是驗證管線 —— <b>142 條自建情境 × 8 條基準線 × 8 項指標</b>(含一條**真實 gpt-4o-mini** 的 LLM 自我審查),含兩組消融與一組最壞情況核准者的敏感度測試。<b>FBR 拆成兩半</b>:被閘門擋下(FBR_gate)與被核准者駁回(FBR_approver)—— 兩者的改法完全不同,混在一起看會把「核准介面設計不良」誤診成「治理層太嚴」。</p>
   </div>
   <div class="stack-lg">
     <div class="sec">
@@ -323,7 +332,7 @@
       <div class="sec-b">
         <div class="row wrap gap8">
           <button class="primary" id="btnBench"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>執行驗證管線</button>
-          <span class="micro dimmer">120 條情境 × 7 條基準線,本機離線跑,約需 1 秒。</span>
+          <span class="micro dimmer">142 條情境 × 8 條基準線,本機離線跑,約需 1 秒(B1-llm 讀快取,不打 API)。</span>
         </div>
         <div class="mt14" id="benchResult"></div>
       </div>
@@ -335,6 +344,8 @@
       <span><b>HAR</b> 有害動作放行率(越低越好)</span>
       <span><b>TCR</b> 正常任務完成率(越高越好)</span>
       <span><b>FBR</b> 誤攔率(產品存活關鍵)</span>
+      <span><b>FBR_gate</b> 誤攔中被 G0/G2/G3 擋下的部分</span>
+      <span><b>FBR_approver</b> 誤攔中被 G4 核准者駁回的部分</span>
       <span><b>ESB</b> 權限升級攔截率</span>
       <span><b>AC</b> 稽核完整率</span>
       <span><b>DL</b> 決策延遲 p95</span>
@@ -1247,15 +1258,88 @@ let script = [];
 let currentStep = null;
 const doneSteps = new Set();
 
+let agentMode = "template";      /* template | llm */
+let agentInfo = null;
+
 async function loadScript(){
   try {
     const d = await api("/api/demo/script");
     script = d.script;
+    agentInfo = d.agent ?? null;
     $("#scriptMeta").textContent = `${script.length} STEPS`;
+    renderAgentSwitch();
     renderScript();
   } catch(e){
     $("#scriptList").innerHTML = errHTML("劇本載入失敗", e.message);
   }
+}
+
+function renderAgentSwitch(){
+  const box = $("#agentSwitch"); if (!box) return;
+  $("#agentMode").textContent = agentInfo
+    ? (agentInfo.llm_available ? `可用：${agentInfo.mode}`
+                               : "未設定金鑰：選真 Agent 會降級回樣板並標記")
+    : "";
+  $$("#agentSwitch .seg").forEach(el => {
+    el.classList.toggle("on", el.dataset.agent === agentMode);
+    el.onclick = () => { agentMode = el.dataset.agent; renderAgentSwitch(); };
+  });
+}
+
+/* 模型實際發出的 tool call，與 runtime 附上的來源鏈。
+   這兩塊是「你的 Agent 在哪」這個問題的答案：左邊是模型真的送出的東西，
+   右邊是治理層拿到的來源鏈——而後者模型碰不到。 */
+function agentPanel(a, latency){
+  if (!a) return "";
+  const call = a.tool_call ?? {};
+  const args = call.arguments ?? {};
+  const rationale = args.agent_rationale ?? "";
+  const shown = Object.fromEntries(
+    Object.entries(args).filter(([k]) => k !== "agent_rationale"));
+  const argText = esc(JSON.stringify(shown, null, 1));
+
+  const sources = (a.read_sources ?? []).map(sc => `
+    <div class="srcrow ${sc.in_chain ? "chained" : "evidence"}">
+      <span class="badge">${sc.in_chain ? "進鏈" : "證據 · 不進鏈"}</span>
+      <span>
+        <span class="ref">${esc(sc.channel)} · ${esc(sc.source_ref)}</span>
+        <div class="why">${esc(sc.why)}</div>
+      </span>
+    </div>`).join("");
+
+  const errs = (a.validation_errors ?? []);
+  const lat = latency ?? {};
+
+  return `
+  <div class="sec agentcard">
+    <div class="sec-h">
+      <b>${ic("shield")}被治理的 Agent</b>
+      <span class="meta">${esc(a.mode)}${a.degraded ? " · 降級" : ""}</span>
+    </div>
+    <div class="sec-b">
+      <div class="micro">模型實際發出的 tool call</div>
+      <div class="toolcall mt6"><span class="fn">${esc(call.name ?? "(模型未呼叫工具)")}</span>(${argText})</div>
+      ${rationale ? `<div class="why mt6">模型自述：${esc(rationale)}</div>` : ""}
+      ${errs.length ? `<ul class="reasons mt6">${errs.map(e =>
+          `<li class="rule">G1 schema 驗證：${esc(e)}</li>`).join("")}</ul>` : ""}
+      ${a.note ? `<div class="hint mt6">${esc(a.note)}</div>` : ""}
+    </div>
+    <div class="sec-b">
+      <div class="micro">runtime 附上的來源鏈（模型不參與，也無法自報）</div>
+      <div class="mt6">${sources || "<div class='hint'>（無）</div>"}</div>
+    </div>
+    <div class="sec-b">
+      <div class="lat">
+        <span>映射延遲（LLM）<b>${lat.mapping_latency_ms != null
+          ? lat.mapping_latency_ms.toFixed(0) + " ms" : "—"}</b></span>
+        <span>閘門延遲（G0–G5）<b>${lat.gate_latency_ms != null
+          ? lat.gate_latency_ms.toFixed(2) + " ms" : "—"}</b></span>
+        <span>token <b>${(a.tokens?.total ?? 0)}</b></span>
+      </div>
+      <div class="hint mt6">兩段延遲刻意分開報。混成一個數字的話，
+        「治理層很慢」與「模型很慢」就分不出來了——AgentGate 只為後半段負責。</div>
+    </div>
+  </div>`;
 }
 
 function renderScript(){
@@ -1279,7 +1363,8 @@ async function runStep(sid){
 
   let d;
   try {
-    d = await api("/api/demo/step", {method:"POST", body: JSON.stringify({step_id: sid})});
+    d = await api("/api/demo/step", {method:"POST",
+      body: JSON.stringify({step_id: sid, agent: agentMode})});
   } catch(e){
     stage.innerHTML = errHTML("這一步執行失敗", e.message);
     return;
@@ -1298,6 +1383,9 @@ async function runStep(sid){
     title: "這一步的來源工單",
     chain: d.verdict?.trust?.chain ?? d.gated?.trust?.chain,
   });
+  /* Agent 那一塊插在工單與裁決之間：先看指令從哪來、再看模型決定做什麼、
+     最後才看治理層怎麼裁。倒過來講就等於先公布答案。 */
+  if (d.agent) html += agentPanel(d.agent, d.latency);
   if (d.verdict) html += verdictCard(d.verdict);
   if (d.gated && d.ungated) html += abPanel(d.gated, d.ungated);
 
@@ -1809,7 +1897,7 @@ async function loadMetrics(){
 $("#btnBench").addEventListener("click", async () => {
   const btn = $("#btnBench");
   btn.disabled = true;
-  $("#benchResult").innerHTML = loadingHTML("RUNNING 120 SCENARIOS × 7 BASELINES");
+  $("#benchResult").innerHTML = loadingHTML("RUNNING 142 SCENARIOS × 8 BASELINES");
   try {
     benchCache = await api("/api/benchmark", {method:"POST", body:"{}"});
     renderBench(benchCache);
@@ -1823,7 +1911,8 @@ $("#btnBench").addEventListener("click", async () => {
 function renderBench(rep){
   const st = rep.scenario_stats ?? {};
   $("#benchMeta").textContent =
-    `${st.total} 情境 · 正常 ${st.normal} / 攻擊 ${st.attack} · 有害 ${st.harmful}`;
+    `${st.total} 情境 · 正常 ${st.normal} / 攻擊 ${st.attack} · 有害 ${st.harmful}`
+    + (st.with_attachment ? ` · 帶附件 ${st.with_attachment}(其中 ${st.with_attachment_normal} 條為正常業務)` : "");
   if (rep.disclaimer) $("#benchDisclaimer").textContent = rep.disclaimer;
 
   const rows = rep.baselines.map(b => {
@@ -1836,6 +1925,8 @@ function renderBench(rep){
       <td class="r ${m.HAR === 0 ? "good" : m.HAR > 0.3 ? "bad" : ""}">${pctOf(m.HAR)}</td>
       <td class="r">${pctOf(m.TCR)}</td>
       <td class="r ${m.FBR > 0.15 ? "bad" : ""}">${pctOf(m.FBR)}</td>
+      <td class="r dimmer ${m.FBR_gate > 0.05 ? "bad" : ""}">${pctOf(m.FBR_gate ?? 0)}</td>
+      <td class="r dimmer">${pctOf(m.FBR_approver ?? 0)}</td>
       <td class="r ${m.ESB === 1 ? "good" : ""}">${pctOf(m.ESB)}</td>
       <td class="r ${m.AC === 1 ? "good" : m.AC === 0 ? "bad" : ""}">${pctOf(m.AC)}</td>
       <td class="r mono">${m.DL_p95_ms ?? "—"}</td>
@@ -1851,7 +1942,7 @@ function renderBench(rep){
       <div class="fact"><span class="macro v">${pctOf(b3.metrics.TCR)}</span>
         <span class="k">B3 任務完成率</span><span class="s">治理沒有把正常業務擋死</span></div>
       <div class="fact ${b3.metrics.FBR > 0.15 ? "bad" : ""}"><span class="macro v">${pctOf(b3.metrics.FBR)}</span>
-        <span class="k">B3 誤攔率</span><span class="s">產品能不能被用下去的關鍵</span></div>
+        <span class="k">B3 誤攔率</span><span class="s">閘門 ${pctOf(b3.metrics.FBR_gate ?? 0)} · 核准者 ${pctOf(b3.metrics.FBR_approver ?? 0)}</span></div>
       <div class="fact good"><span class="macro v">${pctOf(b3.metrics.AC)}</span>
         <span class="k">B3 稽核完整率</span><span class="s">被擋的動作也留完整紀錄</span></div>
     </div>` : "";
@@ -1861,7 +1952,8 @@ function renderBench(rep){
     <div class="tbl mt14"><table class="bench">
       <thead><tr>
         <th>基準線</th><th class="r">HAR 有害放行</th><th class="r">TCR 任務完成</th>
-        <th class="r">FBR 誤攔</th><th class="r">ESB 升級攔截</th><th class="r">AC 稽核完整</th><th class="r">DL p95 (ms)</th>
+        <th class="r">FBR 誤攔</th><th class="r">└ 閘門擋</th><th class="r">└ 核准者駁</th>
+        <th class="r">ESB 升級攔截</th><th class="r">AC 稽核完整</th><th class="r">DL p95 (ms)</th>
       </tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div class="mt14">${scatter(rep.tradeoff)}</div>`;

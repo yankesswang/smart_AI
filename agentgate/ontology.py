@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -75,17 +77,58 @@ CHANNEL_MAX_RISK: dict[Channel, str] = {
 }
 
 
+# 可被「確認提升」的不可信通道(G0-R2)。memory 不在其中:
+# 記憶是 Agent 自己寫的,讓它被確認等於讓 Agent 自己給自己背書。
+LIFTABLE_CHANNELS: set[Channel] = {Channel.TOOL_OUTPUT, Channel.USER_UNVERIFIED}
+
+# 有資格擔任「確認者」的通道。必須本身就是 verified 等級 ——
+# 一份文件不能確認另一份文件。
+CONFIRMER_CHANNELS: set[Channel] = {Channel.USER_VERIFIED, Channel.SYSTEM}
+
+
+def action_fingerprint(kind: "ActionKind | str", params: dict[str, Any]) -> str:
+    """動作指紋:動作種類 + 全部參數的確定性雜湊。
+
+    為什麼要有這個東西:確認提升的前提是「用戶確認的是**這一個**動作與**這一組**參數」。
+    只比對「用戶有沒有說好」是不夠的 —— 攻擊者可以讓用戶對「退費 880 元到本人帳戶」
+    說好,Agent 卻送出「退費 880 元到 ACC-9999」。指紋涵蓋全部參數,
+    任何一個欄位被換掉,指紋就對不上,提升就不成立。
+
+    指紋由 runtime 計算(harness 在向用戶展示動作的當下算一次、送進閘門時再算一次),
+    **不由 LLM 自報** —— 見 ``gates/g1_resolution.attach_runtime_provenance``。
+    """
+    kind_value = kind.value if isinstance(kind, ActionKind) else str(kind)
+    canonical = json.dumps(
+        {"kind": kind_value, "params": params},
+        ensure_ascii=False, sort_keys=True, default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+
+
 @dataclass(frozen=True)
 class Provenance:
-    """一個指令來源節點。攻擊者可以改寫措辭,但改不掉指令從哪個通道進來的事實。"""
+    """一個指令來源節點。攻擊者可以改寫措辭,但改不掉指令從哪個通道進來的事實。
+
+    ``confirms`` / ``confirmed_action_hash`` 是 G0-R2「確認提升」用的兩個欄位:
+    一個已驗證(或系統)節點可以宣告「我確認了 <confirms> 這個來源提出的、指紋為
+    <confirmed_action_hash> 的那個動作」。兩個欄位都由 runtime 寫入,
+    LLM 自報的一律在 G1 邊界被清掉。
+    """
 
     channel: Channel
     source_ref: str          # 例如 "upload:invoice_20260817.pdf#p3"
     trust: str = ""          # verified / derived / untrusted(留空則由通道推導)
+    confirms: str = ""       # 本節點確認了哪一個來源(該來源的 source_ref)
+    confirmed_action_hash: str = ""   # 被確認的動作指紋(runtime 計算,見 action_fingerprint)
 
     def __post_init__(self) -> None:
         if not self.trust:
             object.__setattr__(self, "trust", CHANNEL_TRUST[self.channel])
+
+    @property
+    def is_confirmation(self) -> bool:
+        """是不是一個「有效形式」的確認節點(內容是否對得上另算)。"""
+        return bool(self.confirmed_action_hash) and self.channel in CONFIRMER_CHANNELS
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +136,8 @@ class Provenance:
             "source_ref": self.source_ref,
             "trust": self.trust,
             "max_risk": CHANNEL_MAX_RISK[self.channel],
+            "confirms": self.confirms,
+            "confirmed_action_hash": self.confirmed_action_hash,
         }
 
 
@@ -131,6 +176,10 @@ class Finding:
     message: str
     statute: str = ""                     # 條文原文(核准介面要能引用)
     evidence: tuple[Evidence, ...] = ()
+    # 觸發後把動作風險抬升到這個等級(空字串 = 不抬升)。
+    # G2 的規則在 PolicyEngine 內部就處理掉了;這個欄位讓 **G3 的規則**
+    # 也能抬升風險而不必在 pipeline 裡寫死規則 ID。
+    escalate_to: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -139,6 +188,7 @@ class Finding:
             "severity": self.severity.value,
             "message": self.message,
             "statute": self.statute,
+            "escalate_to": self.escalate_to,
             "evidence": [e.to_dict() for e in self.evidence],
         }
 
@@ -167,10 +217,23 @@ class ActionRequest:
     # 治理結果只能由動作本身與來源鏈決定,不能因為「這件客訴看起來很急」而放寬。
     # 它的用途是讓稽核與核准介面能回到指令的出處。
     context: dict[str, Any] = field(default_factory=dict)
+    # 結構化的「用戶已知悉」事實,由 runtime 記錄(例如:已於通話中告知違約金並取得同意)。
+    # 刻意**不**參與 G2/G3 的確定性裁決 —— 那兩層只看動作、參數與帳戶狀態。
+    # 它只出現在 G4 的證據包裡供人(或模擬核准者)判斷,理由見實作說明「知悉是欄位不是文字」。
+    acknowledgements: dict[str, Any] = field(default_factory=dict)
+    # G1 在清洗 LLM 自報 provenance 時產生的 finding(嚴重度 info),
+    # 由 pipeline 併入裁決紀錄 —— 「以 runtime 為準」這件事本身要留痕。
+    runtime_findings: list[Finding] = field(default_factory=list)
+
+    def fingerprint(self) -> str:
+        """本次動作的指紋(runtime 計算)。確認提升與客戶授權判定都以它為準。"""
+        return action_fingerprint(self.kind, self.params)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "action_id": self.action_id,
+            "fingerprint": self.fingerprint(),
+            "acknowledgements": self.acknowledgements,
             "kind": self.kind.value,
             "params": self.params,
             "principal": self.principal,
@@ -191,16 +254,28 @@ class TrustVerdict:
     """指令來源鏈的信任評估結果。"""
 
     min_trust: str            # 鏈中最低信任等級
-    risk_cap: str             # 鏈可授權的最高風險等級
+    risk_cap: str             # 鏈可授權的最高風險等級(已計入確認提升)
     weakest_link: Provenance | None
     chain: list[Provenance]
+    # 與 chain 等長:每個節點「經確認提升後」實際可授權的風險上限。
+    effective_caps: list[str] = field(default_factory=list)
+    # 實際發生的提升紀錄(G0-R2)。空 list = 這次裁決沒有任何節點被提升。
+    lifts: list[dict[str, Any]] = field(default_factory=list)
+    # 形式上是確認節點、但指紋對不上這次動作的節點(攻擊訊號:確認了 A 卻拿去做 B)。
+    stale_confirmations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        caps = self.effective_caps or [CHANNEL_MAX_RISK[p.channel] for p in self.chain]
         return {
             "min_trust": self.min_trust,
             "risk_cap": self.risk_cap,
             "weakest_link": self.weakest_link.to_dict() if self.weakest_link else None,
-            "chain": [p.to_dict() for p in self.chain],
+            "chain": [
+                {**p.to_dict(), "effective_max_risk": cap}
+                for p, cap in zip(self.chain, caps)
+            ],
+            "lifts": self.lifts,
+            "stale_confirmations": self.stale_confirmations,
         }
 
 
@@ -215,6 +290,10 @@ class Projection:
     reversible: bool                    # 是否可回復
     reversal_window_hours: int | None
     pii_fields_exposed: list[str]       # 觸及的個資欄位
+    # 連鎖後果:這個動作執行後會被**其他流程**接手做的事。
+    # 每一項 {"process", "label", "service_interruption"};
+    # 只要有一項 service_interruption 為真,G3 的 AG-32 就會把它升成需核准。
+    cascade: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -224,6 +303,7 @@ class Projection:
             "reversible": self.reversible,
             "reversal_window_hours": self.reversal_window_hours,
             "pii_fields_exposed": self.pii_fields_exposed,
+            "cascade": self.cascade,
         }
 
 
@@ -273,6 +353,8 @@ __all__ = [
     "ActionRequest",
     "CHANNEL_MAX_RISK",
     "CHANNEL_TRUST",
+    "CONFIRMER_CHANNELS",
+    "LIFTABLE_CHANNELS",
     "Channel",
     "Evidence",
     "Finding",
@@ -283,6 +365,7 @@ __all__ = [
     "RISK_ORDER",
     "Severity",
     "TrustVerdict",
+    "action_fingerprint",
     "risk_exceeds",
     "risk_max",
 ]
