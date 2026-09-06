@@ -980,6 +980,7 @@ svg.ag{width:1.05em;height:1.05em;flex:0 0 auto;vertical-align:-.17em}
         <div class="sec-b" id="rankWrap" hidden style="border-top:1px solid var(--line)">
           <span class="micro">RANKING RATIONALE</span>
           <div class="narr mt6" id="rankExplain"></div>
+          <div class="narr mt6" id="rankRobust" hidden></div>
         </div>
       </section>
 
@@ -1747,8 +1748,18 @@ function reasonDetect(s){
   // 這時候顯示 0.00 會被誤讀成「不嚴重」。沒有意義就不畫。
   if(mon.online) {
     seen.push({k:"惡化斜率",v:`${signed(mon.worst_trend,4)}/tick`,tail:"目前，所有訊號中最壞的一條"});
-    seen.push({k:"故障風險",v:fmt(mon.failure_risk,2),tail:"目前"});
+    seen.push({k:"故障風險",v:fmt(mon.failure_risk,2),tail:"目前（已納入到達門檻的剩餘時間）"});
   }
+  // 事件本身帶著觸發當下的 TTT；沒有就退回 monitoring 對「現在」的估計。
+  const ttt=(e.time_to_threshold_min!==undefined&&e.time_to_threshold_min!==null)
+    ? {v:e.time_to_threshold_min, d:e.time_to_threshold_detail||{}, when:"觸發當下"}
+    : ((mon.time_to_threshold_min!==undefined&&mon.time_to_threshold_min!==null)
+        ? {v:mon.time_to_threshold_min, d:{signal:mon.ttt_signal,runtime:mon.ttt_runtime}, when:"目前"} : null);
+  if(ttt) seen.push({
+    k:"到達危險門檻",
+    v:ttt.v<=0?"已踩線":`約 ${fmt(ttt.v,1)} 分鐘`,
+    tail:`${ttt.when}｜${SIG_LABEL[ttt.d.signal]||ttt.d.signal||"訊號"}｜runtime ${ttt.d.runtime||"-"}；只用可觀測歷史外推`,
+    bad:ttt.v<=10});
 
   const others=Object.values((state.snapshot||{}).machines||{})
     .filter(m=>m.machine_id!==e.machine_id).map(m=>({
@@ -1790,6 +1801,9 @@ function reasonDiagnose(s){
     eqs.push({t:`指紋餘弦相似度 ${fmt(sc.cosine,3)}${sc.cosine<0?"（負值取 0）":""} × ${fmt(w.signature,2)}`,v:fmt(cos*w.signature,3)});
     eqs.push({t:`歷史先驗 ${fmt(sc.prior,3)} × ${fmt(w.prior,2)}`,v:fmt(sc.prior*w.prior,3)});
     eqs.push({t:`文件支持度 ${fmt(sc.docs,3)} × ${fmt(w.docs,2)}`,v:fmt(sc.docs*w.docs,3)});
+    if(w.rerank>0){
+      eqs.push({t:`判別式模型 ${fmt(sc.rerank,3)} × ${fmt(w.rerank,2)}`,v:fmt((sc.rerank||0)*w.rerank,3)});
+    }
     eqs.push({sum:true,t:"合計（再經 softmax 轉信心度）",v:fmt(sc.combined,3)});
   }
   if(th.strength_full!==undefined){
@@ -1884,12 +1898,45 @@ function reasonPlan(s){
     ? {k:planName(p.plan_id),v:`分數 ${fmt(p.score,3)}`,tail:`落後 ${fmt(win.score-p.score,3)}，主要劣勢在${CRIT_LABEL[worstOf(p)]||worstOf(p)}`}
     : {k:planName(p.plan_id),v:"不可行",tail:humanize(p.infeasible_reason),bad:true});
 
+  // 權重擾動掃描：那六個權重是人訂的，所以要有數字回答「權重改一點會不會換人」。
+  const rb=rk.robustness||null;
+  const rankRows=[{k:"硬限制",v:"Safety BLOCK 直接出局",tail:"不進入加權比較"}];
+  if(rb&&rb.stable_fraction!==null&&rb.stable_fraction!==undefined){
+    const key=rb.most_sensitive_criterion, detail=(rb.criteria||{})[key]||{};
+    rankRows.push({k:"權重穩健性",
+      v:`±${Math.round((rb.perturbation||0)*100)}% 擾動下推薦不變 ${Math.round(rb.stable_fraction*100)}%`,
+      tail:`掃描 ${rb.scenarios} 個權重情境（seed ${rb.seed}，純計算可重現）`});
+    rankRows.push({k:"最敏感準則",
+      v:key?(CRIT_LABEL[key]||key):"無",
+      tail:key?`權重要從 ${fmt(detail.weight,2)} 動到 ${fmt(rb.critical_weight,2)}（${fmt(detail.relative_shift_pct,0)}%）才會換推薦`
+              :"任一權重單獨擾動都翻不動這個推薦"});
+    if(rb.min_top_gap!==null&&rb.min_top_gap!==undefined)
+      rankRows.push({k:"第一名領先第二名",
+        v:`最小 ${fmt(rb.min_top_gap,3)}`,
+        tail:`基準權重下 ${fmt(rb.baseline_top_gap,3)}；第二名是 ${planName(rb.runner_up_plan_id)}`});
+  }
+
+  // 家族內參數搜尋：「為什麼是 0.6 不是 0.4」。變體與分數都是後端乾跑出來的。
+  const variantSlots=[];
+  const searched=sorted.filter(p=>(p.variants||[]).length>1);
+  searched.forEach(p=>{
+    variantSlots.push({label:`${planName(p.plan_id)} 的參數搜尋`,
+      rows:(p.variants||[]).map(v=>({
+        k:v.label,
+        v:v.blocked?"安全規則擋下":(!v.executable?"執行層做不到":`分數 ${fmt(v.score,3)}`),
+        tail:`產出 ${fmt(v.production_pct,0)}%｜振動峰值 ${fmt(v.peak_vibration,2)}｜最低健康度 ${fmt(v.min_health,0)}`
+             +(v.selected?"｜← 採用":"")+(v.indistinguishable?"｜孿生體對這個參數不敏感，分數相同":""),
+        win:!!v.selected, bad:!!v.blocked})),
+      note:"每個變體都在信念模型上乾跑並過一次 Safety 預測規則；被 BLOCK 或執行層做不到的不得代表家族。"});
+  });
+
   return {
     headline:win?`推薦${planName(win.plan_id)}｜${humanize(win.title)}`:"沒有可行方案",
     slots:[
       {label:"看到什麼（模擬器乾跑結果）",rows:seen,
        note:"每個方案都在「診斷信念模型」上乾跑 30 分鐘，數字是跑出來的，不是估的。"},
-      {label:"怎麼排名",eqs,rows:[{k:"硬限制",v:"Safety BLOCK 直接出局",tail:"不進入加權比較"}]},
+      {label:"怎麼排名",eqs,rows:rankRows},
+      ...variantSlots,
       {label:"為什麼不是其他方案",rows:rejected},
       {label:"結論",rows:win?[
         {k:"推薦方案",v:`${planName(win.plan_id)}｜${humanize(win.title)}`,win:true},
@@ -1897,7 +1944,7 @@ function reasonPlan(s){
         {k:"動作",v:(win.actions||[]).map(a=>actionName(a.kind)).join(" → ")},
       ]:[{k:"結果",v:"所有方案都被擋下，需人工重新規劃",bad:true}]},
     ],
-    note:"六個準則用固定尺規換算成 0~1（不是 min-max 正規化），所以分數在不同情境之間可以直接比較。排名由 optimizer.py 計算，LLM 沒有參與。",
+    note:"六個準則用固定尺規換算成 0~1（不是 min-max 正規化），所以分數在不同情境之間可以直接比較。排名與權重穩健性掃描都由 optimizer.py 計算，LLM 沒有參與。",
   };
 }
 
@@ -2724,8 +2771,8 @@ function renderMachines(s){
         <span class="micro" style="flex:0 0 auto">HEALTH</span>
         <span class="num hv">${fmt(m.health,0)}</span>
         <span class="led ${hCls}"><i style="width:${Math.max(2,m.health)}%"></i></span>
-        <span class="est">
-          ${m.online?`AGENT EST ${fmt(mon.health_estimate,0)} / RISK ${fmt(mon.failure_risk,2)}`:"SENSORS OFFLINE"}
+        <span class="est" title="${esc(tttTitle(mon))}">
+          ${m.online?`AGENT EST ${fmt(mon.health_estimate,0)} / RISK ${fmt(mon.failure_risk,2)}${tttText(mon)}`:"SENSORS OFFLINE"}
           ${m.queue?` / WIP ${esc(m.queue)}`:""}${m.maintenance_remaining_min>0?` / ETA ${fmt(m.maintenance_remaining_min,0)}M`:""}</span>
       </div></div>`;
   }).join("");
@@ -2733,6 +2780,24 @@ function renderMachines(s){
   Object.values(s.machines).forEach(m =>
     SIGNALS.filter(n=>m.readings[n]).forEach(n =>
       spark(`cv-${m.machine_id}-${n}`, m.machine_id+"."+n, m.readings[n].band)));
+}
+
+/* TTT（time-to-threshold）：還有幾分鐘會踩到危險門檻。
+   斜率回答不了「還有多久」，這一格才是現場拿來決定要不要停機的數字。
+   值由 Monitoring Agent 用可觀測歷史算出（prediction/threshold.py），runtime 一律標示。 */
+function tttText(mon){
+  const v=(mon||{}).time_to_threshold_min;
+  if(v===null||v===undefined) return "";
+  return v<=0 ? " / TTT 已踩線" : ` / TTT ${fmt(v,1)}M`;
+}
+function tttTitle(mon){
+  const v=(mon||{}).time_to_threshold_min;
+  if(v===null||v===undefined)
+    return `到達危險門檻的預估剩餘時間：依可觀測趨勢外推，${fmt((mon||{}).ttt_horizon_min||60,0)} 分鐘內不會踩線。`;
+  const sig=SIG_LABEL[(mon||{}).ttt_signal]||(mon||{}).ttt_signal||"訊號";
+  return v<=0
+    ? `${sig} 已經在危險區內（runtime: ${(mon||{}).ttt_runtime||"-"}）。`
+    : `預估 ${fmt(v,1)} 分鐘後 ${sig} 踩到危險門檻（runtime: ${(mon||{}).ttt_runtime||"-"}）。只用 Agent 可見的遙測歷史，不讀模擬器答案。`;
 }
 
 function renderMachineLog(rows){
@@ -3010,7 +3075,7 @@ function restoreLive(live){
     STAGES.forEach(([k])=>{ if(!stageState[k]) stageState[k]=""; });
   }
   if(live.impact && live.impact.impact) renderImpact(live.impact.impact);
-  if(live.plan && live.plan.plans) renderPlans(live.plan.plans, (live.rank||{}).explanation||"");
+  if(live.plan && live.plan.plans) renderPlans(live.plan.plans, (live.rank||{}).explanation||"", (live.rank||{}).ranking||null);
   if(live.work_order && live.work_order.work_order && !lastLoop){
     lastLoop = {work_order: live.work_order.work_order};
   }
@@ -3020,7 +3085,7 @@ function restoreLive(live){
 function renderLoop(loop){
   if(loop.event) renderDiagnosis(loop);
   if(loop.impact) renderImpact(loop.impact);
-  if(loop.plans && loop.plans.length) renderPlans(loop.plans, loop.ranking_explanation);
+  if(loop.plans && loop.plans.length) renderPlans(loop.plans, loop.ranking_explanation, loop.ranking||null);
   const att=(loop.attempts||[]).filter(a=>a.verification);
   if(att.length) renderVerify(att[att.length-1], loop);
 }
@@ -3072,7 +3137,26 @@ function renderImpact(im){
     </tr>`).join("") + `</tbody></table></div>`;
 }
 
-function renderPlans(plans, explain){
+/* 權重穩健性：那六個權重是人訂的，所以「權重改一點推薦會不會換人」必須有答案。
+   這一行的數字全部來自 optimizer.robustness_scan（固定種子的擾動掃描），前端只負責排版。 */
+function robustnessLine(ranking){
+  const rb=(ranking||{}).robustness;
+  if(!rb||rb.stable_fraction===null||rb.stable_fraction===undefined) return "";
+  const pct=Math.round(rb.stable_fraction*100);
+  const key=rb.most_sensitive_criterion;
+  const sens=key?(CRIT_LABEL[key]||key):"無（權重怎麼動都不翻轉）";
+  let line=`在 ±${Math.round((rb.perturbation||0)*100)}% 權重擾動下推薦不變比例 ${pct}%，最敏感準則：${sens}`;
+  const detail=(rb.criteria||{})[key];
+  if(key&&detail&&rb.critical_weight!==null&&rb.critical_weight!==undefined)
+    line+=`（權重要從 ${fmt(detail.weight,2)} 動到 ${fmt(rb.critical_weight,2)} 才翻轉）`;
+  line+="。";
+  if(rb.min_top_gap!==null&&rb.min_top_gap!==undefined)
+    line+=` 擾動情境中第一名與第二名的最小分數差 ${fmt(rb.min_top_gap,3)}（基準 ${fmt(rb.baseline_top_gap,3)}）；`
+         +`共掃描 ${rb.scenarios} 個情境（seed ${rb.seed}，可重現）。`;
+  return line;
+}
+
+function renderPlans(plans, explain, ranking){
   const sorted=plans.slice().sort((a,b)=>(a.rank||99)-(b.rank||99));
   const recommended=sorted.find(p=>p.feasible&&p.rank===1)||sorted.find(p=>p.feasible)||sorted[0];
   const actionText=p=>{
@@ -3111,6 +3195,13 @@ function renderPlans(plans, explain){
   const guidance=recommended?`先看三個關鍵差異：${esc(planName(recommended.plan_id))} 是目前推薦；產出看「30 分鐘後產出」，交期看「最大交期延遲」，安全看「不可執行／需核准／安全放行」。分數只是排序依據，不是現場 KPI。`:"目前沒有可執行方案，請查看安全裁決原因。";
   $("plans").innerHTML = `<div class="plan-compare">${cards}</div><div class="plan-guide">${guidance}</div>`;
   if(explain){ $("rankWrap").hidden = false; $("rankExplain").textContent = humanize(explain); }
+  const robust=robustnessLine(ranking);
+  const robustEl=$("rankRobust");
+  if(robustEl){
+    robustEl.textContent = robust;
+    robustEl.hidden = !robust;
+    if(robust) $("rankWrap").hidden = false;
+  }
 }
 
 function renderVerify(attempt, loop){
@@ -3205,9 +3296,11 @@ function onEvent(e){
   }
   log(e);
   if(e.stage==="tick" && e.payload.snapshot){ state.snapshot=e.payload.snapshot; render(); }
-  if(e.stage==="plan" && e.payload.plans) renderPlans(e.payload.plans,"");
+  if(e.stage==="plan" && e.payload.plans) renderPlans(e.payload.plans,"",null);
   if(e.stage==="rank" && e.payload.ranking){
     if(e.payload.explanation){ $("rankWrap").hidden = false; $("rankExplain").textContent=humanize(e.payload.explanation); }
+    const robust=robustnessLine(e.payload.ranking), robustEl=$("rankRobust");
+    if(robustEl){ robustEl.textContent=robust; robustEl.hidden=!robust; if(robust) $("rankWrap").hidden=false; }
   }
   if(e.stage==="approval_required") renderApproval(e.payload);
   // 鏈路狀態可能從別的分頁或 CLI 切換，收到事件就把部署面板拉回一致。

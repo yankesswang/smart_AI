@@ -88,6 +88,15 @@ class SafetyContext:
     keeps_full_speed: bool          # 是否維持全速
     plan_id: str = ""
     projection: PlanProjection | None = None
+    # 到達危險門檻的預估剩餘時間（Monitoring Agent 用可觀測歷史算的，見 prediction/threshold.py）。
+    #
+    # 這三個欄位**只當證據，不當判準**：預測型規則的裁決仍然以方案乾跑的峰值為主。
+    # 理由是責任分界 —— 乾跑峰值是「這個方案會把設備帶到哪裡」，那是方案自己的後果；
+    # TTT 是「不介入的話還剩多久」，它讓同一條 BLOCK 讀起來有急迫性，
+    # 但如果讓它參與裁決，安全裁決就會跟著一個外推值浮動，那是把預測誤當成事實。
+    time_to_threshold_min: float | None = None
+    time_to_threshold_signal: str = ""
+    time_to_threshold_runtime: str = ""
 
     @property
     def machine(self) -> MachineSnapshot:
@@ -127,6 +136,29 @@ def _sensor_evidence(machine: MachineSnapshot, signal: str) -> list[Evidence]:
             statement=f"{signal} = {reading.value:.2f} {reading.unit}（{reading.band.value}）",
         )
     ]
+
+
+def _ttt_evidence(ctx: SafetyContext) -> list[Evidence]:
+    """把 TTT 掛成一條**額外證據**。
+
+    只在規則已經觸發之後才加，所以它不改變任何裁決，只讓同一條 BLOCK 多一句
+    「而且不介入的話還剩幾分鐘」——那是現場真正要拿去做決定的資訊。
+    """
+    if ctx.time_to_threshold_min is None:
+        return []
+    signal = ctx.time_to_threshold_signal or "訊號"
+    runtime = ctx.time_to_threshold_runtime or "unknown"
+    if ctx.time_to_threshold_min <= 0.0:
+        statement = f"{signal} 已經在危險區內（TTT = 0 分鐘；runtime: {runtime}）。"
+    else:
+        statement = (
+            f"依可觀測歷史外推，若不介入，{signal} 約 {ctx.time_to_threshold_min:.0f} 分鐘後"
+            f"踩到危險門檻（runtime: {runtime}）。"
+        )
+    return [Evidence(
+        "prediction", f"{ctx.machine_id}.time_to_threshold",
+        statement + "此為證據，非裁決依據；裁決仍以方案乾跑峰值為準。",
+    )]
 
 
 def _rule_person_in_hazard_zone(ctx: SafetyContext) -> tuple[bool, str, list[Evidence]]:
@@ -193,7 +225,7 @@ def _rule_projected_vibration(ctx: SafetyContext) -> tuple[bool, str, list[Evide
             Evidence("simulation", f"{ctx.plan_id}.peak_vibration",
                      f"乾跑期間振動峰值 {proj.peak_vibration:.2f} mm/s，最低健康度 {proj.min_health:.0f}。"),
             Evidence("manual", "MAN-A-3.2", "進入危險區間（>7 mm/s）不建議繼續全速運轉。"),
-        ],
+        ] + _ttt_evidence(ctx),
     )
 
 
@@ -231,7 +263,7 @@ def _rule_projected_temperature(ctx: SafetyContext) -> tuple[bool, str, list[Evi
             Evidence("simulation", f"{ctx.plan_id}.peak_temperature",
                      f"乾跑期間溫度峰值 {proj.peak_temperature:.1f}°C。"),
             Evidence("sop", "SOP-SF-01#4", "異常高溫（>90°C）屬立即停機事件。"),
-        ],
+        ] + _ttt_evidence(ctx),
     )
 
 
@@ -299,7 +331,7 @@ def _rule_projected_current(ctx: SafetyContext) -> tuple[bool, str, list[Evidenc
             Evidence("simulation", f"{ctx.plan_id}.min_health",
                      f"乾跑期間最低健康度 {proj.min_health:.0f}，設備已進入不可接受的劣化區。"),
             Evidence("manual", "MAN-A-5.3", "處置建議：不可持續全速運轉。應停機檢查驅動器與刀具狀態。"),
-        ],
+        ] + _ttt_evidence(ctx),
     )
 
 

@@ -182,6 +182,62 @@ def test_full_loop_over_the_api_reaches_verification(client):
     assert loop["verified"]
 
 
+def test_state_reports_time_to_threshold_per_machine(client):
+    """遙測卡要顯示「還有多久踩線」，所以 /api/state 必須帶得出這個欄位與它的 runtime。"""
+    client.post("/api/session/reset", json={"scenario_id": "bearing-degradation"})
+    state = client.post("/api/session/tick", json={"count": 10}).json()
+    monitoring = state["monitoring"]
+    for mid, row in monitoring.items():
+        assert "time_to_threshold_min" in row, f"{mid} 缺少 TTT 欄位"
+        assert "ttt_runtime" in row
+    machine_a = monitoring["M-A"]
+    if machine_a["time_to_threshold_min"] is not None:
+        assert machine_a["time_to_threshold_min"] >= 0
+        assert machine_a["ttt_runtime"]
+    # TTT 只能來自可觀測歷史，不能夾帶 Ground Truth
+    assert "fault_progress" not in str(monitoring)
+
+
+def test_ranking_carries_a_weight_robustness_scan(client):
+    """排名結果必須帶著權重擾動掃描 —— 這是回答「權重是你自己訂的」那一題的證據。"""
+    client.post("/api/session/reset", json={"scenario_id": "bearing-degradation"})
+    assert client.post("/api/session/run", json={"max_ticks": 40}).json()["started"]
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        state = client.get("/api/state").json()
+        if state["pending_approval"]:
+            client.post("/api/session/approve", json={
+                "plan_id": state["pending_approval"]["plan"]["plan_id"],
+                "approved": True, "approver": "test"})
+        if not state["running"] and state["last_loop"]:
+            break
+        time.sleep(0.2)
+
+    loop = client.get("/api/state").json()["last_loop"]
+    assert loop is not None, "閉環未在時限內完成"
+    robustness = loop["ranking"]["robustness"]
+    assert robustness["baseline_plan_id"] == loop["ranking"]["recommended_plan_id"]
+    assert 0.0 <= robustness["stable_fraction"] <= 1.0
+    assert robustness["scenarios"] > 0
+    assert robustness["seed"] == 20260809          # 固定種子：掃描結果可重現
+
+    # 方案家族的參數搜尋紀錄也要送到前端，Dashboard 才展得開「為什麼是 0.6 不是 0.4」
+    searched = [p for p in loop["plans"] if p.get("variants")]
+    assert searched, "至少有一個方案家族掃描過參數"
+    for plan in searched:
+        assert sum(1 for v in plan["variants"] if v["selected"]) == 1
+        assert all(not v["selected"] or not v["blocked"] for v in plan["variants"])
+
+
+def test_dashboard_renders_robustness_and_time_to_threshold(client):
+    page = client.get("/").text
+    assert "robustnessLine" in page          # 方案那格的權重穩健性說明
+    assert "權重擾動下推薦不變比例" in page
+    assert "tttText" in page                 # 遙測卡的 TTT
+    assert "到達危險門檻" in page
+
+
 def test_deployment_endpoint_exposes_the_edge_cloud_split(client):
     body = client.get("/api/deployment").json()
 
@@ -262,8 +318,12 @@ def test_full_loop_over_the_api_survives_a_severed_cloud_link(client):
 
 
 def test_benchmark_endpoint(client):
+    from factory_guardian.episode import MODES
+
     report = client.post("/api/benchmark", json={"scenario_ids": ["bearing-degradation"]}).json()
-    assert len(report["rows"]) == 3
+    # 不寫死模式數：對照組是會增加的（Baseline C 就是後來才加的），
+    # 寫死只會在加對照組的那天製造一個假失敗。
+    assert len(report["rows"]) == len(MODES)
     assert report["aggregate"]["guardian"]["production_attainment_pct"] > \
            report["aggregate"]["baseline-a"]["production_attainment_pct"]
 

@@ -35,10 +35,31 @@ class SafetyAgent(Agent):
     name = "safety-agent"
     role = "風險與政策檢查"
 
-    def __init__(self, ctx=None, vision: VisionBackend | None = None) -> None:
+    def __init__(self, ctx=None, vision: VisionBackend | None = None, monitoring=None) -> None:
         super().__init__(ctx)
         self.vision = vision or SimulatedVLM()
         self.hazard_seq = 0
+        # Monitoring Agent（可選）。給它是為了拿 TTT（到達危險門檻的剩餘時間）當**證據**，
+        # 不是拿來判斷 —— 見 policy/engine.py 的 _ttt_evidence。沒接也照樣運作，只是少一條證據。
+        self.monitoring = monitoring
+
+    def _ttt(self, machine_id: str) -> dict[str, object]:
+        """跟 Monitoring Agent 拿這台機器最近一次算出的 TTT。
+
+        刻意不自己重算：TTT 是 Monitoring Agent 的職責，而且它每個 tick 都算過了。
+        拿不到就回空的 —— 少一條證據，裁決完全不變。
+        """
+        latest = getattr(self.monitoring, "last_ttt", {}).get(machine_id) if self.monitoring else None
+        if latest is None:
+            return {}
+        _, estimate = latest
+        if estimate.minutes is None:
+            return {}
+        return {
+            "time_to_threshold_min": estimate.minutes,
+            "time_to_threshold_signal": estimate.signal,
+            "time_to_threshold_runtime": estimate.runtime,
+        }
 
     # ------------------------------------------------------------------ 視覺與環境
     def perceive(self, snapshot: FactorySnapshot) -> list[CameraObservation]:
@@ -122,6 +143,8 @@ class SafetyAgent(Agent):
                 keeps_full_speed=keeps_full_speed,
                 plan_id=plan.plan_id,
                 projection=plan.projection,
+                # TTT 只當證據（見 policy/engine.py 的 _ttt_evidence），不參與裁決。
+                **self._ttt(machine_id),
             )
             with self.tool("policy.evaluate_safety", f"plan={plan.plan_id}"):
                 findings = self.ctx.policy.evaluate_safety(ctx)
