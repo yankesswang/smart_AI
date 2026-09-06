@@ -446,3 +446,22 @@ def test_缺少對照組時明確報錯而不是默默算出數字() -> None:
     )
     with pytest.raises(ValueError, match="缺少模式"):
         build_business_case(partial, BASE, plant_scope(1))
+
+
+def test_no_fault_disturbance_scenarios_carry_zero_annual_events():
+    """fp-* 干擾情境是量誤報率的壓力測試，不是事件：年度次數必須為 0，
+    否則它們會分走工安事件池、並把「沒白停機」的差額年化成效益。"""
+    from factory_guardian.benchmark import BenchmarkReport, run_benchmark  # noqa: F401
+    import json, pathlib
+    report = BenchmarkReport.from_dict(json.loads(pathlib.Path("benchmark.json").read_text()))
+    events = annual_events_by_scenario(report)
+    no_fault = [sid for sid in report.scenarios()
+                if not next((r.ground_truth for r in report.rows if r.scenario_id == sid), {})]
+    assert no_fault, "benchmark.json 應含至少一個無故障干擾情境"
+    for sid in no_fault:
+        assert events[sid] == 0.0, f"{sid} 不該被算成事件"
+    # 工安事件池不可被稀釋：純工安情境仍拿到完整的每年 12 次
+    hazard = [sid for sid in report.scenarios()
+              if (gt := next((r.ground_truth for r in report.rows if r.scenario_id == sid), {}))
+              and all(k == "SAFETY" for k in gt)]
+    assert hazard and abs(sum(events[s] for s in hazard) - 12.0) < 1e-6

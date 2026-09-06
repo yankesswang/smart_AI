@@ -577,13 +577,22 @@ def annual_events_by_scenario(
     hazard_pool = A.ANNUAL_HAZARD_INTRUSION_EVENTS_PER_LINE * frequency_multiplier
 
     # 先分組：同一個 (fault_id, 是否含工安) 的情境平分該格的次數，避免重複計算。
+    #
+    # **無故障的干擾情境（fp-*）不是事件，年度次數為 0。** 它們是 Benchmark 用來量誤報率的
+    # 壓力測試：機台完全健康，任何「效益」都只是 Guardian 沒白停機而 Baseline B 白停了的差額。
+    # 把它們算進事件池，等於把「客戶工廠每年會發生 N 次假警報」當成效益來源年化 ——
+    # 那個 N 沒有任何依據，而且會把工安事件池平分給它們、稀釋真正的工安效益。
+    # 誤報的代價已經在 Benchmark 的誤報彙總與 §5 刻意不計入的項目裡誠實揭露，不進 ROI。
     buckets: dict[tuple[str | None, bool], list[str]] = {}
+    out: dict[str, float] = {}
     for scenario_id in report.scenarios():
         gt = next((r.ground_truth for r in report.rows if r.scenario_id == scenario_id), {})
+        if not gt:
+            out[scenario_id] = 0.0
+            continue
         fault_id = next((v for k, v in gt.items() if k != "SAFETY"), None)
         buckets.setdefault((fault_id, "SAFETY" in gt), []).append(scenario_id)
 
-    out: dict[str, float] = {}
     for (fault_id, has_safety), scenario_ids in buckets.items():
         if fault_id is None:
             share = hazard_pool
