@@ -36,3 +36,22 @@ data/external/
 .DS_Store
 .idea/
 .vscode/
+
+# ppt-master 工作目錄產出（只追蹤 projects/*/notes/ 的講稿）
+projects/*/analysis/
+projects/*/backup*/
+projects/*/exports/
+projects/*/icons/
+projects/*/images/
+projects/*/live_preview/
+projects/*/sources/
+projects/*/svg_final/
+projects/*/svg_output/
+projects/*/validation/
+projects/*/templates/
+
+# ppt-master 在根目錄的來源快照
+/sources/
+
+# ROI 量測產出（與 benchmark.json 同性質，由 factory-guardian business 重跑）
+business.json
