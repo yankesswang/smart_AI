@@ -25,7 +25,7 @@ pytest tests/test_agentgate_*.py -q    # 512 個測試,離線 11 秒跑完
 客戶 ─→ 客服對話(工單) ─→ AI Agent 讀對話、決定呼叫工具 ─→【AgentGate】─→ 後台系統
 ```
 
-[`console.py`](../agentgate/console.py) 把前兩段補上。`agentgate serve` 啟動時會
+[`console.py`](../../agentgate/console.py) 把前兩段補上。`agentgate serve` 啟動時會
 **回填 45 分鐘的當班歷史**(約 400 件工單、1,600 筆稽核紀錄),之後由前端輪詢
 懶惰推進,每分鐘約 9 件持續進來 —— 不開背景執行緒,少一個併發來源。
 
@@ -80,14 +80,14 @@ AgentGate 站在 AI Agent 與真實系統之間。Agent 不再直接呼叫工具
 
 | 關卡 | 模組 | 職責 | 輸出 | 用 LLM |
 |---|---|---|---|---|
-| **G1** 動作解析 | [`gates/g1_resolution.py`](../agentgate/gates/g1_resolution.py) | 工具呼叫 → 結構化動作;參數 schema 驗證 | `ActionRequest` | 僅映射 |
-| **G0** 來源信任 | [`gates/g0_provenance.py`](../agentgate/gates/g0_provenance.py) | 取來源鏈**最弱環節**算出風險上限(G0-R1);不可信來源若有指紋相符的獨立確認節點則提升上限(G0-R2) | `TrustVerdict` | 否 |
-| **G2** 政策裁決 | [`gates/g2_policy.py`](../agentgate/gates/g2_policy.py) | 7 動作權限表 + 13 條 AG 規則,動態升級風險 | `PolicyDecision` + `Finding[]` | **否(刻意)** |
-| **G3** 後果預演 | [`gates/g3_projection.py`](../agentgate/gates/g3_projection.py)、[`shadow.py`](../agentgate/shadow.py) | 影子環境乾跑,實測影響範圍/可回復性/個資欄位/**連鎖後果** | `Projection` | 否 |
-| **G4** 人工核准 | [`gates/g4_approval.py`](../agentgate/gates/g4_approval.py) | 組裝 15 秒證據包,綁定經驗證的核准者身分 | `PendingApproval` | 否 |
-| **G5** 執行與封存 | [`gates/g5_audit.py`](../agentgate/gates/g5_audit.py) | 執行 + 雜湊鏈封存 + **HMAC 簽章的外部錨點**,可驗證竄改與整條重寫 | `ChainRecord` / `Anchor` | 否 |
+| **G1** 動作解析 | [`gates/g1_resolution.py`](../../agentgate/gates/g1_resolution.py) | 工具呼叫 → 結構化動作;參數 schema 驗證 | `ActionRequest` | 僅映射 |
+| **G0** 來源信任 | [`gates/g0_provenance.py`](../../agentgate/gates/g0_provenance.py) | 取來源鏈**最弱環節**算出風險上限(G0-R1);不可信來源若有指紋相符的獨立確認節點則提升上限(G0-R2) | `TrustVerdict` | 否 |
+| **G2** 政策裁決 | [`gates/g2_policy.py`](../../agentgate/gates/g2_policy.py) | 7 動作權限表 + 13 條 AG 規則,動態升級風險 | `PolicyDecision` + `Finding[]` | **否(刻意)** |
+| **G3** 後果預演 | [`gates/g3_projection.py`](../../agentgate/gates/g3_projection.py)、[`shadow.py`](../../agentgate/shadow.py) | 影子環境乾跑,實測影響範圍/可回復性/個資欄位/**連鎖後果** | `Projection` | 否 |
+| **G4** 人工核准 | [`gates/g4_approval.py`](../../agentgate/gates/g4_approval.py) | 組裝 15 秒證據包,綁定經驗證的核准者身分 | `PendingApproval` | 否 |
+| **G5** 執行與封存 | [`gates/g5_audit.py`](../../agentgate/gates/g5_audit.py) | 執行 + 雜湊鏈封存 + **HMAC 簽章的外部錨點**,可驗證竄改與整條重寫 | `ChainRecord` / `Anchor` | 否 |
 
-編排在 [`pipeline.py`](../agentgate/pipeline.py) `evaluate()`,單一入口、單一出口(`GateVerdict`)。
+編排在 [`pipeline.py`](../../agentgate/pipeline.py) `evaluate()`,單一入口、單一出口(`GateVerdict`)。
 
 ### 一次動作的生命週期(退費 5,000 元,Demo 步驟 2)
 
@@ -171,7 +171,7 @@ PDF 夾帶指令同時觸發 `AG-10`(批次筆數超標)與 `G0-R1`,兩條 findi
 
 整個 G0 建立在「來源鏈是真的」這個前提上。來源鏈如果由 LLM 自報,
 那它就跟 Agent 說「我是管理員」一樣沒有價值。所以
-[`gates/g1_resolution.py`](../agentgate/gates/g1_resolution.py) 定義了一個契約
+[`gates/g1_resolution.py`](../../agentgate/gates/g1_resolution.py) 定義了一個契約
 `attach_runtime_provenance(payload, harness_context)`:
 
 * `tool_output` 節點由 **harness** 依「這次 tool call 之前 Agent 讀過哪些工具回傳與附件」
@@ -414,16 +414,16 @@ AG-02 的免除更嚴一級:授權節點的指紋必須等於**這一次**動作
 
 | 規格 | 實作 | 測試 |
 |---|---|---|
-| §4.1 動作本體論(7 動作、動態風險) | [`agentgate/ontology.py`](../agentgate/ontology.py)、[`gates/g2_policy.py`](../agentgate/gates/g2_policy.py) `ACTION_POLICY` + 13 條 AG 規則 | `test_agentgate_core.py::TestG2Policy` |
-| §4.2 來源信任分級(G0-R1 權限升級阻斷、G0-R2 確認提升) | [`gates/g0_provenance.py`](../agentgate/gates/g0_provenance.py) + [`pipeline.py`](../agentgate/pipeline.py) 的 G0-R1 檢查(G2 後與 G3 抬升後各一次);來源鏈注入契約在 [`gates/g1_resolution.py`](../agentgate/gates/g1_resolution.py) `attach_runtime_provenance()` | `TestG0Provenance`、`TestG0ConfirmationLifting`、`TestRuntimeProvenanceContract` |
+| §4.1 動作本體論(7 動作、動態風險) | [`agentgate/ontology.py`](../../agentgate/ontology.py)、[`gates/g2_policy.py`](../../agentgate/gates/g2_policy.py) `ACTION_POLICY` + 13 條 AG 規則 | `test_agentgate_core.py::TestG2Policy` |
+| §4.2 來源信任分級(G0-R1 權限升級阻斷、G0-R2 確認提升) | [`gates/g0_provenance.py`](../../agentgate/gates/g0_provenance.py) + [`pipeline.py`](../../agentgate/pipeline.py) 的 G0-R1 檢查(G2 後與 G3 抬升後各一次);來源鏈注入契約在 [`gates/g1_resolution.py`](../../agentgate/gates/g1_resolution.py) `attach_runtime_provenance()` | `TestG0Provenance`、`TestG0ConfirmationLifting`、`TestRuntimeProvenanceContract` |
 | §4.3 G2 刻意不用 LLM;政策可版本化 | 確定性 `PolicyEngine`;G1 的 schema 驗證守住 LLM 映射輸出;`PolicyEngine.version()` 內容雜湊 + YAML/JSON 限額覆寫 | `test_describe_exports_rules_and_policy`、`TestPolicyVersioning` |
-| §4.4 後果預演(影子環境乾跑) | [`shadow.py`](../agentgate/shadow.py) `project()` 不寫入 / `execute()` 生效;[`gates/g3_projection.py`](../agentgate/gates/g3_projection.py) AG-30(不可回復需核准)、AG-31(範圍逃逸實測)、AG-32(連鎖服務中斷) | `TestG3Projection`、`TestG3Cascade`、`TestCascadeAndG3Escalation` |
-| §4.5 人工核准(15 秒證據包) | [`gates/g4_approval.py`](../agentgate/gates/g4_approval.py) 證據包 + 門號綁定碼模擬(§9) | `TestEvidenceAndMetrics::test_evidence_package_content` |
-| §4.6 雜湊鏈稽核 + 外部錨定 | [`gates/g5_audit.py`](../agentgate/gates/g5_audit.py):雜湊鏈、完整率、竄改偵測、降級留痕、HMAC 簽章錨點(`anchor()` / `verify()`) | `TestG5AuditChain`、`TestG5Anchoring` |
-| §5.1 測試集 **142 條(93/49)** | [`scenarios.py`](../agentgate/scenarios.py):注入 24、權限混淆 14、範圍逃逸 11,每條標註預期裁決;含 12 條「附件 + 明確確認」的正常情境與 memory / user_unverified 兩通道 | `test_agentgate_scenarios.py` 逐條交叉檢核(142 條) |
-| §5.2 指標(FBR 拆為 gate/approver,共 8 項)§5.3 消融 | [`validation.py`](../agentgate/validation.py):B0/B1/B2/B3/B3−G0/B3−G3 + 最壞核准者敏感度 | `test_agentgate_validation.py`、`TestFBRDecomposition` |
-| §6 API 規格 | [`api/server.py`](../agentgate/api/server.py):九個 `/api/gate/*` 端點全數實作 | `test_agentgate_api.py` |
-| §7.2 四分鐘劇本 + A/B 對照 | [`demo.py`](../agentgate/demo.py) + Dashboard「四分鐘劇本」分頁(關 Gate 匯出個資的對照當場可見) | `TestDemoEndpoints::test_ab_compare_restores_gate` |
+| §4.4 後果預演(影子環境乾跑) | [`shadow.py`](../../agentgate/shadow.py) `project()` 不寫入 / `execute()` 生效;[`gates/g3_projection.py`](../../agentgate/gates/g3_projection.py) AG-30(不可回復需核准)、AG-31(範圍逃逸實測)、AG-32(連鎖服務中斷) | `TestG3Projection`、`TestG3Cascade`、`TestCascadeAndG3Escalation` |
+| §4.5 人工核准(15 秒證據包) | [`gates/g4_approval.py`](../../agentgate/gates/g4_approval.py) 證據包 + 門號綁定碼模擬(§9) | `TestEvidenceAndMetrics::test_evidence_package_content` |
+| §4.6 雜湊鏈稽核 + 外部錨定 | [`gates/g5_audit.py`](../../agentgate/gates/g5_audit.py):雜湊鏈、完整率、竄改偵測、降級留痕、HMAC 簽章錨點(`anchor()` / `verify()`) | `TestG5AuditChain`、`TestG5Anchoring` |
+| §5.1 測試集 **142 條(93/49)** | [`scenarios.py`](../../agentgate/scenarios.py):注入 24、權限混淆 14、範圍逃逸 11,每條標註預期裁決;含 12 條「附件 + 明確確認」的正常情境與 memory / user_unverified 兩通道 | `test_agentgate_scenarios.py` 逐條交叉檢核(142 條) |
+| §5.2 指標(FBR 拆為 gate/approver,共 8 項)§5.3 消融 | [`validation.py`](../../agentgate/validation.py):B0/B1/B2/B3/B3−G0/B3−G3 + 最壞核准者敏感度 | `test_agentgate_validation.py`、`TestFBRDecomposition` |
+| §6 API 規格 | [`api/server.py`](../../agentgate/api/server.py):九個 `/api/gate/*` 端點全數實作 | `test_agentgate_api.py` |
+| §7.2 四分鐘劇本 + A/B 對照 | [`demo.py`](../../agentgate/demo.py) + Dashboard「四分鐘劇本」分頁(關 Gate 匯出個資的對照當場可見) | `TestDemoEndpoints::test_ab_compare_restores_gate` |
 
 ## 驗證結果(自建 142 條測試集)
 
@@ -552,10 +552,10 @@ G0-R2 確認提升關掉了「附件裡的指令直接被執行」這條路,但�
 
 ### 一、被治理的 Agent:`agentgate/agent.py`
 
-[`CustomerServiceAgent`](../agentgate/agent.py) 用 OpenAI function calling,
+[`CustomerServiceAgent`](../../agentgate/agent.py) 用 OpenAI function calling,
 讀一件工單(`console.Case`:對話逐字 + 附件**全文**),自己決定呼叫七個後台工具
 中的哪一個、參數是什麼。七個工具一對一對應 `ActionKind`,參數 schema 是
-[`gates/g1_resolution.py`](../agentgate/gates/g1_resolution.py) `_REQUIRED_PARAMS`
+[`gates/g1_resolution.py`](../../agentgate/gates/g1_resolution.py) `_REQUIRED_PARAMS`
 的超集(`TestToolSchema::test_required_params_are_a_superset_of_g1` 逐項檢核 ——
 少一個欄位,模型就會產生一個注定過不了驗證的呼叫,那不是治理,是我們把 Agent 寫壞了)。
 

@@ -12,7 +12,7 @@ python3 -m factory_guardian.validation --prototypes 2 --json runs/ai4i_validatio
 
 **誠實邊界**：AI4I 2020 是**合成**資料集（作者以物理規則模擬產生的公開 benchmark），
 不是真實工廠量測，而且**不含振動訊號**。詳見 `ai4i.py` 模組 docstring 與
-`docs/external_validation.md`。本套件不被 `twin/`、`agents/`、`api/`、`cli.py` 匯入。
+`docs/factory_guardian/external_validation.md`。本套件不被 `twin/`、`agents/`、`api/`、`cli.py` 匯入。
 
 ## 第二條驗證線：CWRU 軸承振動
 
@@ -29,7 +29,7 @@ python3 -m factory_guardian.validation.cwru --json runs/cwru_validation.json
 攤平到同一個命名空間只會讓「這個數字是哪一份資料集算的」變得可以搞錯。
 用 `from factory_guardian.validation import cwru` 明確指名。
 它另外需要 `scipy`（讀 `.mat`、抗混疊降採樣），也不該讓 AI4I 那條線被這個相依綁住。
-誠實邊界見 `cwru.py` 模組 docstring 與 `docs/cwru_validation.md`。
+誠實邊界見 `cwru.py` 模組 docstring 與 `docs/factory_guardian/cwru_validation.md`。
 """
 
 from .ai4i import (

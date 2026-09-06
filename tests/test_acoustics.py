@@ -543,7 +543,7 @@ _DATASET_ZIP = (
 )
 requires_dataset = pytest.mark.skipif(
     bool(_MISSING_AUDIO) or not _DATASET_ZIP.is_file(),
-    reason="DCASE2020 pump 資料集未下載（1.03 GB，不進版控）——見 docs/acoustic_validation.md",
+    reason="DCASE2020 pump 資料集未下載（1.03 GB，不進版控）——見 docs/factory_guardian/acoustic_validation.md",
 )
 
 
@@ -581,7 +581,7 @@ def test_dataset_split_matches_the_documented_counts():
 
 @requires_dataset
 def test_detector_beats_the_official_baseline_on_real_pump_audio():
-    """docs/acoustic_validation.md §4 那張表，就是這個測試算出來的。
+    """docs/factory_guardian/acoustic_validation.md §4 那張表，就是這個測試算出來的。
 
     第一次執行會建特徵快取（約 23 秒）；之後由快取評估只要 1.4 秒。
     """

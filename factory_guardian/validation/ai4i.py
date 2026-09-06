@@ -31,7 +31,7 @@ Factory Guardian 的診斷核心是「感測器指紋餘弦相似度」（`agent
 還有一個必須講清楚的限制：**本資料集沒有振動訊號**。本專案診斷用四訊號
 （vibration / temperature / current / rpm），這裡只覆蓋得到其中三個，
 而且 `bearing_degradation` 這個以振動主導的故障在 AI4I 中**沒有對應模式**。
-詳見 `MISSING_SIGNALS` 與 `docs/external_validation.md`。
+詳見 `MISSING_SIGNALS` 與 `docs/factory_guardian/external_validation.md`。
 
 ## 資料集
 
@@ -82,7 +82,7 @@ EXPECTED_ROWS = 10_000
 class ChannelMapping:
     """一條「UCI 欄位 → 本專案訊號」的對應規則。
 
-    對應規則寫成資料而不是散在程式裡，是為了讓 `docs/external_validation.md` 的對應表
+    對應規則寫成資料而不是散在程式裡，是為了讓 `docs/factory_guardian/external_validation.md` 的對應表
     可以直接由這裡產生 —— 文件與程式不可能對不上。
     """
 
@@ -262,7 +262,7 @@ FAULT_MODES: tuple[FaultModeMapping, ...] = (
             "對應本專案 motor_overload：主軸驅動的功率超出正常工作區間。"
             "本專案的指紋是「current 上升 + rpm 下降」，AI4I 的 PWF 是「T·ω 離開 [3.5, 9] kW」。"
             "注意 PWF 是**雙側**條件（功率過低也算），這對單一原型的指紋法是硬考題，"
-            "結果與檢討見 docs/external_validation.md。"
+            "結果與檢討見 docs/factory_guardian/external_validation.md。"
         ),
         generating_rule="機械功率 P = 扭矩 × 角速度 低於 3500 W 或高於 9000 W 時觸發。",
     ),

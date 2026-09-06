@@ -239,7 +239,7 @@ class AcousticObservation:
     與 Sensor / Orders / Manual / History 的標示方式一致。
 
     偵測器本身的有效性另外用**外部真實工業錄音**驗證（DCASE2020 Task2 / MIMII pump），
-    那份驗證與本物件沒有任何資料流往來 —— 見 ``docs/acoustic_validation.md``。
+    那份驗證與本物件沒有任何資料流往來 —— 見 ``docs/factory_guardian/acoustic_validation.md``。
 
     四個指標的定義與物理意義見 ``acoustics/signatures.py``。
     """
@@ -818,7 +818,7 @@ class FaultSignature:
 
     ## 為什麼一個故障可以有多個原型
 
-    原本的設計是「一個故障 = 一個方向向量」。`docs/external_validation.md` §8.2 在 AI4I 2020
+    原本的設計是「一個故障 = 一個方向向量」。`docs/factory_guardian/external_validation.md` §8.2 在 AI4I 2020
     上量到這個假設的代價：AI4I 的 PWF（功率失效）生成規則是**雙側**的（功率過低**或**過高），
     在偏離向量空間裡是兩個相反方向的簇，單一質心會落在兩簇中間、方向失去意義 ——
     PWF recall 只有 0.388，80 筆裡 42 筆被誤判成 HDF。改成每模式 2 個原型、取最大餘弦後，

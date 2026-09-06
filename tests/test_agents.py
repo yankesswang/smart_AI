@@ -356,7 +356,7 @@ def test_work_order_is_complete_and_cites_sop(ctx):
 
 # --------------------------------------------------------------------------------- 多原型指紋
 class TestMultiPrototypeFingerprint:
-    """一個故障對多個指紋方向（`docs/external_validation.md` §8.2 的改進）。
+    """一個故障對多個指紋方向（`docs/factory_guardian/external_validation.md` §8.2 的改進）。
 
     這一組測試守的是兩件事，而且第二件比第一件重要：
 
@@ -450,7 +450,7 @@ class TestMultiPrototypeFingerprint:
 
 # --------------------------------------------------------------------------------- 判別式接手層
 class TestDiscriminativeReranker:
-    """判別式模型接手排序（`docs/external_validation.md` §8.3）。
+    """判別式模型接手排序（`docs/factory_guardian/external_validation.md` §8.3）。
 
     最重要的一條是 `test_default_is_bit_identical`：這一層預設不存在，
     存在但權重為 0 時也不得改變任何一個數字。否則「加了一層新東西」就會

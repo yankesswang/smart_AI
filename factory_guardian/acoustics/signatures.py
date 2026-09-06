@@ -33,7 +33,7 @@ Agent 仍須從帶雜訊的麥克風指標比對出最像的那一個。
 > **SYNTHETIC DEMO DATA** —— 本檔案的 nominal 值與 delta 值皆為競賽用假設參數，
 > 由公開文獻對滾動軸承故障聲學特徵的一般性描述設定量級，**不代表任何真實設備商規格**。
 > 偵測器本身的有效性是用**外部真實工業錄音**（DCASE2020 Task2 / MIMII pump）驗證的，
-> 見 ``docs/acoustic_validation.md``；那份驗證與這裡的合成參數完全獨立。
+> 見 ``docs/factory_guardian/acoustic_validation.md``；那份驗證與這裡的合成參數完全獨立。
 """
 
 from __future__ import annotations

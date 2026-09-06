@@ -676,7 +676,7 @@ def run_validation(
     notes.append(
         f"本次主實驗每個故障模式使用 {n_prototypes} 個指紋原型"
         + (
-            "（＝ docs/external_validation.md §7 既有數字的設定）。"
+            "（＝ docs/factory_guardian/external_validation.md §7 既有數字的設定）。"
             if n_prototypes == 1
             else "（多原型；對應 agents/diagnosis.py 的 FaultSignature.alt_prototypes 設計）。"
         )

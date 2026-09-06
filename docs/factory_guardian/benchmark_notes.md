@@ -10,10 +10,10 @@
 > pytest -q tests/test_benchmark.py                   # 報表本身的測試
 > ```
 >
-> 程式碼：[`benchmark.py`](../factory_guardian/benchmark.py)、
-> [`episode.py`](../factory_guardian/episode.py)、
-> [`twin/scenarios.py`](../factory_guardian/twin/scenarios.py)、
-> [`twin/disturbances.py`](../factory_guardian/twin/disturbances.py)
+> 程式碼：[`benchmark.py`](../../factory_guardian/benchmark.py)、
+> [`episode.py`](../../factory_guardian/episode.py)、
+> [`twin/scenarios.py`](../../factory_guardian/twin/scenarios.py)、
+> [`twin/disturbances.py`](../../factory_guardian/twin/disturbances.py)
 
 ---
 
@@ -73,7 +73,7 @@ Baseline C 把現行流程真正花時間的那一段放進模擬：**人工判�
 
 ## 2. 情境三族與注入參數
 
-情境定義在 [`twin/scenarios.py`](../factory_guardian/twin/scenarios.py)；
+情境定義在 [`twin/scenarios.py`](../../factory_guardian/twin/scenarios.py)；
 `FieldScenario` 額外帶兩樣孿生體內部設定：`disturbances`（干擾）與 `reality_gap`（現實落差）。
 兩者都不會進入任何 Agent 的輸入，`snapshot()` 也不會輸出它們
 （測試：`test_twin.py::test_snapshot_never_exposes_disturbances_or_reality_gap`）。

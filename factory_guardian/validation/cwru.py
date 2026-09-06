@@ -2,7 +2,7 @@
 
 ## 這個模組為什麼存在
 
-`docs/external_validation.md` §2.2 自己寫了一條缺口：AI4I 2020 **沒有振動訊號**，
+`docs/factory_guardian/external_validation.md` §2.2 自己寫了一條缺口：AI4I 2020 **沒有振動訊號**，
 所以 Demo 主線情境 `bearing-degradation` 的診斷能力「這份驗證完全沒有覆蓋到」。
 而振動正是它指紋裡權重最大的分量（`FAULTS["bearing_degradation"].deltas` 的
 vibration = 6.8，為最大項）。整個提案最常被展示的那條情境，外部驗證是空的。
@@ -40,7 +40,7 @@ Case Western Reserve University Bearing Data Center 的軸承振動資料集正�
 不用隨機切窗的理由很實際：同一段錄音切出來的窗彼此高度相關，
 隨機切分會讓訓練與測試共享同一段錄音，數字會虛高到沒有意義。
 
-重現指令見 `docs/cwru_validation.md`。
+重現指令見 `docs/factory_guardian/cwru_validation.md`。
 """
 
 from __future__ import annotations
@@ -197,7 +197,7 @@ class FeatureMapping:
     """一條「CWRU 振動特徵 → 本專案訊號語彙」的對應規則。
 
     寫成資料而不是散在程式裡，理由與 `ai4i.CHANNEL_MAPPINGS` 相同：
-    `docs/cwru_validation.md` 的對應表由這裡產生，文件與程式不可能對不上。
+    `docs/factory_guardian/cwru_validation.md` 的對應表由這裡產生，文件與程式不可能對不上。
     """
 
     feature: str
@@ -336,7 +336,7 @@ def download(directory: Path | None = None, timeout: float = 120.0) -> list[int]
 
     刻意**不**在 `load_windows()` 裡自動呼叫：測試與 CI 不該在背後打外部網路。
     下載是一個明確的動作（`python -m factory_guardian.validation.cwru --download`），
-    失敗時的補救指令寫在 `docs/cwru_validation.md`。
+    失敗時的補救指令寫在 `docs/factory_guardian/cwru_validation.md`。
     """
     root = directory or DATASET_DIR
     root.mkdir(parents=True, exist_ok=True)
@@ -377,7 +377,7 @@ def _signal(recording: Recording, directory: Path) -> "list[float]":
     if recording.mat_key not in mat:
         raise KeyError(
             f"{recording.file_id}.mat 內找不到變數 {recording.mat_key}；"
-            "檔案可能下載不完整，請重新下載（見 docs/cwru_validation.md）。"
+            "檔案可能下載不完整，請重新下載（見 docs/factory_guardian/cwru_validation.md）。"
         )
     x = np.asarray(mat[recording.mat_key], dtype=float).ravel()
     if recording.sample_rate_hz != SAMPLE_RATE_HZ:

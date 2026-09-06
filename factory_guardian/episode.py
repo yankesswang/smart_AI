@@ -14,7 +14,7 @@
 B 是「告警完全被接住而且技師零等待」。真實工廠兩者都不是，
 拿 41% 對 97% 當開場，第一個追問就會是「哪家工廠是這樣運作的？」。
 Baseline C 把現行流程真正花時間的那一段放進模擬：**人工判定根因的 90 分鐘**
-（來源見 docs/business_case.md §3 假設參數表）。它才是該被比較的對象。
+（來源見 docs/factory_guardian/business_case.md §3 假設參數表）。它才是該被比較的對象。
 
 四種模式跑在**相同 seed、相同情境、相同總時長**的孿生體上，所以 KPI 可以直接比較。
 Ground Truth 只在這裡用來評分，不會進入任何 Agent 的輸入。
@@ -39,7 +39,7 @@ from .twin.topology import UNIT_MARGIN_NTD
 MODES = ("baseline-a", "baseline-b", "baseline-c", "guardian")
 
 # 現行流程人工判定根因所需工時（分鐘）。
-# 來源：docs/business_case.md §3 假設參數表 —— 到場 15 ＋ 現場量測 30 ＋
+# 來源：docs/factory_guardian/business_case.md §3 假設參數表 —— 到場 15 ＋ 現場量測 30 ＋
 # 查手冊與歷史工單 30 ＋ 與生產確認 15。ROI 模型和這裡引用的是同一個數字，
 # 兩邊不能各講各的。
 MANUAL_DIAGNOSIS_MIN = 90.0
@@ -396,7 +396,7 @@ def _run_baseline_c(kpi: EpisodeKPI, twin: FactoryTwin, audit: AuditLog, event, 
        90 分鐘量的是「判定根因」，不是「反應時間」；現行流程在判定結論出來以前，
        不會停一台還在出貨的機台。這也是為什麼二次損壞在現況下是真的會發生的事。
        這是現況的**悲觀端**；樂觀端是 Baseline B（技師零等待、立刻停機）。
-       ROI 模型引用的是兩者的機率混合（docs/business_case.md §2.1），不是單獨任何一個。
+       ROI 模型引用的是兩者的機率混合（docs/factory_guardian/business_case.md §2.1），不是單獨任何一個。
 
     2. **維修工時取自實際故障的 `repair_min`。**
        人到現場把機器拆開來看，最後總會找到真正壞的是什麼 —— 所以 Baseline C

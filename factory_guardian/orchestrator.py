@@ -352,7 +352,7 @@ class Orchestrator:
         「新穩態」和「才剛開始的斜坡」就是同一條線。
 
         這幾分鐘不是保守，是資訊還不存在。它的代價會誠實地出現在
-        Mean Time To Diagnose 與產能達成率上（見 docs/benchmark_notes.md），
+        Mean Time To Diagnose 與產能達成率上（見 docs/factory_guardian/benchmark_notes.md），
         換到的是干擾情境下的零誤動作 —— 這個交換划不划算，數字攤在那裡讓人自己判斷。
 
         注意兩者都不影響 Detection Latency —— 偵測早就發生了。

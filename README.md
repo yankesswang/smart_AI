@@ -12,7 +12,7 @@
 > 當設備、產線或工安異常發生時，AI 不只警告，而是自動完成
 > **偵測 → 診斷 → 影響分析 → 方案規劃 → 安全檢查 → 人工核准 → 執行/派工 → 驗證恢復**。
 
-本專案依 [`docs/Factory_Guardian_AI_競賽提案與Demo規格.docx`](docs/) 實作，
+本專案依 [`docs/factory_guardian/Factory_Guardian_AI_競賽提案與Demo規格.docx`](docs/) 實作，
 是一套可執行、可量測、可稽核的系統，不是簡報。
 
 ---
@@ -127,16 +127,16 @@ Orchestrator 因此會在信心不足時**先繼續觀察**（`confirm_diagnosis
 
 單一原型指紋在雙側故障（例如馬達過載 vs 失載、冷卻不足 vs 過度冷卻）上會失去方向：
 兩種相反的偏離平均起來，餘弦自然指不到正確答案 —— 這是在
-[`docs/external_validation.md`](docs/external_validation.md) 的外部資料上實測發現的結構性弱點
+[`docs/factory_guardian/external_validation.md`](docs/factory_guardian/external_validation.md) 的外部資料上實測發現的結構性弱點
 （PWF recall 只有 0.388）。`FaultSignature` 因此支援 `alt_prototypes`，比對時對所有原型取最大餘弦；
 `motor_overload`（失載）與 `cooling_failure`（冷卻過度）各補了一個手冊來源的第二原型，
 `bearing_degradation` 手冊上只有一個方向，行為逐位元不變。外部資料上重跑後 Top-1 從
 0.724 升到 **0.821**（詳見該文件 §11）。AI4I 沒有振動訊號，覆蓋不到 `bearing_degradation`
-本身——這個缺口由 [`docs/cwru_validation.md`](docs/cwru_validation.md)（真實加速規量測的軸承振動
+本身——這個缺口由 [`docs/factory_guardian/cwru_validation.md`](docs/factory_guardian/cwru_validation.md)（真實加速規量測的軸承振動
 資料集）補上：內圈／滾珠／外圈三類歸因 Top-1 0.994，但同尺寸內的數字幾乎飽和、
 偵測任務單一 RMS 門檻的 AUC 還贏過指紋法（1.000 vs 0.982）；真正有資訊量的跨嚴重度轉移測試
 （拿壞得明顯的訓練、測剛開始壞的）Top-1 掉到 0.335 ＝ 隨機，因此**不宣稱驗證了早期偵測能力**。
-[`docs/acoustic_validation.md`](docs/acoustic_validation.md)（DCASE2020 pump，真實工業錄音）
+[`docs/factory_guardian/acoustic_validation.md`](docs/factory_guardian/acoustic_validation.md)（DCASE2020 pump，真實工業錄音）
 則驗證聲學偵測器：平均 AUC 0.903 vs 官方 baseline 0.726。三條線各自誠實地寫出輸的地方，
 不是只報贏的數字。
 
@@ -213,7 +213,7 @@ factory-guardian benchmark --out benchmark.json
 
 跑在**相同 seed、相同情境、相同總時長**的孿生體上，所以 KPI 直接可比。
 以下是實際執行結果（非預錄）。每一個對照組的定義、每一個情境的注入參數、
-以及為什麼 Baseline C 才是該比的對象，逐項寫在 [`docs/benchmark_notes.md`](docs/benchmark_notes.md)。
+以及為什麼 Baseline C 才是該比的對象，逐項寫在 [`docs/factory_guardian/benchmark_notes.md`](docs/factory_guardian/benchmark_notes.md)。
 
 | 對照組 | 它代表什麼 |
 |---|---|
@@ -225,7 +225,7 @@ factory-guardian benchmark --out benchmark.json
 **為什麼加 Baseline C**：A 和 B 都是理想化的極端，沒有工廠長那樣。
 拿 41% 對 95% 當開場，第一個追問就是「哪家工廠是這樣運作的？」。
 C 把現行流程真正花時間的那一段放進模擬 —— 人工判定根因的 90 分鐘
-（來源是 [`docs/business_case.md`](docs/business_case.md) §3 假設參數表，ROI 模型引用的是同一個數字）。
+（來源是 [`docs/factory_guardian/business_case.md`](docs/factory_guardian/business_case.md) §3 假設參數表，ROI 模型引用的是同一個數字）。
 
 ### 設備故障情境（bearing / cooling / motor 平均）
 

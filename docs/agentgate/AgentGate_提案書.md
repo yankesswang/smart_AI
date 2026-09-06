@@ -289,11 +289,11 @@ G1 動作解析 ──▶ G0 來源信任 ──▶ G2 政策裁決 ──▶ G3
 |---|---|---|---|
 | 1 | 真 Agent 注入 Demo 輸出、映射/閘門延遲 | `agentgate/agent.py`、`agentgate/console.py` | `python3 -m agentgate.cli agent-run injection` |
 | 1, 11 | 142 條測試集、B0/B3 HAR | `agentgate/scenarios.py`、`agentgate/validation.py` | `python3 -m agentgate.cli benchmark` |
-| 6, 11 | AgentDojo 外部驗證數字 | `agentgate/external/agentdojo_eval.py`、[`docs/agentgate_external_validation.md`](agentgate_external_validation.md) | `python3 -c "from agentgate.external import run_agentdojo_eval; run_agentdojo_eval(record=False)"` |
+| 6, 11 | AgentDojo 外部驗證數字 | `agentgate/external/agentdojo_eval.py`、[`docs/agentgate/agentgate_external_validation.md`](agentgate_external_validation.md) | `python3 -c "from agentgate.external import run_agentdojo_eval; run_agentdojo_eval(record=False)"` |
 | 7, 11 | 13 條 AG 規則、AG-32 連鎖 | `agentgate/gates/g2_policy.py`、`agentgate/gates/g3_projection.py` | `pytest tests/test_agentgate_core.py -k TestCascadeAndG3Escalation -q` |
 | 10 | 雜湊鏈完整率、外部錨定 | `agentgate/gates/g5_audit.py` | `pytest tests/test_agentgate_core.py -k TestG5Anchoring -q` |
 | 11 | B1-llm 真實數字、不一致率 3.5% | `runs/agentgate_b1_llm.json`、`agentgate/llm_baseline.py` | `python3 -m agentgate.cli benchmark-llm --cached` |
-| 12 | ROI 三情境、破口分析、人力等效 | `agentgate/business/`、[`docs/agentgate_business_case.md`](agentgate_business_case.md) | `python3 -m agentgate.cli business-case` |
+| 12 | ROI 三情境、破口分析、人力等效 | `agentgate/business/`、[`docs/agentgate/agentgate_business_case.md`](agentgate_business_case.md) | `python3 -m agentgate.cli business-case` |
 | 13 | Mobile ID 查證 | 公開報導（iThome、TechNews，2018） | 見第 13 頁引註，非程式碼可重現項 |
 
 *本文件所有效能與商業數字未經任何企業實地驗證，測試集為自建合成資料，不宣稱與中華電信有任何既有合作關係。*

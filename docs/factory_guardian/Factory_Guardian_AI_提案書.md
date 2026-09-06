@@ -315,17 +315,17 @@ CAM-01 目前是**腳本化合成觀測**，真實影像 VLM 尚未串接；P2 B
 
 | 主題 | 來源檔案 | 重現指令 |
 |---|---|---|
-| 四組對照組 KPI（第 1、2、6、10、11、14 頁） | `benchmark.json`、[`docs/benchmark_notes.md`](benchmark_notes.md) | `factory-guardian benchmark --out benchmark.json` |
-| 商業案例三情境／破口分析（第 12 頁） | `business.json`、[`docs/business_case.md`](business_case.md) | `factory-guardian business-case --from-json benchmark.json --out business.json` |
-| AI4I 外部驗證與多原型（第 7、10 頁） | [`docs/external_validation.md`](external_validation.md) | `python3 -m factory_guardian.validation --json runs/ai4i_validation.json`（單原型）／`--prototypes 2`（多原型） |
-| DCASE2020 聲學驗證（第 10 頁） | [`docs/acoustic_validation.md`](acoustic_validation.md) | 見該文件 §7 重現指令 |
-| CWRU 軸承振動驗證（第 7、10、14 頁） | [`docs/cwru_validation.md`](cwru_validation.md) | `python3 -m factory_guardian.validation.cwru --download` 後 `python3 -m factory_guardian.validation.cwru --json runs/cwru_validation.json` |
+| 四組對照組 KPI（第 1、2、6、10、11、14 頁） | `benchmark.json`、[`docs/factory_guardian/benchmark_notes.md`](benchmark_notes.md) | `factory-guardian benchmark --out benchmark.json` |
+| 商業案例三情境／破口分析（第 12 頁） | `business.json`、[`docs/factory_guardian/business_case.md`](business_case.md) | `factory-guardian business-case --from-json benchmark.json --out business.json` |
+| AI4I 外部驗證與多原型（第 7、10 頁） | [`docs/factory_guardian/external_validation.md`](external_validation.md) | `python3 -m factory_guardian.validation --json runs/ai4i_validation.json`（單原型）／`--prototypes 2`（多原型） |
+| DCASE2020 聲學驗證（第 10 頁） | [`docs/factory_guardian/acoustic_validation.md`](acoustic_validation.md) | 見該文件 §7 重現指令 |
+| CWRU 軸承振動驗證（第 7、10、14 頁） | [`docs/factory_guardian/cwru_validation.md`](cwru_validation.md) | `python3 -m factory_guardian.validation.cwru --download` 後 `python3 -m factory_guardian.validation.cwru --json runs/cwru_validation.json` |
 | 5G/MEC 頻寬與 Edge/Cloud 不變式（第 5、13 頁） | `factory_guardian/deployment/{tiers,budget,link}.py` | `python3 -c "from factory_guardian.deployment import budget; import json; print(json.dumps(budget.bandwidth_budget(), ensure_ascii=False, indent=1))"` |
 | 稽核軌跡實測量（第 8、13 頁） | `factory_guardian/deployment/budget.py` 常數 | 見該檔頭部 `MEASURED_*` 常數與其量測腳本說明 |
-| Demo 舞台劇本與穩定度（第 10 頁） | [`docs/demo_runbook.md`](demo_runbook.md) | `factory-guardian stage-check --runs 30` |
+| Demo 舞台劇本與穩定度（第 10 頁） | [`docs/factory_guardian/demo_runbook.md`](demo_runbook.md) | `factory-guardian stage-check --runs 30` |
 | 測試總數與離線時間（第 10、15 頁） | `tests/` | `python3 -m pytest -q` |
-| 競品比較（第 12 頁） | [`docs/business_case.md`](business_case.md) §11、研究文件 §2/§4.5 | — |
-| 15 頁配置與評分權重（全文） | [`2026中華電信智慧創新應用大賽_完整研究與勝率策略.md`](2026中華電信智慧創新應用大賽_完整研究與勝率策略.md) §1.4/§1.5/§5.6 | — |
+| 競品比較（第 12 頁） | [`docs/factory_guardian/business_case.md`](business_case.md) §11、研究文件 §2/§4.5 | — |
+| 15 頁配置與評分權重（全文） | [`2026中華電信智慧創新應用大賽_完整研究與勝率策略.md`](../shared/2026中華電信智慧創新應用大賽_完整研究與勝率策略.md) §1.4/§1.5/§5.6 | — |
 
 **紀律聲明**：本文件所有標示「實測」的數字皆可用上表指令當場重新產生並比對；標示「推導」的數字
 公式與輸入已在正文或來源文件中列出；標示「假設」的數字皆附推估過程，且未經任何真實工廠報價或

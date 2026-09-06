@@ -10,7 +10,7 @@
 > 同一份資料上 Top-1 從 0.724 升到 **0.821**、macro-F1 0.706 → **0.830**。
 > §1–§10 記錄的是**單原型**版本（預設值，數字原地可重現），
 > 採納後的重跑數字與程式改動記在 **§11**。
-> 缺振動訊號那條缺口（§2.2）則由 [`docs/cwru_validation.md`](cwru_validation.md) 補上。
+> 缺振動訊號那條缺口（§2.2）則由 [`docs/factory_guardian/cwru_validation.md`](cwru_validation.md) 補上。
 
 重現指令：
 
@@ -19,14 +19,14 @@ python3 -m factory_guardian.validation --json runs/ai4i_validation.json         
 python3 -m factory_guardian.validation --prototypes 2 --json runs/ai4i_validation_p2.json  # 多原型（§11.1）
 ```
 
-程式在 [`factory_guardian/validation/`](../factory_guardian/validation/)，
-測試在 [`tests/test_validation.py`](../tests/test_validation.py)（資料集不存在時自動 skip）。
+程式在 [`factory_guardian/validation/`](../../factory_guardian/validation/)，
+測試在 [`tests/test_validation.py`](../../tests/test_validation.py)（資料集不存在時自動 skip）。
 
 ---
 
 ## 1. 為什麼需要這份文件
 
-本專案的診斷核心是**感測器指紋餘弦相似度**（[`agents/diagnosis.py`](../factory_guardian/agents/diagnosis.py)，
+本專案的診斷核心是**感測器指紋餘弦相似度**（[`agents/diagnosis.py`](../../factory_guardian/agents/diagnosis.py)，
 權重 0.75，另加歷史先驗 0.15、文件支持 0.10）。問題在於：指紋的來源、被比對的訊號、
 以及評估用的標籤，**全部來自本專案自己的 Digital Twin**。
 
@@ -35,7 +35,7 @@ python3 -m factory_guardian.validation --prototypes 2 --json runs/ai4i_validatio
 而且要和 baseline 比 —— 研究文件 §3.3 明列失分警訊：
 「只報模型準確率，沒有和現行流程、人工判斷或簡單 baseline 比較。」
 
-聲學偵測器那一側由 [`docs/acoustic_validation.md`](acoustic_validation.md)（DCASE2020 pump，
+聲學偵測器那一側由 [`docs/factory_guardian/acoustic_validation.md`](acoustic_validation.md)（DCASE2020 pump，
 真實工業錄音）負責；這份文件負責**感測器指紋診斷法**。
 
 ---
@@ -405,7 +405,7 @@ LR 0.964 / RF 0.939 明顯優於指紋法 0.724，且學習曲線顯示這個差
 
 §2.2 寫過：AI4I 沒有振動訊號，Demo 主線情境 `bearing-degradation` 的診斷能力
 「這份驗證完全沒有覆蓋到」。這個缺口現在由 **CWRU 軸承振動資料集**（真實加速規量測）
-補上，見 [`docs/cwru_validation.md`](cwru_validation.md)。
+補上，見 [`docs/factory_guardian/cwru_validation.md`](cwru_validation.md)。
 
 一句話摘要（細節與誠實邊界請讀那份文件，不要只引用這三行）：
 
@@ -422,7 +422,7 @@ LR 0.964 / RF 0.939 明顯優於指紋法 0.724，且學習曲線顯示這個差
 * ❌ 不宣稱本專案已在**真實工廠資料**上驗證診斷能力（AI4I 是合成資料集）。
 * ❌ 不宣稱指紋法優於機器學習分類器（實測輸給 LR 與 RF，見 §7.1）。
 * ❌ 不宣稱已驗證 `bearing_degradation` 的辨識能力（缺振動訊號，AI4I 無對應模式）。
-  **這份文件**仍然不覆蓋它；覆蓋它的是 [`docs/cwru_validation.md`](cwru_validation.md)，
+  **這份文件**仍然不覆蓋它；覆蓋它的是 [`docs/factory_guardian/cwru_validation.md`](cwru_validation.md)，
   而那份文件同樣明確不宣稱早期偵測能力（跨嚴重度轉移 Top-1 = 隨機）。
 * ❌ 不宣稱系統能辨識「不可診斷案例」（RNF 拒答率並未優於一般正常樣本，見 §7.5）。
 * ❌ 不宣稱指紋法可單獨作為異常偵測器（端到端 macro-F1 0.308，見 §7.4）。
@@ -467,9 +467,9 @@ softmax 溫度 `0.16`、四訊號偏離向量餘弦。
 
 §8 列的是「從結果學到的三件事」。這一節記錄其中兩件**已經改進到程式裡**之後的實際數字，
 以及一件刻意**沒有**打開的改進與理由。改動落在
-[`agents/diagnosis.py`](../factory_guardian/agents/diagnosis.py)、
-[`twin/faults.py`](../factory_guardian/twin/faults.py)、
-[`domain.py`](../factory_guardian/domain.py) 的 `FaultSignature`。
+[`agents/diagnosis.py`](../../factory_guardian/agents/diagnosis.py)、
+[`twin/faults.py`](../../factory_guardian/twin/faults.py)、
+[`domain.py`](../../factory_guardian/domain.py) 的 `FaultSignature`。
 
 ### 11.1 多原型指紋：診斷 Agent 已採納
 

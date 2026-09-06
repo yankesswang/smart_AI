@@ -246,7 +246,7 @@ class HarmMeasurement:
             "har_governed_b3": round(self.har_governed, 4),
             "prevented_share": round(self.prevented_share, 4),
             "attack_scenarios": self.scenarios,
-            "caveat": "測試集為自建合成資料;外部效度另見 docs/agentgate_external_validation.md。",
+            "caveat": "測試集為自建合成資料;外部效度另見 docs/agentgate/agentgate_external_validation.md。",
         }
 
 

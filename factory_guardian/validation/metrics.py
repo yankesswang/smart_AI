@@ -184,14 +184,14 @@ def roc_auc(labels: list[int], scores: list[float]) -> float:
 def partial_auc(labels: list[int], scores: list[float], p: float = 0.1) -> float:
     """pAUC：只看 FPR ∈ [0, p] 的那一段。
 
-    p = 0.1 是 DCASE2020 Task2 的官方設定，本專案 `docs/acoustic_validation.md` 也用它。
+    p = 0.1 是 DCASE2020 Task2 的官方設定，本專案 `docs/factory_guardian/acoustic_validation.md` 也用它。
     **它比 AUC 重要**：工廠現場能容忍的誤報率本來就只有個位數百分比，
     「整體 AUC 漂亮但要接受 50% 誤報才抓得到異常」的模型在產線上沒有價值。
 
     回傳值採 **McClish 標準化**（與 `sklearn.metrics.roc_auc_score(..., max_fpr=p)`
     以及 `acoustics/detector.py::auc_scores` 逐位元一致），因此隨機猜測 = 0.5、完美 = 1.0，
-    和 AUC 同一把尺。不這樣做的話，`docs/cwru_validation.md` 的 pAUC 就不能和
-    `docs/acoustic_validation.md` 的 0.785 放在同一句話裡比較 —— 那是最容易發生、
+    和 AUC 同一把尺。不這樣做的話，`docs/factory_guardian/cwru_validation.md` 的 pAUC 就不能和
+    `docs/factory_guardian/acoustic_validation.md` 的 0.785 放在同一句話裡比較 —— 那是最容易發生、
     也最難被發現的一種數字造假。
     """
     if p <= 0.0 or p > 1.0:

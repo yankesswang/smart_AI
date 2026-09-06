@@ -48,7 +48,7 @@ class MaintenanceCase:
     # 依該故障在 `twin/faults.py` 的手冊徵兆方向補一個合理值。
     # 因此它**可以**用來驗證「判別式接手層這條程式路徑會不會動、降級會不會被記錄」，
     # **不可以**被引用為「判別式模型在真實維修歷史上有效」——
-    # 那個宣稱要等真實場域資料，見 `docs/external_validation.md` §8.3。
+    # 那個宣稱要等真實場域資料，見 `docs/factory_guardian/external_validation.md` §8.3。
     readings: dict[str, float] = field(default_factory=dict)
     readings_synthetic: bool = True
 

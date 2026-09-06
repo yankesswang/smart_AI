@@ -184,7 +184,7 @@ COMPARISON_AXES: tuple[ComparisonAxis, ...] = (
         "商業論據",
         "公開資料未見量化 ROI 與定價。",
         "實測 KPI → 年化模型 → 三情境 ROI、回收期與破口分析，假設全部具名且標示來源。",
-        "business/（本模組）、docs/business_case.md",
+        "business/（本模組）、docs/factory_guardian/business_case.md",
     ),
 )
 

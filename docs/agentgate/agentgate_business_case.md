@@ -17,7 +17,7 @@ python3 -c "from agentgate.business import run_business_case; run_business_case(
 python3 -m pytest tests/test_agentgate_business.py -q
 ```
 
-程式碼：[`agentgate/business/`](../agentgate/business/)｜測試：[`tests/test_agentgate_business.py`](../tests/test_agentgate_business.py)
+程式碼：[`agentgate/business/`](../../agentgate/business/)｜測試：[`tests/test_agentgate_business.py`](../../tests/test_agentgate_business.py)
 
 ---
 
@@ -139,7 +139,7 @@ Agent 動得比這更少的企業，不需要買這一層。
 ## 3. 假設參數全表
 
 > CLI 會把這張表原樣輸出（`run_business_case()` 的 `assumptions` 區塊）。
-> 程式碼在 [`business/assumptions.py`](../agentgate/business/assumptions.py)，
+> 程式碼在 [`business/assumptions.py`](../../agentgate/business/assumptions.py)，
 > 每一項都有 `basis`、`source` 與 `rationale`。
 
 | 參數 | 值 | 單位 | 依據 | 來源／推估過程 |
@@ -227,7 +227,7 @@ Agent 動得比這更少的企業，不需要買這一層。
 規格 §8.1 的「收費」欄只有一行：「平台年費 ＋ 依受治理 Agent 數或裁決次數計價；
 高保證等級（不可否認稽核）另計」。以下是級距。
 **全部是假設值** —— 我們沒有報過價、沒有簽過約，所以不會把它們寫成「市場行情」。
-程式碼在 [`business/pricing.py`](../agentgate/business/pricing.py)。
+程式碼在 [`business/pricing.py`](../../agentgate/business/pricing.py)。
 
 ### 6.1 三段式定價
 

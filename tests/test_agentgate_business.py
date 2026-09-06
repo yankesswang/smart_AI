@@ -1,6 +1,6 @@
 """AgentGate 商業案例的守門測試(規格 §8)。
 
-這裡守三件事,對應 `docs/agentgate_business_case.md` 的三個承諾:
+這裡守三件事,對應 `docs/agentgate/agentgate_business_case.md` 的三個承諾:
 
 1. **數字可重現** —— 同樣的 seed 與視窗必然得到同樣的實測比例、同樣的 ROI。
    一份每次跑都不一樣的商業案例,在決賽問答時無法被驗證。

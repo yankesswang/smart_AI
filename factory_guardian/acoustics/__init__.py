@@ -15,7 +15,7 @@
 **誠實邊界**：Demo 閉環裡的每一個聲學數字都是合成的（由既有振動物理推導），
 真實錄音只用來證明偵測器本身有效，兩者沒有任何一條資料流互通 ——
 `dcase.py` 不被 `twin/`、`agents/`、`api/` 的任何一處匯入。詳見 `synthetic.py`
-的模組說明與 `docs/acoustic_validation.md`。
+的模組說明與 `docs/factory_guardian/acoustic_validation.md`。
 
 `features` / `detector` / `dcase` 需要 numpy / librosa / scikit-learn，
 所以採**延遲匯入**：Agent 閉環、CLI 與 Dashboard 不載入它們，

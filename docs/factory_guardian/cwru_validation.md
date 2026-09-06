@@ -17,21 +17,21 @@ python3 -m factory_guardian.validation.cwru \
     --json runs/cwru_validation.json --markdown runs/cwru_validation.md
 ```
 
-程式在 [`factory_guardian/validation/cwru.py`](../factory_guardian/validation/cwru.py)，
-測試在 [`tests/test_cwru.py`](../tests/test_cwru.py)（資料不存在時自動 skip，CI 不會紅）。
+程式在 [`factory_guardian/validation/cwru.py`](../../factory_guardian/validation/cwru.py)，
+測試在 [`tests/test_cwru.py`](../../tests/test_cwru.py)（資料不存在時自動 skip，CI 不會紅）。
 
 ---
 
 ## 1. 為什麼需要這份文件
 
-[`docs/external_validation.md`](external_validation.md) §2.2 自己寫了一條缺口：
+[`docs/factory_guardian/external_validation.md`](external_validation.md) §2.2 自己寫了一條缺口：
 
 > **`bearing_degradation` 在 AI4I 中沒有對應模式**。而振動正是它指紋裡權重最大的分量。
 > Demo 主線情境 `bearing-degradation` 的診斷能力，**這份驗證完全沒有覆蓋到**。
 
 也就是說：整個提案最常被展示的那條情境（軸承劣化 → 提前 47 分鐘發現 → 轉單 → 維修），
 它的**診斷**環節在外部資料上是空白的。AI4I 沒有振動訊號，
-`docs/acoustic_validation.md`（DCASE2020 pump）驗證的是**聲學偵測器**、不是感測器指紋。
+`docs/factory_guardian/acoustic_validation.md`（DCASE2020 pump）驗證的是**聲學偵測器**、不是感測器指紋。
 
 CWRU Bearing Data Center 正好補這一塊：**真實加速規量測**（不是模擬）、公開、
 數十篇論文引用，故障類型正好是內圈／外圈／滾珠 ——
@@ -218,7 +218,7 @@ nominal 的定義就是「這台機器沒事時長什麼樣」，混進故障樣
 | **歸因**（三類軸承故障） | 指紋餘弦：每類的原型 = 訓練窗偏離向量的質心，取最大餘弦排序。 | Top-1 / Top-2 / macro-F1 / 混淆矩陣 |
 
 pAUC 採 **McClish 標準化**，與 `acoustics/detector.py`（sklearn `max_fpr`）逐位元一致 ——
-否則本文件的 pAUC 不能和 `docs/acoustic_validation.md` 的 0.785 放在同一句話裡比較，
+否則本文件的 pAUC 不能和 `docs/factory_guardian/acoustic_validation.md` 的 0.785 放在同一句話裡比較，
 而那是最容易發生、也最難被發現的一種數字造假（`test_partial_auc_is_mcclish_standardised`）。
 
 **這裡沒有歷史先驗、也沒有文件語料**（CWRU 沒有機台 id、沒有手冊），

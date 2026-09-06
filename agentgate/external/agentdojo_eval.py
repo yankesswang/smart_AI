@@ -711,7 +711,7 @@ def run_agentdojo_eval(
     if not AGENTDOJO_AVAILABLE:  # pragma: no cover
         raise RuntimeError(
             "agentdojo 未安裝。`pip install agentdojo`,或見 "
-            "docs/agentgate_external_validation.md 的備援方案。"
+            "docs/agentgate/agentgate_external_validation.md 的備援方案。"
         )
     out_dir = out_dir or DATA_DIR
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -11,7 +11,7 @@
 3. **現實落差情境** —— 故障是真的，但這一台機器的徵兆和手冊寫的不一樣，
    或某個感測器本身有問題。考的是「診斷錯了之後，系統會不會自己發現」。
 
-第 2、3 類的參數（注入幅度、時間、落差倍率）逐項說明在 `docs/benchmark_notes.md`。
+第 2、3 類的參數（注入幅度、時間、落差倍率）逐項說明在 `docs/factory_guardian/benchmark_notes.md`。
 """
 
 from __future__ import annotations

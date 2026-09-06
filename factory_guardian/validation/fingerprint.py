@@ -13,7 +13,7 @@
 代價是**兩邊會漂**：diagnosis.py 之後若調整融合權重或新增模態（例如聲學），
 這裡不會自動跟上。這是刻意的取捨 —— 外部驗證數字必須綁定「被驗證的那個版本的方法」，
 否則「這個 0.724 是在驗證什麼」會說不清楚。本檔驗證的版本記錄在
-`docs/external_validation.md` 的「被驗證的方法版本」一節；要重新驗證新版本時，
+`docs/factory_guardian/external_validation.md` 的「被驗證的方法版本」一節；要重新驗證新版本時，
 更新這裡的常數並重跑 `python -m factory_guardian.validation`。
 
 ## 對應關係
@@ -159,7 +159,7 @@ class FingerprintModel:
 
     channels: tuple[str, ...] = STRICT_CHANNELS
     n_prototypes: int = 1
-    """每個故障模式的原型數量。**預設 1**，讓 `docs/external_validation.md` 既有的數字原地可重現。
+    """每個故障模式的原型數量。**預設 1**，讓 `docs/factory_guardian/external_validation.md` 既有的數字原地可重現。
 
     >1 時改用 k-means 分群出多個子指紋、取最大餘弦。這原本只是 ablation，
     但 §8.2 的結果（Top-1 0.724 → 0.821）已經被 `agents/diagnosis.py` 採納：

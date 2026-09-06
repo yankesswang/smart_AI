@@ -47,7 +47,7 @@ requires_dataset = pytest.mark.skipif(
     reason=(
         f"CWRU 資料不存在（{cwru.DATASET_DIR}）；"
         "取得指令：python3 -m factory_guardian.validation.cwru --download"
-        "（另見 docs/cwru_validation.md）"
+        "（另見 docs/factory_guardian/cwru_validation.md）"
     ),
 )
 

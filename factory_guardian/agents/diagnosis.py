@@ -65,14 +65,14 @@ Digital Twin 的聲學指標由既有的振動／轉速／電流物理算出（�
 
 > ⚠️ Demo 的聲學觀測是**合成**的。偵測器本身的有效性另以外部真實工業錄音驗證
 > （DCASE2020 Task2 / MIMII pump，AUC 0.903 / pAUC 0.785），
-> 兩者沒有任何資料流往來 —— 見 `docs/acoustic_validation.md`。
+> 兩者沒有任何資料流往來 —— 見 `docs/factory_guardian/acoustic_validation.md`。
 
 ---
 
 ## 一個故障可以有多個指紋（多原型）
 
 原本每個故障只有一個方向向量。外部驗證量到了這個假設的代價
-（`docs/external_validation.md` §8.2）：AI4I 2020 的 PWF 是**雙側**故障
+（`docs/factory_guardian/external_validation.md` §8.2）：AI4I 2020 的 PWF 是**雙側**故障
 （功率過低**或**過高），單一質心落在兩簇中間、方向失去意義，recall 只有 0.388。
 改成每模式 2 個原型、取最大餘弦後，PWF recall 0.788、整體 Top-1 0.724 → **0.821**。
 
@@ -89,7 +89,7 @@ Digital Twin 的聲學指標由既有的振動／轉速／電流物理算出（�
 
 ## 判別式接手層（`DiscriminativeReranker`）
 
-`docs/external_validation.md` §8.3 的實測：同樣特徵下 LogisticRegression 的
+`docs/factory_guardian/external_validation.md` §8.3 的實測：同樣特徵下 LogisticRegression 的
 歸因 Top-1 是 0.964，指紋餘弦法是 0.724。誠實的結論是「有標註歷史時該加一層判別式模型」，
 但那**不會**取代指紋法 —— 兩者需要的輸入不同（標註樣本 vs 手冊徵兆）。
 
@@ -159,7 +159,7 @@ ACOUSTIC_STRENGTH_FULL = 0.60
 # 這個門檻同時是對評審的承諾：**新產線第一天不會有這一層**，指紋法自己撐冷啟動。
 MIN_LABELLED_CASES = 8
 # 判別式模型在合分裡的固定權重。**預設 0.0 = 完全不參與**。
-# 為什麼預設是 0：`docs/external_validation.md` §8.3 的結論是「有標註歷史時應該加這一層」，
+# 為什麼預設是 0：`docs/factory_guardian/external_validation.md` §8.3 的結論是「有標註歷史時應該加這一層」，
 # 但 Demo 的維修歷史是合成的，用它去推動排名等於用自己編的資料證明自己。
 # 所以程式路徑先建好、可稽核、可開啟，權重留給有真實標註歷史的場域再調。
 W_RERANK = 0.0
@@ -199,7 +199,7 @@ class DiscriminativeReranker:
 
     ## 為什麼有這一層
 
-    `docs/external_validation.md` §8.3 的實測結論：在 AI4I 2020 上，同樣的特徵下
+    `docs/factory_guardian/external_validation.md` §8.3 的實測結論：在 AI4I 2020 上，同樣的特徵下
     LogisticRegression 的歸因 Top-1 是 0.964，指紋餘弦法是 0.724，而且學習曲線顯示
     這個差距在「每個模式只有 1 筆標註」時就已經存在。誠實的結論是 ——
     **在已經累積標註故障歷史的產線上，判別式模型該被加進來。**
@@ -598,7 +598,7 @@ class DiagnosisAgent(Agent):
             "provenance": observation.provenance,
             "note": (
                 "SYNTHETIC DEMO AUDIO — 合成音訊特徵（由振動物理推導），非真實錄音。"
-                "偵測器本身以 DCASE2020/MIMII 真實工業錄音另行驗證，見 docs/acoustic_validation.md。"
+                "偵測器本身以 DCASE2020/MIMII 真實工業錄音另行驗證，見 docs/factory_guardian/acoustic_validation.md。"
             ),
         }
 

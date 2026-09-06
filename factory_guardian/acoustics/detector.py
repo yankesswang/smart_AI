@@ -23,7 +23,7 @@ DCASE2020 Task2 的訓練集**只有正常音訊**（pump 是 3,349 段正常、
    啟動、穩態、不同負載點各自成群。全域方法（PCA 重建誤差、單一高斯的
    Mahalanobis 距離）會把「密度低但完全正常」的稀有工況判成異常。
    LOF 比的是「這個點的局部密度，相對於它鄰居的局部密度」，所以稀有但自洽的工況不會被誤殺。
-   同一份特徵上的實測（完整表格見 ``docs/acoustic_validation.md``）：
+   同一份特徵上的實測（完整表格見 ``docs/factory_guardian/acoustic_validation.md``）：
 
    | 偵測器 | AUC | pAUC |
    |---|---:|---:|
@@ -40,7 +40,7 @@ DCASE2020 Task2 的訓練集**只有正常音訊**（pump 是 3,349 段正常、
 
 k（鄰居數）取 5。這**不是**挑出來的最高點（最高點在 k=3，AUC 0.9068）：
 k 從 2 到 8 的 AUC 落在 0.897–0.907 之間，是一片平台而不是一根尖峰
-（完整 sweep 見 ``docs/acoustic_validation.md``），取平台中段是為了不讓數字看起來像調出來的。
+（完整 sweep 見 ``docs/factory_guardian/acoustic_validation.md``），取平台中段是為了不讓數字看起來像調出來的。
 
 ## 快取
 

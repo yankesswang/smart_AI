@@ -61,7 +61,7 @@ from factory_guardian.validation.runner import (
 
 requires_dataset = pytest.mark.skipif(
     not dataset_available(),
-    reason=f"AI4I 2020 資料集不存在（{ai4i.DATASET_CSV}）；請見 docs/external_validation.md",
+    reason=f"AI4I 2020 資料集不存在（{ai4i.DATASET_CSV}）；請見 docs/factory_guardian/external_validation.md",
 )
 
 
@@ -470,7 +470,7 @@ class TestValidationRun:
 class TestMultiPrototype:
     """`--prototypes N` 與 `Candidate.prototype`。
 
-    這一組守的核心是「預設不動既有數字」：`docs/external_validation.md` §7 的
+    這一組守的核心是「預設不動既有數字」：`docs/factory_guardian/external_validation.md` §7 的
     0.724 / 0.706 全部綁在單一原型上，預設值一改，別人重跑就對不起來了。
     """
 
@@ -554,7 +554,7 @@ class TestAucMath:
 
     def test_partial_auc_is_mcclish_standardised(self) -> None:
         """pAUC 必須與 `acoustics/detector.py`（sklearn max_fpr）同一把尺，
-        否則 `docs/cwru_validation.md` 的 pAUC 不能和 `docs/acoustic_validation.md` 比較。"""
+        否則 `docs/factory_guardian/cwru_validation.md` 的 pAUC 不能和 `docs/factory_guardian/acoustic_validation.md` 比較。"""
         from factory_guardian.validation.metrics import partial_auc
 
         assert partial_auc([0, 0, 1, 1], [0.1, 0.2, 0.8, 0.9], 0.1) == pytest.approx(1.0)

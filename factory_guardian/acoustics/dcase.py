@@ -8,7 +8,7 @@ Factory Guardian 的 Digital Twin 是**合成**的，這是提案最容易被質
 把偵測器再跑一次，並且和官方 baseline 比。
 
 這份資料的角色僅止於此 —— 它**驗證偵測器**，不參與 Demo 閉環，
-也不會有任何一個 Demo 上的數字來自這裡。邊界寫在 `docs/acoustic_validation.md`，
+也不會有任何一個 Demo 上的數字來自這裡。邊界寫在 `docs/factory_guardian/acoustic_validation.md`，
 程式上的保證則是：本模組不被 `twin/`、`agents/`、`api/` 任何一處匯入。
 
 ## 資料集
@@ -152,7 +152,7 @@ def build_feature_cache(
     zip_file = Path(zip_path or DATASET_ZIP)
     out = Path(cache_path or FEATURE_CACHE)
     if not zip_file.is_file():
-        raise FileNotFoundError(f"找不到資料集 {zip_file}（見 docs/acoustic_validation.md 的下載說明）")
+        raise FileNotFoundError(f"找不到資料集 {zip_file}（見 docs/factory_guardian/acoustic_validation.md 的下載說明）")
 
     clips = list(iter_clips(zip_file))
     features = np.empty((len(clips), config.feature_dim), dtype=np.float32)

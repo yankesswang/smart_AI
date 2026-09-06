@@ -79,7 +79,7 @@ THROUGHPUT_EMA_ALPHA = 0.45
 # --- 麥克風（合成聲學觀測）-------------------------------------------------------------
 # ⚠️ 這裡產生的是**合成音訊特徵**，由既有的振動／轉速／電流物理推導，不是真實錄音。
 #    真實工業錄音（DCASE2020 / MIMII）只用來驗證偵測器，不參與本迴圈。
-#    完整的邊界說明見 acoustics/synthetic.py 與 docs/acoustic_validation.md。
+#    完整的邊界說明見 acoustics/synthetic.py 與 docs/factory_guardian/acoustic_validation.md。
 # 只有加工機台裝麥克風：本 Demo 的三個故障模型都發生在主軸／冷卻／馬達上，
 # 包裝機沒有 vibration 訊號，也就沒有對應的聲學故障模型可以誠實地渲染。
 MIC_SAMPLE_RATE_HZ = 16_000
@@ -744,7 +744,7 @@ class FactoryTwin:
 
         ⚠️ **合成音訊特徵**：目標值由 `acoustics/synthetic.py` 從既有的故障物理推導，
         不是真實錄音。真實工業錄音（DCASE2020 / MIMII）只用來驗證偵測器本身有效，
-        不參與這個迴圈 —— 見 `docs/acoustic_validation.md`。
+        不參與這個迴圈 —— 見 `docs/factory_guardian/acoustic_validation.md`。
 
         流程與 `_refresh_signals` 的感測器路徑逐字對應，這是刻意的：
         目標值 → 一階遲滯 → 量測雜訊。聲音是「多一個感測器」，不是「另一套規則」。

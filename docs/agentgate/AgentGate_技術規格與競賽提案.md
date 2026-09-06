@@ -48,7 +48,7 @@
 
 ### 1.3 收斂範圍
 
-依 [競賽研究文件 §4.3](2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L249) 的收斂原則,鎖死四個維度:
+依 [競賽研究文件 §4.3](../shared/2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L249) 的收斂原則,鎖死四個維度:
 
 | 維度 | 設定 |
 |---|---|
@@ -59,7 +59,7 @@
 
 ### 1.4 明確不做(Non-goals)
 
-[競賽研究文件 §3.3](2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L221) 的第一條失分警訊是「一次全做」。以下明確排除:
+[競賽研究文件 §3.3](../shared/2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L221) 的第一條失分警訊是「一次全做」。以下明確排除:
 
 - ❌ **不做 Agent 本身**。AgentGate 治理別人的 Agent,不與之競爭。Demo 中的客服 Agent 是被治理對象,刻意做得普通。
 - ❌ **不做內容安全過濾**。仇恨言論、色情、越獄提示詞屬於既有產品範疇(Llama Guard、NeMo Guardrails)。AgentGate 管的是**動作**,不是**文字**。
@@ -132,9 +132,9 @@ flowchart LR
 
 | 現有模組 | 行數 | 處置 | 說明 |
 |---|---|---|---|
-| [`policy/engine.py`](../factory_guardian/policy/engine.py) | 418 | **抽取協定,重寫規則** | `ActionPolicy` / `PolicyDecision` / `SafetyRule` / `PolicyEngine` 四個型別完全領域無關,直接成為 G2 核心;12 條 `_rule_*` 函式綁死工廠語意,全部替換 |
-| [`audit.py`](../factory_guardian/audit.py) | — | **幾乎直接搬** | `AuditLog` / `load_audit` / `summarize_audit` 已是通用事件流 |
-| [`agents/base.py`](../factory_guardian/agents/base.py) | — | **搬骨架** | 稽核、計時、工具呼叫統計;Task Completion / Tool Success / Decision Latency 的累積機制正是 §5.2 要的 |
+| [`policy/engine.py`](../../factory_guardian/policy/engine.py) | 418 | **抽取協定,重寫規則** | `ActionPolicy` / `PolicyDecision` / `SafetyRule` / `PolicyEngine` 四個型別完全領域無關,直接成為 G2 核心;12 條 `_rule_*` 函式綁死工廠語意,全部替換 |
+| [`audit.py`](../../factory_guardian/audit.py) | — | **幾乎直接搬** | `AuditLog` / `load_audit` / `summarize_audit` 已是通用事件流 |
+| [`agents/base.py`](../../factory_guardian/agents/base.py) | — | **搬骨架** | 稽核、計時、工具呼叫統計;Task Completion / Tool Success / Decision Latency 的累積機制正是 §5.2 要的 |
 | `validation/` | 2,154 | **搬架構換資料** | `runner` / `metrics` / `baselines` 的消融框架可用,`ai4i` / `fingerprint` 丟棄 |
 | `business/` | 1,950 | **搬架構換數字** | `assumptions` / `model` / `pricing` 的 ROI 建模骨架可用 |
 | `deployment/` | 1,281 | **搬** | `link` / `tiers` 的 Edge/Cloud 降級在此處變成「稽核資料不出境」的落地論述 |
@@ -306,7 +306,7 @@ class Projection:
 
 ## 5. 資料與驗證
 
-> 這一節是決賽 40% 技術成熟度的主要戰場,也是 [§3.3 失分警訊](2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L223)「只報準確率不比 baseline」的直接回應。**9/6 更新:本節數字已全數實測,§5.1 的 W1 資料可得性驗證已完成。**
+> 這一節是決賽 40% 技術成熟度的主要戰場,也是 [§3.3 失分警訊](../shared/2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L223)「只報準確率不比 baseline」的直接回應。**9/6 更新:本節數字已全數實測,§5.1 的 W1 資料可得性驗證已完成。**
 
 ### 5.1 資料來源(已完成)
 
@@ -487,7 +487,7 @@ class GateVerdict:
 | 企業客戶通路 | CHT 是台灣最大 B2B 通路 | 銷售路徑,不是技術依賴 |
 | **CHT 自身** | 首個客戶。CHT 要讓 Agent 碰千萬用戶帳務,就需要這一層 | 最強的落地論述:買方就是主辦方 |
 
-> 提案中不得暗示已有合作關係。[競賽辦法 §1.7](2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L118) 明訂既有專案合作廠商將被取消資格。
+> 提案中不得暗示已有合作關係。[競賽辦法 §1.7](../shared/2026中華電信智慧創新應用大賽_完整研究與勝率策略.md#L118) 明訂既有專案合作廠商將被取消資格。
 
 ---
 

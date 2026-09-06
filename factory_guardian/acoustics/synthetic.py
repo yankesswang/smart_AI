@@ -8,7 +8,7 @@
 * Demo 畫面上的每一個聲學數字都來自這裡，因此都是合成的，且一律標記
   `synthetic=True`，與 Sensor / Orders / Manual / History 的處理方式一致。
 * `data/external/` 底下那份 **DCASE2020 / MIMII 真實泵浦錄音，只用來驗證偵測器有效**
-  （見 `acoustics/dcase.py` 與 `docs/acoustic_validation.md`），
+  （見 `acoustics/dcase.py` 與 `docs/factory_guardian/acoustic_validation.md`），
   **完全不參與 Demo 閉環**，也沒有任何一個 Demo 數字來自它。
 
 這兩件事必須分得清清楚楚。程式上的保證是：`acoustics/dcase.py` 不被

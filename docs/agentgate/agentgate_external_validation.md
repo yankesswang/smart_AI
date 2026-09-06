@@ -5,7 +5,7 @@
 >
 > 本文件的順序是刻意的：**先講這份驗證不能證明什麼**（§2），再講方法（§4–§6）、
 > 結果（§7）、以及我們明確不宣稱的事（§9）。
-> 沿用 [`external_validation.md`](external_validation.md)（Factory Guardian 的
+> 沿用 [`external_validation.md`](../factory_guardian/external_validation.md)（Factory Guardian 的
 > AI4I 外部驗證）的同一套紀律。
 
 **結論先講**：AgentDojo 可取得（MIT 授權、`pip install agentdojo` 一行裝好），
@@ -142,7 +142,7 @@ targeted ASR 立刻再降一段。**我們沒有改**，因為那是在看到答
 ```
 
 旗標是對工具行為的**事實陳述**，可以逐條被反駁。程式碼：
-[`agentgate/external/agentdojo_eval.py`](../agentgate/external/agentdojo_eval.py)
+[`agentgate/external/agentdojo_eval.py`](../../agentgate/external/agentdojo_eval.py)
 的 `GENERIC_TOOL_RISK`；規則本身由
 `tests/test_agentgate_external.py::test_風險等級由三個旗標機械推出` 守住。
 

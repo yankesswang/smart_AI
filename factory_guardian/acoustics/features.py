@@ -2,7 +2,7 @@
 
 這個模組是**唯一**的特徵定義處，真實錄音與合成音訊都走同一條路徑：
 
-* `docs/acoustic_validation.md` 報的 AUC / pAUC，是把這裡的 `log_mel_summary()`
+* `docs/factory_guardian/acoustic_validation.md` 報的 AUC / pAUC，是把這裡的 `log_mel_summary()`
   套在 DCASE2020 Task2（MIMII）**真實泵浦錄音**上算出來的。
 * Digital Twin 的 Demo 音訊也是餵給同一個函式（見 `acoustics/synthetic.py`）。
 
@@ -45,7 +45,7 @@ autoencoder 就是這樣）會得到上百萬個訓練樣本，但也強迫模�
 
 加更多統計量**沒有**變好。這件事值得寫出來而不是藏起來：它說明分數不是靠堆特徵堆出來的，
 也提醒我們這些選擇是在 DCASE **development set** 上做的（完整說明見
-`docs/acoustic_validation.md` 的「這些數字的邊界」一節）。
+`docs/factory_guardian/acoustic_validation.md` 的「這些數字的邊界」一節）。
 """
 
 from __future__ import annotations

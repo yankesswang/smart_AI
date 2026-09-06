@@ -26,7 +26,7 @@ class AltSignature:
 
     ## 為什麼需要它
 
-    `docs/external_validation.md` §8.2 在 AI4I 2020 上量到「一個故障一個原型」的結構性代價：
+    `docs/factory_guardian/external_validation.md` §8.2 在 AI4I 2020 上量到「一個故障一個原型」的結構性代價：
     雙側故障（功率過低**或**過高）的單一質心會落在兩簇中間，方向失去意義。
     改成每模式 2 個原型後 Top-1 從 0.724 升到 0.821。
 

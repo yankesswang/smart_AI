@@ -8,7 +8,7 @@ ETH Zurich 的 [AgentDojo](https://github.com/ethz-spylab/agentdojo)(MIT 授權)
 專為**間接提示注入**設計的 agent 評測環境。
 
 這裡刻意不放任何「AgentGate 在公開 benchmark 上得幾分」的結論字串。
-結論寫在 [`docs/agentgate_external_validation.md`](../../docs/agentgate_external_validation.md),
+結論寫在 [`docs/agentgate/agentgate_external_validation.md`](../../docs/agentgate/agentgate_external_validation.md),
 而且第一節是「這驗證的是什麼、不是什麼」。
 """
 

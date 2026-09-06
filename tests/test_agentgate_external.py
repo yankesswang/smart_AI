@@ -6,7 +6,7 @@
   這一層不需要 agentdojo 也不需要 trace 檔。
 * **重放層**(資料在才跑):用 ``data/external/agentdojo/`` 的 trace 離線重放。
   那個目錄已被 gitignore,所以 CI 上通常是 skip —— **skip 不可以讓 CI 變紅**,
-  這是 `docs/external_validation.md` 既有的作法(資料集不存在時自動 skip)。
+  這是 `docs/factory_guardian/external_validation.md` 既有的作法(資料集不存在時自動 skip)。
 """
 
 from __future__ import annotations

@@ -16,7 +16,7 @@ factory-guardian benchmark --out benchmark.json      # 四組對照組（A/B/C/G
 factory-guardian business-case --from-json benchmark.json --out business.json
 ```
 
-程式碼：[`factory_guardian/business/`](../factory_guardian/business/)｜測試：[`tests/test_business.py`](../tests/test_business.py)
+程式碼：[`factory_guardian/business/`](../../factory_guardian/business/)｜測試：[`tests/test_business.py`](../../tests/test_business.py)
 
 ---
 
@@ -88,14 +88,14 @@ Benchmark 的兩組對照組都是理想化的極端：
 **Baseline C（現行流程）現在已經存在，但 ROI 模型仍然用 A/B 機率混合，不是直接讀 C。**
 2026-09-06 的六條工程工作流替 Benchmark 加了 Baseline C（`factory_guardian/benchmark.py`）：
 告警 → 人工判定根因 90 分鐘 → 停機維修 → 復機，不轉單——這是一個現場工程師認得出來的、
-單一自洽的現況模型。但 [`factory_guardian/business/model.py`](../factory_guardian/business/model.py)
+單一自洽的現況模型。但 [`factory_guardian/business/model.py`](../../factory_guardian/business/model.py)
 的 `INCUMBENT_MODES` 目前仍寫死 `("baseline-a", "baseline-b")`，換算 ROI 用的公式沒有改：
 
 ```
 現況 KPI = 逃逸率 × Baseline A + (1 − 逃逸率) × Baseline B
 ```
 
-**為什麼沒有直接改成 C**：這是 [`docs/benchmark_notes.md`](benchmark_notes.md) §1.1 明講過的決定——
+**為什麼沒有直接改成 C**：這是 [`docs/factory_guardian/benchmark_notes.md`](benchmark_notes.md) §1.1 明講過的決定——
 「Baseline C 不是拿來取代它的，它是第三個各自自洽的真實系統，讓 Benchmark 表格上有一個現場工程師
 認得出來的對照組。商業層要不要改用 C，是另一個決定，不在這次改動範圍內。」
 A/B 機率混合與 Baseline C 是**兩個不同的建模哲學**：前者用兩個極端的機率加權去逼近「有些告警被接住、
@@ -111,7 +111,7 @@ Benchmark 表格上的 Baseline C 只用來佐證「90 分鐘人工判定」這�
 
 | 步驟 | 值 | 依據 |
 |---|---:|---|
-| 合成維修語料筆數 | 30 筆 | `實測` 直接數 [`knowledge/corpus.py`](../factory_guardian/knowledge/corpus.py) 的 `MAINTENANCE_HISTORY` |
+| 合成維修語料筆數 | 30 筆 | `實測` 直接數 [`knowledge/corpus.py`](../../factory_guardian/knowledge/corpus.py) 的 `MAINTENANCE_HISTORY` |
 | 語料時間跨度 | 412 天 | `實測` `MaintenanceCase.days_ago` 的最大值 |
 | 每線每年設備異常事件 | **26.6 次** | `推導` 30 ÷ (412/365.25) |
 | 會造成產能衝擊的比例 | 50% | `假設` 語料中相當比例備註為「僅補充潤滑脂即改善，屬極早期」「趨勢監控提早三天發現」，這些在現行流程已被接住 |
@@ -152,7 +152,7 @@ Benchmark 表格上的 Baseline C 只用來佐證「90 分鐘人工判定」這�
 ## 3. 假設參數全表
 
 > CLI 會把這張表原樣印出來（`factory-guardian business-case`）。
-> 程式碼在 [`business/assumptions.py`](../factory_guardian/business/assumptions.py)，每一項都有 `basis`、`source` 與 `rationale`。
+> 程式碼在 [`business/assumptions.py`](../../factory_guardian/business/assumptions.py)，每一項都有 `basis`、`source` 與 `rationale`。
 
 | 參數 | 值 | 單位 | 依據 | 來源／推估過程 |
 |---|---:|---|---|---|
@@ -180,7 +180,7 @@ Benchmark 表格上的 Baseline C 只用來佐證「90 分鐘人工判定」這�
 | 每單位產品邊際貢獻 | 185 | NTD/件 | 假設 | 沿用 `twin/topology.py::UNIT_MARGIN_NTD` |
 | 折現率 | 0.08 | 比例 | 假設 | 中小型製造業資金成本量級，用於三年 NPV |
 
-二次損壞成本不另設常數，直接讀 [`twin/faults.py`](../factory_guardian/twin/faults.py) 的既有值：
+二次損壞成本不另設常數，直接讀 [`twin/faults.py`](../../factory_guardian/twin/faults.py) 的既有值：
 軸承劣化 210,000、冷卻失效 150,000、馬達過載 260,000 NTD。
 
 ---
@@ -309,7 +309,7 @@ ROI、回收期與所有破口臨界值一個字都沒變。這不是模型不�
 
 提案書 §12.1 已列四種收費方式，但只有名詞沒有數字。以下是級距。
 **全部是假設值** —— 我們沒有報過價、沒有簽過約，所以不會把它們寫成「市場行情」。
-程式碼在 [`business/pricing.py`](../factory_guardian/business/pricing.py)。
+程式碼在 [`business/pricing.py`](../../factory_guardian/business/pricing.py)。
 
 ### 6.1 平台 SaaS（依 Factory / Production Line / Machine 計費）
 
@@ -349,7 +349,7 @@ ROI、回收期與所有破口臨界值一個字都沒變。這不是模型不�
 ### 6.5 中華電信網路與邊緣（通路綁售；客戶 TCO，非本方案收入）
 
 這一塊不是我們的收入，但它是**客戶總持有成本的一部分**，也是本架構的硬需求 ——
-[`deployment/tiers.py`](../factory_guardian/deployment/tiers.py) 宣告並用測試守住一條不變式：
+[`deployment/tiers.py`](../../factory_guardian/deployment/tiers.py) 宣告並用測試守住一條不變式：
 **控制關鍵路徑上的每一個元件都必須是 EDGE**。所以它必須進 ROI 的分母。
 它同時也是「業務連結性」這一項的具體金額。
 

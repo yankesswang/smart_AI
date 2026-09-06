@@ -11,7 +11,7 @@
 
 情境也分三類（見 twin/scenarios.py）：設備故障、**無故障干擾**（量誤報）、
 **現實落差**（徵兆偏離手冊，量初次／最終診斷正確率）。
-每個情境的注入參數與每個對照組的定義寫在 docs/benchmark_notes.md。
+每個情境的注入參數與每個對照組的定義寫在 docs/factory_guardian/benchmark_notes.md。
 """
 
 from __future__ import annotations
