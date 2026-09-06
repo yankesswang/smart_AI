@@ -36,7 +36,12 @@ from factory_guardian.stage import (
     script_dict,
 )
 from factory_guardian.stage.director import stage_settings
-from factory_guardian.twin.scenarios import SCENARIOS, get_scenario
+from factory_guardian.twin.scenarios import (
+    FALSE_POSITIVE_SCENARIOS,
+    REALITY_GAP_SCENARIOS,
+    SCENARIOS,
+    get_scenario,
+)
 
 #: 研究文件 §5.1 表格的八個「畫面」，逐字。
 DOC_SCREENS = (
@@ -177,9 +182,19 @@ def test_stage_writes_a_full_audit_trail():
     assert any(c.name == "稽核軌跡涵蓋閉環每一站" and c.passed for c in run.checks)
 
 
-@pytest.mark.parametrize("scenario_id", sorted(SCENARIOS))
+#: 能上台演完八段的情境。
+#
+# 排除兩類，理由不同但同樣重要：
+# * **無故障干擾情境**（fp-*）：根本沒有事故可以演。它們存在的目的正好相反 ——
+#   證明系統在這些情境下**不會**演出八段（不誤報、不誤動作）。
+# * **現實落差情境**：它們的重點就是診斷信心度不足與重新規劃，
+#   拿「信心度必須達到動設備門檻」這把尺去量，等於在正確的行為上判自己失敗。
+STAGEABLE = sorted(set(SCENARIOS) - set(FALSE_POSITIVE_SCENARIOS) - set(REALITY_GAP_SCENARIOS))
+
+
+@pytest.mark.parametrize("scenario_id", STAGEABLE)
 def test_every_scenario_can_be_staged(scenario_id):
-    """五個情境都要能上台。
+    """每個「有事故可演」的情境都要能上台。
 
     純工安情境（hazard-zone）沒有壞掉的零件可以填，工單完整度天生比設備故障低 ——
     判準必須跟著事故種類走，不能拿同一把尺量兩種東西，否則 Demo 會在正確的行為上判自己失敗。

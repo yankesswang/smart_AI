@@ -21,7 +21,7 @@
 .hero .sub{max-width:66ch;margin-top:22px;font-family:var(--cjk);font-size:var(--t-prose);line-height:1.95;color:var(--fg-2)}
 .hero .sub b{color:var(--fg);font-weight:700}
 
-.arms{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:34px;border:1px solid var(--line)}
+.arms{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);margin-top:34px;border:1px solid var(--line)}
 .arm{background:var(--panel-2);padding:15px 16px}
 .arm .t{font-size:var(--t-body);letter-spacing:.08em;font-weight:700;text-transform:uppercase;display:flex;align-items:baseline;gap:9px}
 .arm .t .k{
@@ -64,6 +64,7 @@
   -webkit-mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px);
   mask-image:repeating-linear-gradient(90deg,#000 0 4px,transparent 4px 6px)}
 .barcmp .tr i.a,.barcmp .tr i.b{background:#9A9A9A}
+.barcmp .tr i.c{background:#C8C8C8}
 .barcmp .tr i.g{background:var(--red)}
 .barcmp .vl{text-align:right;font-variant-numeric:tabular-nums;font-size:var(--t-body);font-weight:700}
 
@@ -78,6 +79,9 @@
 .foot .n{font-family:var(--cjk);font-size:var(--t-meta);color:var(--dim);line-height:1.8;max-width:78ch}
 .foot .n code{font-family:var(--mono);color:var(--fg)}
 
+@media(max-width:1200px){
+  .arms{grid-template-columns:repeat(2,1fr)}
+}
 @media(max-width:1000px){
   .headline{grid-template-columns:repeat(2,1fr)}
   .arms{grid-template-columns:1fr}
@@ -102,18 +106,21 @@
   </header>
 
   <section class="hero">
-    <h2 class="wordmark">三組對照組<br><em>同一座工廠</em></h2>
+    <h2 class="wordmark">四組對照組<br><em>同一座工廠</em></h2>
     <p class="sub">
-      三組跑在<b>相同亂數種子、相同故障情境、相同總模擬時長</b>的數位孿生工廠上，
+      四組跑在<b>相同亂數種子、相同故障情境、相同總模擬時長</b>的數位孿生工廠上，
       差別只有「AI 做到哪一步」。所有數字都是模擬器實際執行產生的結果，不是預錄，也不是估算。
       每次重跑都會得到同一組數字，這正是可重現性的意義。
     </p>
     <div class="arms">
       <div class="arm"><div class="t"><span class="k">A</span> 固定門檻告警</div>
-        <div class="d">感測器踩到門檻就發告警。不做跨資料診斷，不採取任何行動。這是多數工廠的現況。</div></div>
+        <div class="d">感測器踩到危險門檻就發告警，之後什麼都不做。這是「告警完全沒被接住」的極端。</div></div>
       <div class="arm"><div class="t"><span class="k">B</span> 偵測即停機</div>
-        <div class="d">偵測到異常立刻停機維修。設備保住了，但沒有生產影響分析，也沒有替代排程。</div></div>
-      <div class="arm win"><div class="t"><span class="k">C</span> Factory Guardian</div>
+        <div class="d">偵測到異常立刻停機維修，技師零等待。設備保住了，但沒有影響分析與替代排程。</div></div>
+      <div class="arm"><div class="t"><span class="k">C</span> 現行流程</div>
+        <div class="d">告警 → <b>人工判定根因 90 分鐘</b>（機台照跑、照劣化）→ 停機維修 → 復機。不轉單。
+          A 和 B 都是極端，沒有工廠長那樣 —— <b>C 才是該被比較的對象</b>。</div></div>
+      <div class="arm win"><div class="t"><span class="k">G</span> Factory Guardian</div>
         <div class="d">跨 Machine / Production / Safety 的完整閉環，執行後回到孿生體驗證。</div></div>
     </div>
   </section>
@@ -132,15 +139,25 @@ const $ = id => document.getElementById(id);
 const ESCAPES = {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
 const esc = v => (v === null || v === undefined) ? "" : String(v).replace(/[&<>"']/g, c => ESCAPES[c]);
 
-const MODES = ["baseline-a","baseline-b","guardian"];
-const MODE_SHORT = {"baseline-a":"BASELINE A","baseline-b":"BASELINE B","guardian":"GUARDIAN"};
+const MODES = ["baseline-a","baseline-b","baseline-c","guardian"];
+const MODE_SHORT = {"baseline-a":"BASELINE A","baseline-b":"BASELINE B",
+                    "baseline-c":"BASELINE C","guardian":"GUARDIAN"};
+/* 頭條數字仍然只取三個「徵兆照手冊走」的設備故障情境。
+   現實落差情境（bearing-atypical / cooling-with-stuck-vibration）刻意不混進平均：
+   它們量的是另一件事（診斷會不會被誤導），混在一起兩個數字都會失去意義。 */
 const EQUIP = ["bearing-degradation","cooling-failure","motor-overload"];
 const SCEN_TITLE = {
   "bearing-degradation":"軸承劣化","cooling-failure":"冷卻失效","motor-overload":"馬達過載",
   "hazard-zone":"人員闖入危險區","bearing-with-intrusion":"軸承劣化 + 人員闖入",
+  "fp-sensor-spike":"無故障：感測器尖峰","fp-restart-transient":"無故障：重啟暫態",
+  "fp-load-step":"無故障：負載切換","fp-warm-up":"無故障：暖機過衝",
+  "bearing-atypical":"現實落差：非典型軸承劣化",
+  "cooling-with-stuck-vibration":"現實落差：冷卻失效 + 感測器卡值",
 };
 const CATEGORY = {
-  detection:["detection_latency_min","time_to_diagnose_min","diagnosis_correct","diagnosis_confidence","false_positive_events"],
+  detection:["detection_latency_min","time_to_diagnose_min","first_diagnosis_correct","diagnosis_correct",
+             "diagnosis_confidence","replans","replan_recovery_min",
+             "false_positive_events","false_alarm_per_hour","false_positive_actions"],
   maintenance:["work_order_completeness_pct","machine_health_final","secondary_damage"],
   production:["production_attainment_pct","production_loss_units","production_loss_ntd","max_order_delay_min","late_orders","recovery_min"],
   safety:["unsafe_block_rate_pct","safety_violations_executed","hazard_exposure_min"],
@@ -200,6 +217,8 @@ function render(rep){
     });
     const corr = ks.map(k=>k.diagnosis_correct).filter(v=>v!==null&&v!==undefined);
     eqAvg[m].acc = corr.length ? 100*corr.filter(Boolean).length/corr.length : null;
+    const first = ks.map(k=>k.first_diagnosis_correct).filter(v=>v!==null&&v!==undefined);
+    eqAvg[m].firstAcc = first.length ? 100*first.filter(Boolean).length/first.length : null;
   });
 
   const A = eqAvg["baseline-a"], G = eqAvg["guardian"];
@@ -210,7 +229,7 @@ function render(rep){
   /* ---------- 頭條 ---------- */
   html += `<section class="headline">
     ${headline("PRODUCTION ATTAINMENT","產能達成率",A.production_attainment_pct,G.production_attainment_pct,"%",1,"設備故障三情境平均")}
-    ${headline("ROOT CAUSE ACCURACY","根因診斷正確率",null,G.acc,"%",0,"對照 Ground Truth，Agent 看不到答案")}
+    ${headline("ROOT CAUSE ACCURACY","根因診斷正確率",G.firstAcc,G.acc,"%",0,"初次 → 最終；對照 Ground Truth，Agent 看不到答案")}
     ${headline("MAX ORDER DELAY","最大交期延遲",A.max_order_delay_min,G.max_order_delay_min,"m",0,"已排程訂單")}
     ${headline("SECONDARY DAMAGE","設備二次損壞",pct(A.secondary_damage),pct(G.secondary_damage),"%",0,"未處置會演變成軸承咬死或馬達燒毀")}
   </section>`;
@@ -232,6 +251,36 @@ function render(rep){
         ${barRow("危險區曝露",hz,"hazard_exposure_min")}
         ${barRow("產能達成率",hz,"production_attainment_pct")}
       </div>
+    </section>`;
+  }
+
+  /* ---------- 誤報（只有無故障情境才有意義）---------- */
+  const fp = rep.false_positive || {};
+  const fpIds = (rep.families && rep.families.false_positive) || [];
+  if(fpIds.length && Object.keys(fp).length){
+    const g = fp["guardian"] || {}, a = fp["baseline-a"] || {}, b = fp["baseline-b"] || {}, c = fp["baseline-c"] || {};
+    html += `<section class="claim">
+      <div class="q">誤報的成本不在告警，在<b>誤動作</b>。</div>
+      <div class="a">${fpIds.length} 個情境裡機台<b>完全健康</b>（負載切換、換料重啟、暖機過衝、感測器尖峰），
+        所以任何告警都是誤報、任何停機或轉單都是白付的。
+        固定門檻告警在 <b>${esc(a.scenarios_with_alarm)}/${esc(a.scenarios)}</b> 個情境誤報，
+        Guardian 是 <b>${esc(g.scenarios_with_alarm)}/${esc(g.scenarios)}</b>（門檻要求越界在最近 3 個取樣裡出現 2 次）。
+        真正的差距在下一列：<b>偵測即停機</b>在誤報上動了 ${esc(b.false_positive_actions)} 次設備、產能掉到 ${fmt(b.production_attainment_pct,1)}%；
+        <b>現行流程</b>沒有動設備，但派了 ${esc(c.human_interventions)} 趟技師、每趟 90 分鐘。
+        Guardian 主動棄權 ${esc(g.abstained)} 次（診斷判定無故障徵兆、或訊號已停在新穩態），誤動作 ${esc(g.false_positive_actions)} 次。</div>
+      <div class="sec-b flush tbl mt14">
+        <table class="cmp"><caption class="vh">誤報彙總</caption><thead><tr>
+          <th scope="col">誤報 KPI</th>${MODES.map(m=>`<th scope="col" class="mode ${m==='guardian'?'win':''}">${MODE_SHORT[m]}</th>`).join("")}
+        </tr></thead><tbody>` +
+        [["誤報事故（情境數）","scenarios_with_alarm"],
+         ["誤報率（次/小時）","false_alarm_per_hour"],
+         ["誤報後動到設備（次）","false_positive_actions"],
+         ["主動棄權（次）","abstained"],
+         ["技師出動（趟）","human_interventions"],
+         ["產能達成率（%）","production_attainment_pct"]].map(([label,key])=>
+          `<tr><th scope="row" class="kpi-l">${esc(label)}<small>${esc(key)}</small></th>` +
+          MODES.map(m=>`<td class="val">${esc(cell(fp[m] ? fp[m][key] : null))}</td>`).join("") + `</tr>`).join("") +
+      `</tbody></table></div>
     </section>`;
   }
 
@@ -282,7 +331,7 @@ function render(rep){
         const max=Math.max(...vals,1);
         return `<div class="mt10"><span class="micro">${esc(c.label)}</span>
           ${MODES.map(m=>`<div class="barcmp"><span class="nm">${MODE_SHORT[m]}</span>
-              <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':'a'}"
+              <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':m==='baseline-c'?'c':'a'}"
                 style="width:${Math.max(1,100*(agg[m][key]||0)/max)}%"></i></span>
               <span class="vl">${fmt(agg[m][key],1)}</span></div>`).join("")}</div>`;
       }).join("")}
@@ -319,7 +368,7 @@ function barRow(label,data,key){
   const max=Math.max(...vals.map(v=>Math.abs(v||0)),1);
   return `<div class="mt6"><span class="micro">${esc(label)}</span>` +
     MODES.map((m,i)=>`<div class="barcmp"><span class="nm">${MODE_SHORT[m]}</span>
-      <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':'a'}"
+      <span class="tr"><i class="${m==='guardian'?'g':m==='baseline-b'?'b':m==='baseline-c'?'c':'a'}"
         style="width:${Math.max(1,100*Math.abs(vals[i]||0)/max)}%"></i></span>
       <span class="vl">${fmt(vals[i],1)}</span></div>`).join("") + `</div>`;
 }

@@ -5,8 +5,15 @@ from __future__ import annotations
 import pytest
 
 from factory_guardian.domain import Action, ActionKind, MachineState
+from factory_guardian.twin.disturbances import Disturbance, RealityGap, SensorFault, SignatureMismatch
 from factory_guardian.twin.engine import FactoryTwin
-from factory_guardian.twin.scenarios import SCENARIOS, get_scenario
+from factory_guardian.twin.scenarios import (
+    FALSE_POSITIVE_SCENARIOS,
+    SCENARIOS,
+    disturbances_of,
+    get_scenario,
+    reality_gap_of,
+)
 
 
 def test_baseline_is_healthy_and_producing(twin: FactoryTwin):
@@ -207,3 +214,168 @@ def test_all_scenarios_are_runnable():
         twin.schedule(get_scenario(scenario_id).injections)
         snapshot = twin.run(30)
         assert snapshot.tick == 30
+
+
+# ======================================================================================
+# 干擾（無故障）與現實落差
+# ======================================================================================
+def _configured(scenario_id: str, seed: int = 20260809) -> FactoryTwin:
+    scenario = get_scenario(scenario_id)
+    twin = FactoryTwin(seed=seed)
+    twin.schedule(scenario.injections)
+    for disturbance in disturbances_of(scenario):
+        twin.add_disturbance(disturbance)
+    twin.apply_reality_gap(reality_gap_of(scenario))
+    return twin
+
+
+@pytest.mark.parametrize("scenario_id", list(FALSE_POSITIVE_SCENARIOS))
+def test_disturbance_scenarios_have_no_fault_at_all(scenario_id):
+    """干擾情境的 Ground Truth 必須是空的 —— 否則它量到的就不是誤報。"""
+    twin = _configured(scenario_id)
+    twin.run(get_scenario(scenario_id).horizon_ticks)
+    assert get_scenario(scenario_id).ground_truth == {}
+    assert twin.ground_truth == {}
+    assert not any(e["type"] == "secondary_damage" for e in twin.event_log)
+    # 沒有任何一台機器帶著故障標籤 —— 健康度會因為讀值越界而下降（那是門檻的定義），
+    # 但那不是故障，所以這裡斷言的是「沒有故障」，不是「健康度沒掉」。
+    assert all(rt.fault is None for rt in twin.runtime.values())
+
+
+def test_load_step_moves_the_sensor_without_breaking_the_machine():
+    """負載切換：讀值真的變了，但機台沒有故障標籤。"""
+    twin = _configured("fp-load-step")
+    before = twin.run(12).machines["M-A"].value("current")
+    after = twin.run(20).machines["M-A"].value("current")
+    assert after > before + 2.0
+    assert twin.runtime["M-A"].fault is None
+
+
+def test_sensor_only_disturbance_never_touches_the_physics():
+    """感測器尖峰只動回報值：clean_signals、健康度與產出速率都不受影響。"""
+    twin = _configured("fp-sensor-spike")
+    twin.run(11)
+    clean_before = twin.runtime["M-A"].clean_signals["vibration"]
+    rate_before = twin.effective_rate("M-A")
+    snapshot = twin.step()          # 第 12 tick 就是尖峰
+    assert snapshot.machines["M-A"].value("vibration") > 7.0        # 讀值踩進危險帶
+    assert twin.runtime["M-A"].clean_signals["vibration"] < 3.0     # 物理狀態沒動
+    assert abs(twin.runtime["M-A"].clean_signals["vibration"] - clean_before) < 0.5
+    assert twin.effective_rate("M-A") == pytest.approx(rate_before, rel=0.05)
+
+
+def test_stuck_sensor_reports_a_frozen_value():
+    twin = FactoryTwin(seed=3)
+    twin.apply_reality_gap(RealityGap(sensor_faults=(
+        SensorFault(machine_id="M-A", signal="vibration", mode="stuck", stuck_value=3.8),
+    )))
+    values = [twin.step().machines["M-A"].value("vibration") for _ in range(6)]
+    assert values == [pytest.approx(3.8)] * 6
+
+
+def test_drifting_sensor_walks_away_from_the_truth():
+    twin = FactoryTwin(seed=3)
+    twin.apply_reality_gap(RealityGap(sensor_faults=(
+        SensorFault(machine_id="M-A", signal="temperature", mode="drift",
+                    drift_per_tick=0.5, drift_max=6.0),
+    )))
+    twin.run(1)
+    early = twin.snapshot().machines["M-A"].value("temperature")
+    twin.run(14)
+    late = twin.snapshot().machines["M-A"].value("temperature")
+    assert late > early + 4.0
+    # 但機台其實沒事：真實物理狀態仍在正常範圍
+    assert twin.runtime["M-A"].clean_signals["temperature"] < 66.0
+
+
+def test_signature_mismatch_bends_the_symptoms_away_from_the_manual():
+    """同一個故障，在有落差的機台上，振動少很多、溫升多很多。"""
+    plain = FactoryTwin(seed=20260809)
+    plain.schedule(get_scenario("bearing-degradation").injections)
+    plain.run(16)
+    atypical = _configured("bearing-atypical")
+    atypical.run(16)
+
+    p = plain.snapshot().machines["M-A"]
+    a = atypical.snapshot().machines["M-A"]
+    assert a.value("vibration") < p.value("vibration") * 0.6
+    assert a.value("temperature") > p.value("temperature")
+    # 兩邊的 Ground Truth 仍然是同一個故障
+    assert atypical.ground_truth == {"M-A": "bearing_degradation"}
+
+
+def test_belief_model_drops_every_reality_gap():
+    """規劃模型只知道手冊：干擾、感測器故障、指紋落差都不會被帶進去。"""
+    twin = _configured("bearing-atypical")
+    twin.add_disturbance(Disturbance(machine_id="M-A", label="x", deltas={"current": 2.0}, start_tick=0))
+    twin.run(14)
+    belief = twin.fork_as_belief("M-A", "bearing_degradation", twin.snapshot().machines["M-A"].health)
+    assert belief.signature_mismatch == {}
+    assert belief.sensor_faults == []
+    assert belief.disturbances == []
+    # 真實孿生體沒有被動到
+    assert twin.signature_mismatch
+
+
+def test_snapshot_never_exposes_disturbances_or_reality_gap():
+    twin = _configured("bearing-atypical")
+    payload = str(twin.run(14).to_dict())
+    for token in ("signature_mismatch", "sensor_fault", "disturbance", "reality_gap"):
+        assert token not in payload
+    # 但 debug_state（只給評分用）看得到
+    assert twin.debug_state()["signature_mismatch"]
+
+
+# ======================================================================================
+# 降速工作點與不完整維修
+# ======================================================================================
+def test_derate_factor_actually_changes_the_operating_point():
+    """降到四成和降到八成必須跑出不同的結果，否則方案掃描是假的。"""
+    results = {}
+    for factor in (0.4, 0.8):
+        twin = FactoryTwin(seed=20260809)
+        twin.schedule(get_scenario("bearing-degradation").injections)
+        twin.run(12)
+        clone = twin.fork()
+        results[factor] = clone.project(
+            [Action(ActionKind.DERATE_MACHINE, "M-A", {"factor": factor})],
+            ticks=25, target_machine="M-A",
+        )
+    assert results[0.8]["production_pct"] > results[0.4]["production_pct"] + 5
+    assert results[0.8]["peak_vibration"] > results[0.4]["peak_vibration"]
+
+
+def test_derate_without_factor_keeps_the_legacy_operating_point():
+    """沒給 factor 時行為必須和加入這個參數之前完全相同。"""
+    def run(params):
+        twin = FactoryTwin(seed=20260809)
+        twin.schedule(get_scenario("bearing-degradation").injections)
+        twin.run(12)
+        clone = twin.fork()
+        return clone.project([Action(ActionKind.DERATE_MACHINE, "M-A", params)], ticks=25, target_machine="M-A")
+
+    assert run({}) == run({"factor": 0.60})
+
+
+def test_repair_shorter_than_the_fault_needs_leaves_it_unfixed():
+    """工單工時不足 → 故障只被處理掉一部分。診斷錯的代價就在這裡。"""
+    twin = FactoryTwin(seed=20260809)
+    twin.schedule(get_scenario("bearing-degradation").injections)   # 需要 40 分鐘
+    twin.run(14)
+    twin.apply(Action(ActionKind.STOP_MACHINE, "M-A"))
+    twin.apply(Action(ActionKind.START_MAINTENANCE, "M-A", {"duration_min": 30}))  # 冷卻系統的工時
+    twin.run(32)
+    assert twin.runtime["M-A"].fault == "bearing_degradation"      # 沒修好
+    assert 0.0 < twin.runtime["M-A"].fault_progress < 0.5          # 但確實好了一部分
+    assert any(e["type"] == "repair_incomplete" for e in twin.event_log)
+
+
+def test_repair_with_the_right_duration_clears_the_fault():
+    twin = FactoryTwin(seed=20260809)
+    twin.schedule(get_scenario("bearing-degradation").injections)
+    twin.run(14)
+    twin.apply(Action(ActionKind.STOP_MACHINE, "M-A"))
+    twin.apply(Action(ActionKind.START_MAINTENANCE, "M-A", {"duration_min": 40}))
+    twin.run(42)
+    assert twin.runtime["M-A"].fault is None
+    assert any(e["type"] == "maintenance_done" for e in twin.event_log)

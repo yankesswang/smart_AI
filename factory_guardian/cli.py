@@ -306,7 +306,7 @@ def cmd_episode(args: argparse.Namespace) -> int:
 def cmd_benchmark(args: argparse.Namespace) -> int:
     _banner()
     scenario_ids = args.scenarios or None
-    console.print("[dim]執行三組對照組（Baseline A / Baseline B / Factory Guardian），"
+    console.print("[dim]執行四組對照組（Baseline A / B / C / Factory Guardian），"
                   "相同 seed、相同情境、相同總時長…[/dim]\n")
     report = run_benchmark(scenario_ids=scenario_ids, persist_audit=not args.no_audit)
 
@@ -333,8 +333,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
     console.rule("[bold]跨情境彙總[/bold]")
     summary = Table(header_style="bold")
-    summary.add_column("模式", width=26)
-    summary.add_column("診斷正確率", justify="right")
+    summary.add_column("模式", width=30)
+    summary.add_column("初次診斷", justify="right")
+    summary.add_column("最終診斷", justify="right")
     summary.add_column("產能達成率", justify="right")
     summary.add_column("最大延遲", justify="right")
     summary.add_column("危險曝露", justify="right")
@@ -345,6 +346,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     for mode, agg in report.aggregate().items():
         summary.add_row(
             MODE_LABELS[mode],
+            f"{agg['first_diagnosis_accuracy_pct']:.0f}%" if agg["first_diagnosis_accuracy_pct"] is not None else "—",
             f"{agg['diagnosis_accuracy_pct']:.0f}%" if agg["diagnosis_accuracy_pct"] is not None else "—",
             f"{agg['production_attainment_pct']:.1f}%",
             f"{agg['max_order_delay_min']:.0f}m",
@@ -354,6 +356,34 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             f"{agg['energy_intensity_kwh_per_unit']:.2f}",
         )
     console.print(summary)
+
+    # --- 誤報（只跑在無故障情境上）---------------------------------------------------
+    fp = report.false_positive_summary()
+    if fp:
+        fp_ids = report.families()["false_positive"]
+        console.rule(f"[bold]誤報：{len(fp_ids)} 個無故障干擾情境[/bold]")
+        fp_table = Table(header_style="bold")
+        fp_table.add_column("模式", width=30)
+        fp_table.add_column("誤報事故", justify="right")
+        fp_table.add_column("誤報率(次/小時)", justify="right")
+        fp_table.add_column("誤動作(次)", justify="right")
+        fp_table.add_column("主動棄權", justify="right")
+        fp_table.add_column("技師出動", justify="right")
+        fp_table.add_column("產能達成率", justify="right")
+        for mode, row in fp.items():
+            fp_table.add_row(
+                MODE_LABELS[mode],
+                f"{row['false_alarms']}/{row['scenarios']}",
+                f"{row['false_alarm_per_hour']:.2f}",
+                str(row["false_positive_actions"]),
+                str(row["abstained"]),
+                str(row["human_interventions"]),
+                f"{row['production_attainment_pct']:.1f}%",
+            )
+        console.print(fp_table)
+        console.print("[dim]誤報的成本不在告警，在誤動作：這些情境裡機台完全健康，"
+                      "任何停機／降速／轉單都是白付的。[/dim]")
+
     console.print(f"[dim]{report.to_dict()['disclaimer']}[/dim]")
 
     if args.out:

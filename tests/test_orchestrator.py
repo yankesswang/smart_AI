@@ -141,3 +141,104 @@ def test_agent_metrics_are_measured_not_estimated(ctx):
     assert metrics["diagnosis-agent"]["tool_calls"] > 0
     assert metrics["production-agent"]["tool_calls"] > 0
     assert all(m["tool_success_pct"] == 100.0 for m in metrics.values())
+
+
+# ======================================================================================
+# 自我節制（False Positive）與重規劃 KPI
+# ======================================================================================
+def _fp_orchestrator(ctx, scenario_id, **kw):
+    """把干擾情境裝進孿生體（干擾不是故障，所以不走 schedule）。"""
+    from factory_guardian.twin.scenarios import disturbances_of, reality_gap_of
+
+    scenario = get_scenario(scenario_id)
+    twin = FactoryTwin(seed=20260809)
+    twin.schedule(scenario.injections)
+    for disturbance in disturbances_of(scenario):
+        twin.add_disturbance(disturbance)
+    twin.apply_reality_gap(reality_gap_of(scenario))
+    return Orchestrator(twin=twin, ctx=ctx, **kw), twin
+
+
+def test_loop_abstains_when_the_anomaly_stops_progressing(ctx):
+    """負載切換：讀值真的越界，但它停在新的穩態 —— 閉環只告警，不動設備。"""
+    orch, twin = _fp_orchestrator(ctx, "fp-load-step")
+    event = orch.run_until_event(60, min_severity=Severity.WARNING)
+    assert event is not None
+
+    result = orch.handle_event(event)
+    assert result.abstained
+    assert not result.attempts                       # 一個方案都沒有執行
+    assert result.degradation["progressive"] is False
+    assert twin.snapshot().machines["M-A"].state.value == "running"
+    # 棄權不等於不理會：告警仍然發出去了
+    assert any(r.stage == "abstain" for r in ctx.audit.records)
+
+
+def test_a_single_sample_spike_never_reaches_the_loop(ctx):
+    """一個取樣的振動尖峰不該叫醒整個閉環（N-of-M 門檻確認）。"""
+    orch, _ = _fp_orchestrator(ctx, "fp-sensor-spike")
+    assert orch.run_until_event(60, min_severity=Severity.WARNING) is None
+
+
+def test_hazard_rule_on_a_sensor_reading_needs_the_same_confirmation(ctx):
+    """SR-02 讀的是和 Monitoring Agent 同一支感測器，所以它也要通過門檻確認。
+
+    人員類規則（SR-01/04/05/08）不受影響 —— 那是影像直接看到的事實。
+    """
+    orch, _ = _fp_orchestrator(ctx, "fp-sensor-spike")
+    assert orch.run_until_event(60, min_severity=Severity.WARNING) is None
+    assert any(r.stage == "hazard_unconfirmed" for r in ctx.audit.records)
+
+    orch2, _ = _fp_orchestrator(ctx, "hazard-zone")
+    event = orch2.run_until_event(30, min_severity=Severity.WARNING)
+    assert event is not None and event.kind == "safety"
+
+
+def test_observation_window_is_recorded_and_bounded(ctx):
+    orch, _ = _orchestrator(ctx)
+    result = orch.handle_event(orch.run_until_event(60))
+    assert result.observation_ticks >= orch.observe_ticks
+    assert result.observation_ticks <= orch.max_confirm_ticks
+    assert result.degradation["progressive"] is True
+
+
+def test_first_and_final_diagnosis_are_recorded_separately(ctx):
+    orch, _ = _orchestrator(ctx)
+    result = orch.handle_event(orch.run_until_event(60))
+    data = result.to_dict()
+    assert data["first_diagnosis_top"] == "bearing_degradation"
+    assert data["final_diagnosis_top"] == "bearing_degradation"
+    assert data["replans"] == 0
+    assert data["recovery_after_replan_min"] is None
+
+
+def test_a_failed_verification_triggers_a_replan_and_the_recovery_is_timed(ctx, monkeypatch):
+    """驗證失敗 → 重新規劃 → 第二次通過；恢復時間量得出來。
+
+    這裡用「讓第一次驗證失敗」來逼出重試路徑，而不是等某個情境剛好發生 ——
+    重試邏輯與它的 KPI（重規劃次數、驗證失敗後恢復時間）必須被獨立守住，
+    否則它們只有在情境剛好觸發時才會被執行到。
+    """
+    orch, _ = _orchestrator(ctx)
+    real_verify = orch.verification.verify
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        report = real_verify(*args, **kwargs)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            report.passed = False
+            for check in report.checks:
+                check.passed = False
+        return report
+
+    monkeypatch.setattr(orch.verification, "verify", flaky)
+    result = orch.handle_event(orch.run_until_event(60))
+
+    assert result.replans == 1
+    assert len(result.attempts) == 2
+    assert result.attempts[0].verification is not None and not result.attempts[0].verification.passed
+    assert result.attempts[1].diagnosis is not None      # 重試時重新診斷過
+    if result.verified:
+        assert result.recovery_after_replan_min is not None
+        assert result.recovery_after_replan_min > 0

@@ -38,6 +38,7 @@ from ..domain import (
     SignalBand,
     SignalSpec,
 )
+from .disturbances import Disturbance, RealityGap, SensorFault, SignatureMismatch
 from .energy import EnergyLedger
 from .faults import FAULTS, HAZARD_EVENT_ID, FaultModel
 from .topology import (
@@ -61,10 +62,17 @@ SIGNAL_NOISE: dict[str, float] = {
     "current": 0.14,
     "rpm_pct": 0.35,
 }
-# 降速運轉時：故障造成的偏移與轉速的縮放。
+# 降速運轉的**預設**工作點：產能保留六成、轉速降到 63%、故障表現被壓到 0.55。
+# 這三個數字是同一個工作點的三個面向，所以它們必須跟著 factor 一起動 ——
+# 早期版本把 factor 收下來卻不用，於是「降到四成」和「降到八成」跑出完全一樣的結果，
+# 方案比較因此少了一個真正的維度。
 DERATE_LOAD_FACTOR = 0.60
 DERATE_RPM_PCT = 63.0
 DERATE_FAULT_RELIEF = 0.55
+# factor 的合理範圍：低於 0.2 等於停機（那應該用 STOP_MACHINE 表達），
+# 高於 0.95 等於沒降速。
+DERATE_FACTOR_MIN = 0.20
+DERATE_FACTOR_MAX = 0.95
 
 THROUGHPUT_EMA_ALPHA = 0.45
 
@@ -140,6 +148,11 @@ class _MachineRuntime:
     last_rate_uph: float = 0.0
     repairs_done: int = 0
     secondary_damage: bool = False
+    # 這次維修「排了多久」。工單上的工時是依**診斷結果**開出來的，
+    # 診斷錯了就可能排得比實際需要的短 —— 見 _advance_timers 的不完整維修。
+    maintenance_planned_min: float = 0.0
+    # 目前的降速工作點（產能保留比例）。預設值讓沒有指定 factor 的降速行為完全不變。
+    derate_factor: float = DERATE_LOAD_FACTOR
 
 
 @dataclass
@@ -189,6 +202,14 @@ class FactoryTwin:
         )
         self.event_log: list[dict[str, Any]] = []
         self.label = "live"
+        # --- 干擾與現實落差（見 twin/disturbances.py）---
+        # 這三個容器都是 Simulator 內部設定，和 fault 一樣不會出現在 snapshot() 裡。
+        # 它們不在 reset() 裡被清掉：和拓撲一樣，屬於「這座工廠長什麼樣」的設定，
+        # 而不是「這一次模擬跑到哪裡」的狀態。
+        self.disturbances: list[Disturbance] = []
+        self.sensor_faults: list[SensorFault] = []
+        self.signature_mismatch: dict[tuple[str, str], SignatureMismatch] = {}
+        self._stuck_values: dict[tuple[str, str], float] = {}
         self.reset()
 
     # ------------------------------------------------------------------ 生命週期
@@ -206,6 +227,7 @@ class FactoryTwin:
             {mid: m.rated_power_kw for mid, m in self.topo.machines.items()}
         )
         self.event_log = []
+        self._stuck_values = {}
         self.runtime = {}
         for mid, machine in self.topo.machines.items():
             assigned = next(
@@ -255,6 +277,69 @@ class FactoryTwin:
         )
         return min(upstream, packaging)
 
+    # ------------------------------------------------------------------ 干擾與現實落差
+    def add_disturbance(self, disturbance: Disturbance) -> None:
+        """加入一段「沒有故障」的訊號擾動（負載切換、暖機、感測器尖峰…）。
+
+        刻意和 ``inject()`` 分開：注入故障會設定 ``rt.fault``（Ground Truth），
+        干擾不會 —— 它的 Ground Truth 就是「無故障」，所以任何因它而起的告警都是誤報。
+        """
+        self.disturbances.append(disturbance)
+
+    def apply_reality_gap(self, gap: RealityGap | None) -> None:
+        """設定這座工廠與「手冊典型值」之間的落差。
+
+        Agent 拿不到這份設定，這是刻意的：手冊寫的是典型機台，
+        現場這一台可能不一樣，而**沒有人事先知道差多少**。
+        """
+        if gap is None:
+            return
+        for mismatch in gap.signature_mismatch:
+            self.signature_mismatch[(mismatch.machine_id, mismatch.fault_id)] = mismatch
+        self.sensor_faults.extend(gap.sensor_faults)
+
+    def _mismatch_for(self, machine_id: str, fault_id: str | None) -> SignatureMismatch | None:
+        if fault_id is None:
+            return None
+        return self.signature_mismatch.get((machine_id, fault_id))
+
+    def _disturbance_offset(self, machine_id: str, signal: str, sensor_only: bool) -> float:
+        """這一 tick 所有干擾在這個訊號上的合計偏移。"""
+        total = 0.0
+        for dist in self.disturbances:
+            if dist.machine_id != machine_id or dist.sensor_only is not sensor_only:
+                continue
+            delta = dist.deltas.get(signal)
+            if not delta:
+                continue
+            total += delta * dist.amplitude(self.tick)
+        return total
+
+    def _apply_sensor_faults(self, machine_id: str, signal: str, reported: float) -> float:
+        """感測器本身的問題：偏移或卡值。只動**回報值**，機台物理狀態不變。"""
+        for fault in self.sensor_faults:
+            if fault.machine_id != machine_id or fault.signal != signal:
+                continue
+            if self.tick < fault.start_tick:
+                continue
+            if fault.mode == "drift":
+                elapsed = self.tick - fault.start_tick
+                offset = fault.drift_per_tick * elapsed
+                if fault.drift_max:
+                    offset = (
+                        min(offset, fault.drift_max) if fault.drift_per_tick >= 0
+                        else max(offset, -abs(fault.drift_max))
+                    )
+                reported += offset
+            elif fault.mode == "stuck":
+                key = (machine_id, signal)
+                if key not in self._stuck_values:
+                    # 沒指定卡在哪個值就卡在「故障發生當下讀到的值」——
+                    # 這才是卡值的真實樣子：它會停在一個曾經合理的數字上。
+                    self._stuck_values[key] = fault.stuck_value if fault.stuck_value is not None else reported
+                reported = self._stuck_values[key]
+        return reported
+
     def fork(self, label: str = "dryrun") -> "FactoryTwin":
         """複製一份完全獨立的孿生體，用於方案乾跑。拓撲是唯讀的所以共用。"""
         clone = copy.copy(self)
@@ -262,6 +347,11 @@ class FactoryTwin:
         clone.orders = copy.deepcopy(self.orders)
         clone.queue = dict(self.queue)
         clone.pending_injections = list(self.pending_injections)
+        # 干擾與現實落差也要各自帶一份，否則乾跑會改到真實孿生體的卡值狀態。
+        clone.disturbances = list(self.disturbances)
+        clone.sensor_faults = list(self.sensor_faults)
+        clone.signature_mismatch = dict(self.signature_mismatch)
+        clone._stuck_values = dict(self._stuck_values)
         # 能源帳必須跟著複製一份 —— 少了這行，方案乾跑（一個情境會跑好幾個）
         # 累積的電就會被記到真實孿生體上，KPI 直接失真。
         clone.energy = copy.deepcopy(self.energy)
@@ -284,8 +374,18 @@ class FactoryTwin:
         所以規劃模型是這樣建的：拿掉真實故障標籤，換上 Diagnosis Agent 推論出來的故障，
         並用「觀測到的健康度」反推它的嚴重程度。診斷錯了，投影就會錯 ——
         然後由 Verification Agent 在真實孿生體上抓出來並觸發重試。
+
+        信念模型也會把**現實落差全部清掉**（指紋偏差、感測器故障、環境干擾）。
+        這不是簡化，這是同一條紅線的延伸：Agent 只讀得到手冊，
+        它不可能知道「這一台機器的軸承劣化溫升比手冊高四成」。
+        規劃因此永遠跑在手冊物理上 —— 而現場物理不照手冊走的時候，
+        投影就會偏樂觀，然後由 Verification Agent 在真實孿生體上抓出來。
         """
         clone = self.fork(label=label)
+        clone.disturbances = []
+        clone.sensor_faults = []
+        clone.signature_mismatch = {}
+        clone._stuck_values = {}
         rt = clone.runtime[machine_id]
         rt.fault = believed_fault_id
         if believed_fault_id is None:
@@ -474,6 +574,11 @@ class FactoryTwin:
             if rt.fault_progress >= rt.fault_max_progress - 1e-9:
                 # 已經到頂還繼續跑 → 持續惡化，全速運轉惡化更快
                 gain = model.full_speed_risk_gain if rt.state is MachineState.RUNNING else 0.35
+                # 現實落差：這一台機器可能壞得比手冊寫的快。手冊值仍是規劃用的那一份，
+                # 所以「照手冊投影出來還撐得住」的方案，在這裡就會撐不住。
+                mismatch = self._mismatch_for(rt.machine_id, rt.fault)
+                if mismatch is not None:
+                    gain *= mismatch.escalation_gain
                 rt.fault_progress += model.escalation_per_tick * gain * self.tick_minutes
             if rt.fault_progress > 1.9 and not rt.secondary_damage:
                 rt.secondary_damage = True
@@ -489,12 +594,44 @@ class FactoryTwin:
             if rt.state is MachineState.MAINTENANCE:
                 rt.maintenance_remaining_min = max(0.0, rt.maintenance_remaining_min - self.tick_minutes)
                 if rt.maintenance_remaining_min <= 0:
-                    rt.fault = None
-                    rt.fault_progress = 0.0
-                    rt.secondary_damage = False
-                    rt.repairs_done += 1
-                    rt.state = MachineState.IDLE
-                    self.event_log.append({"tick": self.tick, "type": "maintenance_done", "machine": rt.machine_id})
+                    self._finish_maintenance(rt)
+
+    def _finish_maintenance(self, rt: _MachineRuntime) -> None:
+        """維修時間到了 —— 但修不修得好，取決於工單排的工時夠不夠。
+
+        為什麼要有這一段：工單上的工時是依**診斷結果**開出來的
+        （冷卻系統 30 分鐘、軸承 40 分鐘、馬達 55 分鐘）。診斷錯了，
+        技師就會帶著錯的零件、排著不夠的工時進場，時間到了把機台交回，
+        故障其實沒有被排除。少了這一段，「診斷錯」在模擬裡完全沒有代價 ——
+        因為不管開什麼工單，維修都會把 fault 清成 None，
+        於是 Verification Agent 永遠抓不到任何東西，重試路徑也就永遠跑不到。
+        """
+        rt.state = MachineState.IDLE
+        rt.repairs_done += 1
+        required = FAULTS[rt.fault].repair_min if rt.fault else 0.0
+        # 現實落差：手冊工時是典型值，這一台可能要更久。
+        mismatch = self._mismatch_for(rt.machine_id, rt.fault)
+        if mismatch is not None:
+            required *= mismatch.repair_gain
+        planned = rt.maintenance_planned_min
+        if rt.fault and required > 0 and planned + 1e-9 < required:
+            # 工時不足：故障只被處理掉一部分（換了能換的、沒換到真正該換的）。
+            ratio = max(0.0, min(1.0, planned / required))
+            rt.fault_progress *= 1.0 - ratio
+            # fault_start_tick 要跟著回推，否則 _advance_faults 的
+            # ramp = elapsed / ramp_ticks 會在下一 tick 立刻把 progress 拉回原位，
+            # 「修了一半」就會變成完全沒修。
+            rt.fault_start_tick = self.tick - int(rt.fault_progress * rt.fault_ramp_ticks)
+            self.event_log.append({
+                "tick": self.tick, "type": "repair_incomplete", "machine": rt.machine_id,
+                "fault": rt.fault, "planned_min": round(planned, 1), "required_min": round(required, 1),
+            })
+        else:
+            rt.fault = None
+            rt.fault_progress = 0.0
+            rt.secondary_damage = False
+            self.event_log.append({"tick": self.tick, "type": "maintenance_done", "machine": rt.machine_id})
+        rt.maintenance_planned_min = 0.0
 
     def _resolve_hazard(self) -> None:
         """機台一停下來，現場就會被淨空 —— 工安事件到此結束。
@@ -534,22 +671,36 @@ class FactoryTwin:
 
         base = spec.nominal
         if rt.state is MachineState.DERATED:
+            # 三個訊號都隨降速幅度縮放，基準點是預設工作點（factor = 0.60）。
+            ratio = rt.derate_factor / DERATE_LOAD_FACTOR
             if spec.name == "rpm_pct":
-                base = DERATE_RPM_PCT
+                base = DERATE_RPM_PCT * ratio
             elif spec.name == "current":
-                base = spec.nominal * 0.72
+                base = spec.nominal * 0.72 * ratio
             elif spec.name == "temperature":
-                base = spec.nominal - 4.0
+                # 降得越低越涼：溫降幅度和「少掉的那幾成產能」成正比。
+                base = spec.nominal - 4.0 * (1.0 - rt.derate_factor) / (1.0 - DERATE_LOAD_FACTOR)
 
         if rt.fault and not ignore_fault:
             model: FaultModel = FAULTS[rt.fault]
             delta = model.deltas.get(spec.name, 0.0)
-            relief = DERATE_FAULT_RELIEF if rt.state is MachineState.DERATED else 1.0
+            # 現實落差：手冊描述的是典型機台，這一台的表現可以不一樣。
+            # 注意這個倍率只在 Simulator 內部生效 —— Diagnosis Agent 比對的仍是手冊指紋，
+            # 所以徵兆偏離手冊時，它會判錯或信心不足，這正是要被量出來的事。
+            mismatch = self._mismatch_for(rt.machine_id, rt.fault)
+            if mismatch is not None:
+                delta *= mismatch.scale.get(spec.name, 1.0)
+            relief = self._derate_relief(rt)
             base += delta * rt.fault_progress * relief
 
         # 環境溫度耦合：室溫越高，機台溫度越高。
         if spec.name == "temperature":
             base += (self.ambient_temp_c - 28.0) * 0.6
+
+        # 干擾：負載切換、暖機、換料重啟 —— 機台沒有故障，但物理狀態確實改變了。
+        # 放在 ignore_fault 之外是刻意的：能源模型的「健康基線」也該包含這些工況，
+        # 否則一次負載切換會被整段記成「劣化多耗的電」。
+        base += self._disturbance_offset(rt.machine_id, spec.name, sensor_only=False)
         return base
 
     def _refresh_signals(self) -> None:
@@ -565,7 +716,13 @@ class FactoryTwin:
                 rt.clean_signals[spec.name] = max(0.0, clean)
                 sigma = SIGNAL_NOISE.get(spec.name, 0.1)
                 noise = _stable_gauss(self.seed, mid, spec.name, self.tick) * sigma * (noise_gain if active else 0.2)
-                rt.signals[spec.name] = max(0.0, clean + noise)
+                reported = clean + noise
+                # 量測層的干擾與感測器故障：只動「感測器回報什麼」，不動機台的物理狀態。
+                # 所以真實健康度（_health_of 用 clean_signals）、產出速率與能耗都不受影響 ——
+                # 一支壞掉的感測器不會讓機台真的少做幾件，但會讓 Agent 看到一個假的世界。
+                reported += self._disturbance_offset(mid, spec.name, sensor_only=True)
+                reported = self._apply_sensor_faults(mid, spec.name, reported)
+                rt.signals[spec.name] = max(0.0, reported)
             if self._has_microphone(machine):
                 self._refresh_acoustics(mid, rt, noise_gain=noise_gain, active=active)
             rt.health = self._health_of(machine, rt)
@@ -595,6 +752,13 @@ class FactoryTwin:
         送出去的 `AcousticObservation` 只有四個數字。
         """
         derated = rt.state is MachineState.DERATED
+        relief = self._derate_relief(rt)
+        # 現實落差也要傳到聲音上，理由和降速一樣：同一個物理事實不能在兩個模態上說不同的話。
+        # 一台把振動吸收掉七成的機器，麥克風聽到的也會少七成 ——
+        # 若只縮小振動而讓聲音維持手冊值，等於偷偷留了一條「聲音仍然知道答案」的後門。
+        mismatch = self._mismatch_for(machine_id, rt.fault)
+        if mismatch is not None:
+            relief *= mismatch.scale.get("vibration", 1.0)
         target = target_indicators(
             rt.fault,
             rt.fault_progress,
@@ -602,7 +766,7 @@ class FactoryTwin:
             derated=derated,
             # 降速運轉會減輕故障的表現，聲音也一樣 —— 沿用感測器路徑的同一個係數，
             # 否則同一個動作在振動上有效、在聲音上無效，兩個模態會自相矛盾。
-            fault_relief=DERATE_FAULT_RELIEF if derated else 1.0,
+            fault_relief=relief,
         )
         for name in INDICATOR_NAMES:
             current = rt.clean_acoustics.get(name, target[name])
@@ -614,6 +778,17 @@ class FactoryTwin:
                 noise_gain if active else 0.4
             )
             rt.acoustics[name] = clamp_indicator(name, rt.clean_acoustics[name] + noise)
+
+    @staticmethod
+    def _derate_relief(rt: _MachineRuntime) -> float:
+        """降速對「故障表現」的壓抑係數。
+
+        降得越低，故障在感測器（與麥克風）上表現得越少 —— 但實際故障沒有變好，
+        這正是降速方案的危險之處：訊號看起來緩和了，設備仍在劣化。
+        """
+        if rt.state is not MachineState.DERATED:
+            return 1.0
+        return DERATE_FAULT_RELIEF * (rt.derate_factor / DERATE_LOAD_FACTOR)
 
     def _health_of(self, machine: Machine, rt: _MachineRuntime) -> float:
         """真實健康度：由未加雜訊的物理狀態算出。
@@ -677,7 +852,7 @@ class FactoryTwin:
             return 0.0
         if rt.changeover_remaining_min > 0:
             return 0.0
-        state_factor = DERATE_LOAD_FACTOR if rt.state is MachineState.DERATED else 1.0
+        state_factor = rt.derate_factor if rt.state is MachineState.DERATED else 1.0
         # 用未加雜訊的真實轉速：量測雜訊不該讓機台真的少做幾件。
         rpm = rt.clean_signals.get("rpm_pct", 100.0) / 100.0
         # 品質係數：健康度下降代表加工精度下降、重工與廢品增加。
@@ -1058,8 +1233,15 @@ class FactoryTwin:
         rt = self.runtime.get(action.target)
         if rt is None:
             return ActionEffect(False, action.kind.value, action.target, "找不到機台")
+        # factor = 產能保留比例。沒給就用預設工作點，行為與加入這個參數之前完全相同。
+        factor = float(action.params.get("factor", DERATE_LOAD_FACTOR))
+        rt.derate_factor = max(DERATE_FACTOR_MIN, min(DERATE_FACTOR_MAX, factor))
         rt.state = MachineState.DERATED
-        return ActionEffect(True, action.kind.value, action.target, f"{action.target} 進入降速運轉模式")
+        return ActionEffect(
+            True, action.kind.value, action.target,
+            f"{action.target} 進入降速運轉模式（保留 {rt.derate_factor:.0%} 產能）",
+            {"factor": rt.derate_factor},
+        )
 
     def _act_stop(self, action: Action) -> ActionEffect:
         rt = self.runtime.get(action.target)
@@ -1077,6 +1259,8 @@ class FactoryTwin:
         duration = float(action.params.get("duration_min", default_repair))
         rt.state = MachineState.MAINTENANCE
         rt.maintenance_remaining_min = duration
+        # 記下工單排了多久，維修結束時才判得出這次修得完不完整（見 _finish_maintenance）。
+        rt.maintenance_planned_min = duration
         return ActionEffect(
             True, action.kind.value, action.target, f"{action.target} 進入維修（預估 {duration:g} 分鐘）", {"duration_min": duration}
         )
@@ -1109,6 +1293,10 @@ class FactoryTwin:
             "orders": {oid: o.to_dict() for oid, o in self.orders.items()},
             "queue": {k: round(v, 1) for k, v in self.queue.items()},
             "energy": self.energy.to_dict(produced_units=self.completed_units_total),
+            # 干擾與現實落差和 fault 一樣屬於 Ground Truth：只出現在這裡，不出現在 snapshot()。
+            "disturbances": [d.to_dict() for d in self.disturbances],
+            "sensor_faults": [s.to_dict() for s in self.sensor_faults],
+            "signature_mismatch": [m.to_dict() for m in self.signature_mismatch.values()],
         }
 
 
